@@ -5,4 +5,4 @@ Nombre provisional. Flujo objetivo (ciclo cerrado):
     -> perfilar interacciones (PLIP) -> puntuar calidad vs. control -> ADMET/toxicidad
 """
 
-__version__ = "0.9.0"
+__version__ = "1.0.0"
