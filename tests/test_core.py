@@ -179,8 +179,8 @@ def test_se_explica_por_que_no_hay_rmsd(tmp_path):
     a.write_text("ATOM      1  C1  LIG A   1       0.0   0.0   0.0  1.00  0.00           C\n"
                  "ATOM      2  P1  LIG A   1       1.0   0.0   0.0  1.00  0.00           P\n")
     b.write_text("ATOM      1  C1  LIG A   1       0.0   0.0   0.0  1.00  0.00           C\n")
-    assert "no son la misma molécula" in vl._motivo_sin_rmsd(a, b)
-    assert vl._motivo_sin_rmsd(a, a) == "no calculable"
+    assert "are not the same molecule" in vl._motivo_sin_rmsd(a, b)
+    assert vl._motivo_sin_rmsd(a, a) == "not computable"
 
 
 def test_un_peptido_largo_llega_a_estructura_3d(tmp_path):

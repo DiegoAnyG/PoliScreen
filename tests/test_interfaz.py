@@ -12,8 +12,8 @@ pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 APP = str(Path(__file__).resolve().parent.parent / "src" / "poliscreen" / "ui" / "streamlit_app.py")
-ETAPAS = ["Receptores", "Ligandos", "Ejecutar", "Resultados"]
-MODOS = ["Construir por reacción", "Generar péptidos", "Subir estructuras"]
+ETAPAS = ["Receptors", "Ligands", "Run", "Results"]
+MODOS = ["Build by reaction", "Generate peptides", "Upload ready ligands"]
 
 
 def _app(tmp_path, **estado):
@@ -39,7 +39,7 @@ def test_cada_etapa_se_dibuja(tmp_path, etapa):
 
 @pytest.mark.parametrize("modo", MODOS)
 def test_cada_modo_de_ligandos_se_dibuja(tmp_path, modo):
-    _sin_excepcion(_app(tmp_path, etapa="Ligandos", modo_ligandos=modo), f"modo {modo}")
+    _sin_excepcion(_app(tmp_path, etapa="Ligands", modo_ligandos=modo), f"modo {modo}")
 
 
 def test_la_carpeta_vacia_no_rompe_ninguna_etapa(tmp_path):
@@ -49,18 +49,18 @@ def test_la_carpeta_vacia_no_rompe_ninguna_etapa(tmp_path):
 
 
 def test_las_dos_vistas_del_visualizador(tmp_path):
-    for vista in ("Resumen", "Complejo 3D"):
-        _sin_excepcion(_app(tmp_path, etapa="Resultados", vis_res_vista=vista), f"vista {vista}")
+    for vista in ("Summary", "3D complex"):
+        _sin_excepcion(_app(tmp_path, etapa="Results", vis_res_vista=vista), f"vista {vista}")
 
 
 def test_el_estado_sobrevive_al_cambiar_de_etapa(tmp_path):
     """Streamlit descarta los widgets no dibujados; sin reasignarlos se perdian los parámetros."""
-    at = _app(tmp_path, etapa="Ligandos", modo_ligandos="Generar péptidos", pep_len=7)
-    at.session_state["etapa"] = "Resultados"
+    at = _app(tmp_path, etapa="Ligands", modo_ligandos="Generate peptides", pep_len=7)
+    at.session_state["etapa"] = "Results"
     at.run()
-    at.session_state["etapa"] = "Ligandos"
+    at.session_state["etapa"] = "Ligands"
     at.run()
-    assert at.session_state["modo_ligandos"] == "Generar péptidos"
+    assert at.session_state["modo_ligandos"] == "Generate peptides"
     assert at.session_state["pep_len"] == 7
     _sin_excepcion(at, "ida y vuelta entre etapas")
 
@@ -76,6 +76,6 @@ def test_una_ruta_de_windows_no_crea_carpetas_con_barras(tmp_path):
 
 def test_el_dialogo_de_descargas_se_abre(tmp_path):
     (tmp_path / "ranking.csv").write_text("compound,best_dock\na,-8.0\n")
-    at = _app(tmp_path, etapa="Resultados", _abrir_descargas=True)
+    at = _app(tmp_path, etapa="Results", _abrir_descargas=True)
     _sin_excepcion(at, "dialogo de descargas")
     assert [c for c in at.checkbox if c.key and c.key.startswith("dl_")]

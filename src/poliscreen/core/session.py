@@ -58,10 +58,10 @@ def normalizar_ruta(texto: str, base: Optional[Path] = None) -> tuple:
     if str(p) == crudo:
         return p, ""
     if "\\" in crudo:
-        aviso = (f"Se detectó una ruta de Windows. PoliScreen trabaja dentro de Linux (WSL), "
-                 f"así que se usará `{p}`.")
+        aviso = (f"A Windows path was detected. PoliScreen runs inside Linux (WSL), "
+                 f"so `{p}` will be used.")
     else:
-        aviso = f"Ruta ajustada a `{p}`."
+        aviso = f"Path adjusted to `{p}`."
     return p, aviso
 
 # Tablas y configuración: el nucleo reproducible de una corrida.
@@ -75,30 +75,30 @@ CARPETAS_PESADAS = ("poses", "Complejos_Fusionados", "xml_plip", "xtal")
 
 # Catalogo de exportaciones sueltas. Cada entrada: (descripción, tipo, origen).
 EXPORTS = {
-    "resultados_csv":    ("Ranking completo con todas las métricas", "archivo", "ranking.csv"),
-    "resumen_csv":       ("Resumen compacto por compuesto", "archivo", "resumen.csv"),
-    "interacciones_csv": ("Matriz de interacciones por pose (PLIP)", "archivo", "interacciones.csv"),
-    "docking_csv":       ("Energías de todas las poses", "archivo", "resultados_docking.csv"),
-    "ligandos_csv":      ("Tabla de ligandos: nombre, SMILES, IUPAC y procedencia", "archivo", "ligands_meta.csv"),
-    "validacion_csv":    ("Validación por redocking del control", "archivo", "validacion_redocking.csv"),
-    "receptores":        ("Receptores preparados y controles co-cristalizados", "carpeta", "receptores"),
-    "ligandos_zip":      ("Estructuras 3D de los ligandos (SDF)", "carpeta", "ligandos_entrada"),
-    "complejos_zip":     ("Complejos receptor-ligando (PDB)", "carpeta", "Complejos_Fusionados"),
-    "poses_zip":         ("Poses de docking por modelo", "carpeta", "poses"),
-    "methods":           ("Sección de Métodos: parámetros y versiones", "generado", "PoliScreen_Methods.md"),
+    "resultados_csv":    ("Full ranking with all metrics", "archivo", "ranking.csv"),
+    "resumen_csv":       ("Compact summary per compound", "archivo", "resumen.csv"),
+    "interacciones_csv": ("Interaction matrix per pose (PLIP)", "archivo", "interacciones.csv"),
+    "docking_csv":       ("Energies of all poses", "archivo", "resultados_docking.csv"),
+    "ligandos_csv":      ("Ligand table: name, SMILES, IUPAC and provenance", "archivo", "ligands_meta.csv"),
+    "validacion_csv":    ("Redocking validation of the control", "archivo", "validacion_redocking.csv"),
+    "receptores":        ("Prepared receptors and co-crystallized controls", "carpeta", "receptores"),
+    "ligandos_zip":      ("3D structures of the ligands (SDF)", "carpeta", "ligandos_entrada"),
+    "complejos_zip":     ("Receptor-ligand complexes (PDB)", "carpeta", "Complejos_Fusionados"),
+    "poses_zip":         ("Docking poses per model", "carpeta", "poses"),
+    "methods":           ("Methods section: parameters and versions", "generado", "PoliScreen_Methods.md"),
 }
 
 # Qué conviene descargar. La carpeta ya contiene casi todo, así que exportar solo importa en dos
 # casos, que son los marcados: lo que no existe como archivo hasta exportarlo, y el subconjunto
 # mínimo para reproducir y publicar la corrida sin arrastrar los intermedios pesados (regenerables).
 RECOMENDADO = {
-    "methods":           "No está en la carpeta: se redacta al exportar",
-    "resultados_csv":    "Tabla principal: puntuación, Ki, eficiencia y confianza",
-    "interacciones_csv": "Huella de contactos que sustenta la puntuación",
-    "ligandos_csv":      "Procedencia de cada ligando: SMILES e IUPAC",
-    "validacion_csv":    "RMSD del redocking: lo primero que revisa un evaluador",
-    "receptores":        "Entradas exactas para repetir la corrida",
-    "ligandos_zip":      "Entradas exactas para repetir la corrida",
+    "methods":           "Not in the folder: written on export",
+    "resultados_csv":    "Main table: score, Ki, efficiency and confidence",
+    "interacciones_csv": "Contact fingerprint that underpins the score",
+    "ligandos_csv":      "Provenance of each ligand: SMILES and IUPAC",
+    "validacion_csv":    "Redocking RMSD: the first thing a reviewer checks",
+    "receptores":        "Exact inputs to repeat the run",
+    "ligandos_zip":      "Exact inputs to repeat the run",
 }
 # Lo que se puede rehacer a partir de lo anterior; se ofrece, pero pesa y no hace falta guardarlo.
 REGENERABLE = ("resumen_csv", "docking_csv", "complejos_zip", "poses_zip")

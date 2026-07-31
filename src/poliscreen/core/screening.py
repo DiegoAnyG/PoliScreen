@@ -17,10 +17,10 @@ PLIP_MAP = {"hbond": ["hydrogen_bond"], "hydrophobic": ["hydrophobic_interaction
             "water": ["water_bridge"], "halogen": ["halogen_bond"], "pistack": ["pi_stack"],
             "pication": ["pi_cation_interaction"], "metal": ["metal_complex"]}
 # color, etiqueta, estilo de línea por tipo (para el diagrama 2D)
-TYPE_STYLE = {"hbond": ("#1f77b4", "H-bond", "-"), "hydrophobic": ("#7f7f7f", "Hidrofobica", "--"),
-              "saltbridge": ("#d62728", "Puente salino", "-"), "pistack": ("#2ca02c", "Pi-stacking", "-"),
-              "pication": ("#9467bd", "Pi-cation", "-"), "halogen": ("#17becf", "Halogeno", "-"),
-              "water": ("#8c564b", "Puente de agua", ":"), "metal": ("#e377c2", "Metal", "-")}
+TYPE_STYLE = {"hbond": ("#1f77b4", "H-bond", "-"), "hydrophobic": ("#7f7f7f", "Hydrophobic", "--"),
+              "saltbridge": ("#d62728", "Salt bridge", "-"), "pistack": ("#2ca02c", "Pi-stacking", "-"),
+              "pication": ("#9467bd", "Pi-cation", "-"), "halogen": ("#17becf", "Halogen", "-"),
+              "water": ("#8c564b", "Water bridge", ":"), "metal": ("#e377c2", "Metal", "-")}
 
 # ---------------------------------------------------------------- parsers
 # Interacciones específicas y orientadas. Añadir una donde el control no la tiene es mérito real;
@@ -427,7 +427,7 @@ def draw_2d(row, title, fig=None, reference=None, figsize=(5.0, 5.0)):
     fig, ax = plt.subplots(figsize=figsize) if fig is None else (fig, fig.subplots())
     ax.set_aspect("equal"); ax.axis("off")
     if not feats:
-        ax.text(0, 0, "Sin interacciones PLIP en esta pose", ha="center", va="center"); return fig
+        ax.text(0, 0, "No PLIP interactions in this pose", ha="center", va="center"); return fig
     ref = set(reference) if reference else None
     MATCH, EXTRA = "#2ca02c", "#9aa0a6"
     byres = {}
@@ -460,8 +460,8 @@ def draw_2d(row, title, fig=None, reference=None, figsize=(5.0, 5.0)):
         handles = [_plt.Line2D([0], [0], color=TYPE_STYLE[t][0], ls=TYPE_STYLE[t][2], lw=2.2, label=TYPE_STYLE[t][1])
                    for t in TYPE_STYLE if t in used]
     else:
-        handles = [_plt.Line2D([0], [0], color=MATCH, lw=2.4, label="Reproduce el control"),
-                   _plt.Line2D([0], [0], color=EXTRA, lw=2.4, label="Extra / otro enlace")]
+        handles = [_plt.Line2D([0], [0], color=MATCH, lw=2.4, label="Reproduces the control"),
+                   _plt.Line2D([0], [0], color=EXTRA, lw=2.4, label="Extra / other bond")]
         handles += [_plt.Line2D([0], [0], color="#555", ls=TYPE_STYLE[t][2], lw=1.6, label=TYPE_STYLE[t][1])
                     for t in TYPE_STYLE if t in used]
     if handles: ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(-0.02, 1.03), fontsize=8, frameon=False)

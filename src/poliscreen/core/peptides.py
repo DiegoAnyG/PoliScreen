@@ -25,40 +25,40 @@ MAX_LONGITUD = 20
 # Aminoacido: nombre, clases a las que pertenece, carga a pH 7.4 e hidropatía (Kyte-Doolittle).
 # Las clases son las que el usuario combina para restringir el alfabeto.
 AMINOACIDOS = {
-    "A": ("Alanina",       ("hidrofobico", "alifatico", "no_esencial"),            0.0,  1.8),
-    "R": ("Arginina",      ("hidrofilico", "cargado_pos", "no_esencial"),          1.0, -4.5),
-    "N": ("Asparagina",    ("hidrofilico", "polar", "no_esencial"),                0.0, -3.5),
-    "D": ("Aspartato",     ("hidrofilico", "cargado_neg", "no_esencial"),         -1.0, -3.5),
-    "C": ("Cisteina",      ("hidrofobico", "azufrado", "no_esencial"),             0.0,  2.5),
-    "E": ("Glutamato",     ("hidrofilico", "cargado_neg", "no_esencial"),         -1.0, -3.5),
-    "Q": ("Glutamina",     ("hidrofilico", "polar", "no_esencial"),                0.0, -3.5),
-    "G": ("Glicina",       ("especial", "no_esencial"),                            0.0, -0.4),
-    "H": ("Histidina",     ("hidrofilico", "aromatico", "cargado_pos", "esencial"), 0.1, -3.2),
-    "I": ("Isoleucina",    ("hidrofobico", "alifatico", "esencial"),               0.0,  4.5),
-    "L": ("Leucina",       ("hidrofobico", "alifatico", "esencial"),               0.0,  3.8),
-    "K": ("Lisina",        ("hidrofilico", "cargado_pos", "esencial"),             1.0, -3.9),
-    "M": ("Metionina",     ("hidrofobico", "azufrado", "esencial"),                0.0,  1.9),
-    "F": ("Fenilalanina",  ("hidrofobico", "aromatico", "esencial"),               0.0,  2.8),
-    "P": ("Prolina",       ("especial", "no_esencial"),                            0.0, -1.6),
-    "S": ("Serina",        ("hidrofilico", "polar", "no_esencial"),                0.0, -0.8),
-    "T": ("Treonina",      ("hidrofilico", "polar", "esencial"),                   0.0, -0.7),
-    "W": ("Triptofano",    ("hidrofobico", "aromatico", "esencial"),               0.0, -0.9),
-    "Y": ("Tirosina",      ("hidrofilico", "aromatico", "no_esencial"),            0.0, -1.3),
-    "V": ("Valina",        ("hidrofobico", "alifatico", "esencial"),               0.0,  4.2),
+    "A": ("Alanine",       ("hidrofobico", "alifatico", "no_esencial"),            0.0,  1.8),
+    "R": ("Arginine",      ("hidrofilico", "cargado_pos", "no_esencial"),          1.0, -4.5),
+    "N": ("Asparagine",    ("hidrofilico", "polar", "no_esencial"),                0.0, -3.5),
+    "D": ("Aspartate",     ("hidrofilico", "cargado_neg", "no_esencial"),         -1.0, -3.5),
+    "C": ("Cysteine",      ("hidrofobico", "azufrado", "no_esencial"),             0.0,  2.5),
+    "E": ("Glutamate",     ("hidrofilico", "cargado_neg", "no_esencial"),         -1.0, -3.5),
+    "Q": ("Glutamine",     ("hidrofilico", "polar", "no_esencial"),                0.0, -3.5),
+    "G": ("Glycine",       ("especial", "no_esencial"),                            0.0, -0.4),
+    "H": ("Histidine",     ("hidrofilico", "aromatico", "cargado_pos", "esencial"), 0.1, -3.2),
+    "I": ("Isoleucine",    ("hidrofobico", "alifatico", "esencial"),               0.0,  4.5),
+    "L": ("Leucine",       ("hidrofobico", "alifatico", "esencial"),               0.0,  3.8),
+    "K": ("Lysine",        ("hidrofilico", "cargado_pos", "esencial"),             1.0, -3.9),
+    "M": ("Methionine",    ("hidrofobico", "azufrado", "esencial"),                0.0,  1.9),
+    "F": ("Phenylalanine", ("hidrofobico", "aromatico", "esencial"),               0.0,  2.8),
+    "P": ("Proline",       ("especial", "no_esencial"),                            0.0, -1.6),
+    "S": ("Serine",        ("hidrofilico", "polar", "no_esencial"),                0.0, -0.8),
+    "T": ("Threonine",     ("hidrofilico", "polar", "esencial"),                   0.0, -0.7),
+    "W": ("Tryptophan",    ("hidrofobico", "aromatico", "esencial"),               0.0, -0.9),
+    "Y": ("Tyrosine",      ("hidrofilico", "aromatico", "no_esencial"),            0.0, -1.3),
+    "V": ("Valine",        ("hidrofobico", "alifatico", "esencial"),               0.0,  4.2),
 }
 
 CLASES = {
-    "esencial":     "Esenciales (no los sintetiza el organismo)",
-    "no_esencial":  "No esenciales",
-    "hidrofobico":  "Hidrofobicos",
-    "hidrofilico":  "Hidrofilicos",
-    "aromatico":    "Aromaticos (F, W, Y, H)",
-    "alifatico":    "Alifaticos (A, I, L, V)",
-    "polar":        "Polares sin carga",
-    "cargado_pos":  "Carga positiva (K, R, H)",
-    "cargado_neg":  "Carga negativa (D, E)",
-    "azufrado":     "Con azufre (C, M)",
-    "especial":     "Especiales (G, P)",
+    "esencial":     "Essential (not synthesized by the body)",
+    "no_esencial":  "Non-essential",
+    "hidrofobico":  "Hydrophobic",
+    "hidrofilico":  "Hydrophilic",
+    "aromatico":    "Aromatic (F, W, Y, H)",
+    "alifatico":    "Aliphatic (A, I, L, V)",
+    "polar":        "Uncharged polar",
+    "cargado_pos":  "Positive charge (K, R, H)",
+    "cargado_neg":  "Negative charge (D, E)",
+    "azufrado":     "Sulfur-containing (C, M)",
+    "especial":     "Special (G, P)",
 }
 
 # Hidrofobicidad consenso de Eisenberg: se usa para el momento hidrofóbico, que mide la
@@ -112,36 +112,36 @@ class Reglas:
         """Avisos legibles; lista vacia = reglas coherentes."""
         avisos = []
         if not (MIN_LONGITUD <= self.longitud <= MAX_LONGITUD):
-            avisos.append(f"La longitud debe estar entre {MIN_LONGITUD} y {MAX_LONGITUD}.")
+            avisos.append(f"Length must be between {MIN_LONGITUD} and {MAX_LONGITUD}.")
         if not self.alfabeto:
-            avisos.append("El alfabeto quedo vacio: ninguna clase seleccionada deja aminoacidos.")
+            avisos.append("The alphabet is empty: no selected class leaves any amino acids.")
         fijos = len(self.prefijo) + len(self.sufijo)
         if fijos > self.longitud:
-            avisos.append(f"Prefijo y sufijo suman {fijos} residuos y la longitud es {self.longitud}.")
+            avisos.append(f"Prefix and suffix add up to {fijos} residues and the length is {self.longitud}.")
         if self.sin_repetir and self.longitud > len(self.alfabeto):
-            avisos.append(f"Sin repetir no caben {self.longitud} residuos en un alfabeto de "
+            avisos.append(f"Without repeats, {self.longitud} residues do not fit in an alphabet of "
                           f"{len(self.alfabeto)}.")
-        for patron, nombre in ((self.prefijo, "prefijo"), (self.sufijo, "sufijo")):
+        for patron, nombre in ((self.prefijo, "prefix"), (self.sufijo, "suffix")):
             fuera = set(patron.upper()) - set(AMINOACIDOS)
             if fuera:
-                avisos.append(f"El {nombre} contiene simbolos que no son aminoacidos: {', '.join(sorted(fuera))}.")
+                avisos.append(f"The {nombre} contains symbols that are not amino acids: {', '.join(sorted(fuera))}.")
         # Conflictos entre reglas: se detectan aquí para explicar por que no saldría ninguna
         # secuencia, en vez de dejar que la generación devuelva una lista vacia sin motivo.
         extremos = (self.prefijo + self.sufijo).upper()
         if self.sin_repetir and len(set(extremos)) != len(extremos):
-            avisos.append("«Sin repetir» choca con el prefijo o el sufijo, que ya repiten algun residuo.")
+            avisos.append("«No repeats» conflicts with the prefix or suffix, which already repeat a residue.")
         if self.max_consecutivos and self.max_consecutivos > 0:
             racha, previo = 1, ""
             for a in extremos:
                 racha = racha + 1 if a == previo else 1
                 previo = a
                 if racha > self.max_consecutivos:
-                    avisos.append(f"El prefijo o el sufijo repiten {racha} residuos seguidos y el maximo "
-                                  f"consecutivo es {self.max_consecutivos}.")
+                    avisos.append(f"The prefix or suffix repeats {racha} residues in a row and the maximum "
+                                  f"consecutive is {self.max_consecutivos}.")
                     break
         fuera_alfabeto = set(extremos) - set(self.alfabeto)
         if fuera_alfabeto:
-            avisos.append(f"El prefijo o el sufijo usan residuos fuera del alfabeto elegido: "
+            avisos.append(f"The prefix or suffix uses residues outside the chosen alphabet: "
                           f"{', '.join(sorted(fuera_alfabeto))}.")
         return avisos
 
@@ -228,8 +228,8 @@ def generate(reglas: Reglas, n: int, seed: int = 42, max_intentos: int = 200) ->
     aviso = ""
     if len(salida) < n:
         esp = reglas.espacio()
-        aviso = (f"Se generaron {len(salida)} de {n} secuencias: con estas reglas el espacio "
-                 f"disponible es de aproximadamente {esp:.0f} y los filtros descartan el resto.")
+        aviso = (f"{len(salida)} of {n} sequences generated: with these rules the available "
+                 f"space is about {esp:.0f} and the filters discard the rest.")
     return salida, aviso
 
 
@@ -353,7 +353,7 @@ def etiqueta(seq: str, n_acetil: bool = False, c_amida: bool = False,
     """
     seq = seq.upper()
     if ciclico:
-        return f"ciclo-{seq}"
+        return f"cyclo-{seq}"
     return ("Ac-" if n_acetil else "") + seq + ("-NH2" if c_amida else "")
 
 
@@ -480,24 +480,24 @@ def viabilidad_docking(longitud: int, n_peptidos: int = 1, hay_adcp: bool = Fals
     """
     if hay_adcp and longitud >= 5:
         minutos = max(1, round(n_peptidos * 0.6))
-        coste = (f" Estimacion para {n_peptidos} peptidos: del orden de {minutos} minutos."
+        coste = (f" Estimate for {n_peptidos} peptides: on the order of {minutos} minutes."
                  if n_peptidos > 1 else "")
-        return "bueno", ("Longitud dentro del intervalo de ADCP, que genera la conformacion durante "
-                         "el acoplamiento en vez de partir de una estructura rigida. Sube pasos y "
-                         "replicas si la energia aun mejora al subirlos." + coste)
+        return "bueno", ("Length within ADCP's range, which generates the conformation during "
+                         "docking instead of starting from a rigid structure. Raise steps and "
+                         "replicas if the energy still improves." + coste)
 
     minutos = n_peptidos * (1.6 if longitud <= 3 else 3.0 if longitud <= 6 else 6.0)
-    coste = (f" Estimacion para {n_peptidos} peptidos: del orden de {minutos:.0f} minutos con un "
-             f"hilo; reduce el tiempo subiendo «acoplamientos en paralelo»." if n_peptidos > 1 else "")
+    coste = (f" Estimate for {n_peptidos} peptides: on the order of {minutos:.0f} minutes on one "
+             f"thread; reduce the time by raising «dockings in parallel»." if n_peptidos > 1 else "")
     if longitud <= 3:
-        return "bueno", ("Flexibilidad comparable a la de una molecula pequena. Aun asi cada "
-                         "acoplamiento cuesta cerca de un minuto y medio." + coste)
+        return "bueno", ("Flexibility comparable to a small molecule. Even so, each docking "
+                         "costs about a minute and a half." + coste)
     if longitud <= 6:
-        return "medio", ("Flexibilidad alta para Vina: el acoplamiento es lento y la pose concreta es "
-                         "poco fiable, aunque el orden relativo siga siendo informativo. Cina la caja "
-                         "al sitio, considera ciclar el peptido para rigidizarlo o instala ADCP, que "
-                         "cubre esta longitud sin ese problema." + coste)
-    return "malo", ("Por encima de 6 residuos el acoplamiento rigido con Vina deja de ser practicable: "
-                    "el numero de torsiones supera lo que el algoritmo muestrea de forma razonable. "
-                    "Esta es exactamente la longitud para la que existe ADCP; instalalo con "
-                    "scripts/get_adcp.sh en vez de forzar Vina aqui." + coste)
+        return "medio", ("High flexibility for Vina: docking is slow and the exact pose is "
+                         "unreliable, though the relative order stays informative. Tighten the box "
+                         "to the site, consider cyclizing the peptide to rigidify it, or install ADCP, "
+                         "which covers this length without that problem." + coste)
+    return "malo", ("Above 6 residues, rigid docking with Vina stops being practical: "
+                    "the number of torsions exceeds what the algorithm samples reasonably. "
+                    "This is exactly the length ADCP exists for; install it with "
+                    "scripts/get_adcp.sh instead of forcing Vina here." + coste)

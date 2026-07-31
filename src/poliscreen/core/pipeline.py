@@ -188,33 +188,33 @@ def run(cfg: RunConfig, on_step: Optional[Callable[[str, str], None]] = None) ->
     out.mkdir(parents=True, exist_ok=True)
     if not cfg.reuse:
         clean(out)
-        step("limpieza", "corrida desde cero; no se reutiliza nada previo")
+        step("cleanup", "run from scratch; nothing previous is reused")
     res = RunResult(out_dir=out)
 
     # 1. Diseño de análogos (opcional: si no hay lider, se usan los ligandos dados)
     lig_files = [Path(p) for p in cfg.ligands]
     if cfg.lead:
-        step("diseno", "generando analogos y prediciendo ADMET")
+        step("design", "generating analogues and predicting ADMET")
         d = AdmelabBridge().design(cfg.lead, use_ml=cfg.use_ml,
                                    n_substitutions=list(cfg.n_substitutions),
                                    max_rows=cfg.n_analogs)
         res.analogs = d.to_dataframe()
         smis = d.smiles()[: cfg.n_analogs]
-        step("diseno", f"{d.n_generated} generados, {len(smis)} seleccionados")
-        step("3d", "generando confomeros")
+        step("design", f"{d.n_generated} generated, {len(smis)} selected")
+        step("3d", "generating conformers")
         made = lg.materialize(smis, out / "ligands", seed=cfg.seed)
         if res.analogs is not None and not res.analogs.empty:
             names = {s: n for n, _, s in made}
             res.analogs.insert(0, "name", res.analogs["SMILES"].map(names) if "SMILES" in res.analogs else None)
             res.analogs.to_csv(out / "analogos.csv", index=False)
         lig_files += [p for _, p, _ in made]
-        step("3d", f"{len(made)} estructuras 3D")
+        step("3d", f"{len(made)} 3D structures")
 
     dock_set = list(lig_files) + [Path(c) for c in cfg.controls]
     if not dock_set:
-        raise ValueError("No hay nada que acoplar: da una molecula lider o ligandos.")
+        raise ValueError("Nothing to dock: give a lead molecule or ligands.")
     if not cfg.receptors:
-        raise ValueError("No hay receptores.")
+        raise ValueError("No receptors.")
 
     # 2. Caja. Prioridad: la indicada > el control cocristalizado de esa diana > automática. El
     # control marca el sitio real; el centro geométrico o un cofactor apuntarían a otro.
@@ -223,16 +223,16 @@ def run(cfg: RunConfig, on_step: Optional[Callable[[str, str], None]] = None) ->
     boxes = dict(cfg.boxes)
     for r in cfg.receptors:
         if str(r) in boxes:
-            step("caja", f"{Path(r).name}: indicada por el usuario")
+            step("box", f"{Path(r).name}: specified by the user")
             continue
         ctrl = next((c for c in cfg.controls
                      if control_assign.get(sc.normalize_key(Path(c).stem)) == Path(r).stem), None)
         if ctrl:
             boxes[str(r)] = dk.box_from_file(ctrl)
-            step("caja", f"{Path(r).name}: centrada en el control {Path(ctrl).name}")
+            step("box", f"{Path(r).name}: centered on the control {Path(ctrl).name}")
         else:
             boxes[str(r)] = dk.auto_box(r)
-            step("caja", f"{Path(r).name}: automatica, sin control asignado")
+            step("box", f"{Path(r).name}: automatic, no control assigned")
 
     # 2b. Sitios. Por defecto uno por receptor. Con cfg.site_boxes se activa el híbrido: varios
     # bolsillos del mismo receptor, cada uno un sitio 'receptor~Etiqueta' que el scoring trata como
@@ -265,8 +265,8 @@ def run(cfg: RunConfig, on_step: Optional[Callable[[str, str], None]] = None) ->
     hibrido = any(len(v) > 1 for v in sites_of.values())
 
     # 3. Docking
-    step("docking", f"{len(dock_set)} ligandos x {len(targets)} sitio(s)"
-                    + (" (hibrido)" if hibrido else ""))
+    step("docking", f"{len(dock_set)} ligands x {len(targets)} site(s)"
+                    + (" (hybrid)" if hibrido else ""))
     engine = dk.VinaEngine(cpu=cfg.cpu, seed=cfg.seed, exhaustiveness=cfg.exhaustiveness,
                            n_poses=cfg.n_poses, energy_range=cfg.energy_range)
     # Enrutado por motor, decidido por el ligando y no por el usuario: elegir mal aquí no da un
@@ -275,8 +275,8 @@ def run(cfg: RunConfig, on_step: Optional[Callable[[str, str], None]] = None) ->
     peptidos, restantes = _separar_peptidos(out, dock_set)
     rows, errors = [], []
     if peptidos:
-        step("docking", f"{len(peptidos)} peptido(s) -> ADCP; "
-                        f"{len(restantes)} ligando(s) -> Vina")
+        step("docking", f"{len(peptidos)} peptide(s) -> ADCP; "
+                        f"{len(restantes)} ligand(s) -> Vina")
         # Los hilos de ADCP son independientes de los de Vina: aquel paraleliza sus réplicas
         # internamente y sigue siendo reproducible con la semilla, mientras que en Vina más de un
         # hilo rompe el determinismo. Se le dan todos los núcleos para que la tanda no tarde de más.
@@ -299,13 +299,13 @@ def run(cfg: RunConfig, on_step: Optional[Callable[[str, str], None]] = None) ->
     res.docking = pd.DataFrame(rows)
     if not res.docking.empty:
         res.docking.to_csv(out / "resultados_docking.csv", index=False)
-    step("docking", f"{len(rows)} poses" + (f", {len(errors)} fallidos" if errors else ""))
+    step("docking", f"{len(rows)} poses" + (f", {len(errors)} failed" if errors else ""))
     # Se detallan los fallos: un compuesto que no se acopla desaparece del ranking de ese sitio, y
     # sin aviso la ausencia pasa inadvertida y el cribado parece completo.
     if errors:
         res.errores_docking = [(b, e) for b, e in errors]
         for base, err in errors[:8]:
-            step("docking: fallo", f"{base}: {err}")
+            step("docking: failure", f"{base}: {err}")
     # Cobertura real por sitio: avisa si algun sitio quedo con menos compuestos que otro.
     if rows:
         import collections
@@ -314,20 +314,20 @@ def run(cfg: RunConfig, on_step: Optional[Callable[[str, str], None]] = None) ->
         for sid, _n in por_sitio.items():
             distintos = len({r["compound_name"] for r in rows if r["receptor"] == sid})
             if distintos < esperados:
-                step("docking: aviso",
-                     f"{sid}: {distintos} de {esperados} compuestos con poses")
+                step("docking: warning",
+                     f"{sid}: {distintos} of {esperados} compounds with poses")
 
     # 4. Complejos + interacciones
-    step("complejos", "fusionando receptor y pose")
+    step("complexes", "fusing receptor and pose")
     ix.fuse_batch(cfg.receptors, out / "poses", out / "Complejos_Fusionados", cache_dir=out / "prep",
                   stem_to_file=stem_to_file)
     complexes = sorted((out / "Complejos_Fusionados").glob("*.pdb"))
-    step("plip", f"{len(complexes)} complejos")
+    step("plip", f"{len(complexes)} complexes")
     res.interactions = ix.plip_batch(complexes, out, workers=cfg.workers, force=not cfg.reuse)
 
     # 5. Puntuación objetiva por pocket. Referencia = huella del ligando cristalográfico (no el
     # docking del control); pocket = residuos dentro de la caja.
-    step("puntuacion", "referencia cristalografica + interacciones del pocket")
+    step("scoring", "crystallographic reference + pocket interactions")
     base_crystal = ix.crystal_fingerprints(cfg.receptors, cfg.controls, control_assign,
                                            out / "xtal", cache_dir=out / "prep") if cfg.controls else {}
     # Referencia por sitio (clave en híbrido): el del control usa su huella cristalográfica; uno con
@@ -352,15 +352,15 @@ def run(cfg: RunConfig, on_step: Optional[Callable[[str, str], None]] = None) ->
                                           and abs(cc[1] - bx.cy) <= bx.sy / 2
                                           and abs(cc[2] - bx.cz) <= bx.sz / 2)
             if bf and en_caja:
-                crystal_feats[sid] = bf; ref_src[sid] = f"cristalografica ({Path(ctrl).stem})"
+                crystal_feats[sid] = bf; ref_src[sid] = f"crystallographic ({Path(ctrl).stem})"
             else:
                 feats, etq = ix.hetero_fingerprint(r, bx, out / "xtal")
                 if feats:
                     crystal_feats[sid] = feats; ref_src[sid] = f"cofactor {etq}"
                 else:
-                    ref_src[sid] = "residuos del pocket"
+                    ref_src[sid] = "pocket residues"
     if crystal_feats:
-        step("referencia", f"huella de ligando en {len(crystal_feats)} de {len(site_box)} sitio(s)")
+        step("reference", f"ligand fingerprint in {len(crystal_feats)} of {len(site_box)} site(s)")
     pocket_res = {}
     for sid, bx in site_box.items():
         pocket_res[sid] = sorted(dk.residues_in_box(stem_to_file[sid], bx))
@@ -368,7 +368,7 @@ def run(cfg: RunConfig, on_step: Optional[Callable[[str, str], None]] = None) ->
     dc = res.docking.copy()
     if not dc.empty:
         dc["ckey"] = dc["compound_name"].apply(sc.normalize_key)
-    step("confianza", "estabilidad geometrica de poses (obrms)")
+    step("confidence", "geometric stability of poses (obrms)")
     pose_stab = sc.pose_stability_map(dc, out / "poses")
 
     # Segunda opinión opcional: gnina re-puntúa la mejor pose de cada compuesto en cada sitio. No

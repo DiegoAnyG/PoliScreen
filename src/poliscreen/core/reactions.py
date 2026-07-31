@@ -30,28 +30,28 @@ class Reaction:
 REACTIONS = {
     "esterificacion": Reaction(
         key="esterificacion",
-        nombre="Esterificacion de Fischer",
+        nombre="Fischer esterification",
         lead_smarts="[CX3](=[OX1])[OX2H1]",
-        lead_grupo="acido carboxilico",
+        lead_grupo="carboxylic acid",
         # OH sobre carbono sp3 o aromatico: alcohol o fenol. Excluye el OH del acido carboxilico
         # (unido a un carbonilo), que no es un alcohol y no debe entrar como reactivo.
         partner_smarts="[OX2H1][CX4,c]",
         partner_grupo="alcohol",
-        descripcion=("Acido carboxilico + alcohol da ester. La viabilidad depende del tipo de OH: "
-                     "primario y metanol van bien, secundario moderado, fenolico y terciario "
-                     "requieren otra ruta (cloruro de acilo o Steglich)."),
+        descripcion=("Carboxylic acid + alcohol gives ester. Feasibility depends on the OH type: "
+                     "primary and methanol work well, secondary moderate, phenolic and tertiary "
+                     "need another route (acyl chloride or Steglich)."),
         kind="coupling",
         biblioteca="alcoholes.csv",
     ),
     "decoracion": Reaction(
         key="decoracion",
-        nombre="Decoracion aromatica (R-group)",
+        nombre="Aromatic decoration (R-group)",
         lead_smarts="[cH]",                 # carbono aromatico con H, posición decorable
-        lead_grupo="carbono aromatico con H",
+        lead_grupo="aromatic carbon with H",
         partner_smarts="",                  # no hay reactivo externo: usa sustituyentes pequeños internos
-        partner_grupo="sustituyente",
-        descripcion=("Sustituye H por grupos pequenos (F, Cl, CN, OMe...) en carbonos aromaticos. "
-                     "Exploratorio: no es una reaccion unica concreta, sirve para barrer el espacio quimico."),
+        partner_grupo="substituent",
+        descripcion=("Replaces H with small groups (F, Cl, CN, OMe...) on aromatic carbons. "
+                     "Exploratory: not a single concrete reaction, it sweeps the chemical space."),
         kind="decoration",
         biblioteca=None,
     ),
@@ -114,5 +114,5 @@ def library_from_csv(path, name_col: str = "name", smiles_col: str = "smiles") -
             if s:
                 out.append({"name": n or s, "smiles": s})
     if not out:
-        raise ValueError("El csv no tiene columnas reconocibles. Se esperan 'name' y 'smiles'.")
+        raise ValueError("The csv has no recognizable columns. 'name' and 'smiles' are expected.")
     return out
