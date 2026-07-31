@@ -109,19 +109,22 @@ charge and adds +1 to the net charge, usually increasing antimicrobial activity.
 cyclization* rigidifies the peptide: fewer degrees of freedom, protease
 resistance, and more reliable docking.
 
-**Limit of peptide docking.** Measured on saFtsZ with AutoDock Vina (23 Å box,
-exhaustiveness 8, one thread):
+**Peptides use a dedicated engine (ADCP).** Vina treats the ligand as an
+independent torsion tree; with the many rotatable bonds of a peptide its sampling
+stops covering the space (measured on saFtsZ, 23 Å box, exhaustiveness 8, one
+thread):
 
-| Residues | Rotatable bonds | Time |
+| Residues | Rotatable bonds | Vina time |
 |---|---|---|
 | 3 | 15 | ~98 s |
 | 5 | 23 | > 2 min |
 | 10 | 43 | does not finish |
 
-This is a Vina limitation, not PoliScreen's: it treats the ligand as an
-independent torsion tree, and with many bonds the sampling stops covering the
-space. **For peptides, docking serves to rank candidates, not to propose a
-binding mode.**
+That is why PoliScreen routes peptides (5–20 residues) **automatically to
+AutoDock CrankPep (ADCP)**, which builds the conformation with a rotamer library
+instead of a torsion tree; if ADCP is not installed, peptides fall back to Vina
+with a warning. Peptide docking still ranks candidates rather than asserting an
+exact binding mode, but ADCP handles their flexibility as Vina cannot.
 
 ---
 

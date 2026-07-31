@@ -95,8 +95,6 @@ interactions profiled with **PLIP**.
 
 - **Rigid receptor**; no side-chain flexibility.
 - **No covalent docking** (Vina and compatible engines do not model covalent bonds).
-- **Peptide docking ranks candidates; it does not propose a reliable binding
-  mode** — Vina's torsion-tree sampling degrades with many rotatable bonds.
 - **ADMET predictions are estimates** for prioritization, not experimental
   measurements.
 

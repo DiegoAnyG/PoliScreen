@@ -9,208 +9,213 @@ Estructura: SECCIONES = {sección: [(titulo, cuerpo markdown), ...]}
 
 # Frases cortas que acompanan a un control concreto. La explicacion larga esta en SECCIONES.
 BREVE = {
-    "confianza": "Cuánto fiarse del resultado, no cuán bueno es. Detalle en Ayuda › Resultados.",
-    "efectividad": "Porcentaje respecto al ligando de referencia del sitio. Detalle en Ayuda › Resultados.",
-    "pki": "−log₁₀ Ki: numérico y ordenable. Detalle en Ayuda › Resultados.",
-    "le": "Afinidad por átomo pesado. Detalle en Ayuda › Resultados.",
-    "pose": "Todos los valores de la fila salen de esta misma pose.",
-    "cavidades": "Extensión real frente a caja de búsqueda. Detalle en Ayuda › Ejecutar.",
-    "peptidos": "Reglas y descriptores en Ayuda › Ligandos.",
-    "gnina": "Segunda puntuación independiente. Detalle en Ayuda › Ejecutar.",
+    "confianza": "How much to trust the result, not how good it is. Detail in Help › Results.",
+    "efectividad": "Percentage relative to the site's reference ligand. Detail in Help › Results.",
+    "pki": "−log₁₀ Ki: numeric and sortable. Detail in Help › Results.",
+    "le": "Affinity per heavy atom. Detail in Help › Results.",
+    "pose": "Every value in the row comes from this same pose.",
+    "cavidades": "Real extent vs. search box. Detail in Help › Run.",
+    "peptidos": "Rules and descriptors in Help › Ligands.",
+    "gnina": "Independent second score. Detail in Help › Run.",
 }
 
 SECCIONES = {
-    "Primeros pasos": [
-        ("Qué hace PoliScreen",
-         "Encadena el ciclo completo de cribado: preparar la diana, obtener compuestos, acoplarlos "
-         "y evaluar la calidad de la unión.\n\n"
-         "La diferencia con un panel de docking corriente está en cómo puntúa. En vez de premiar "
-         "la afinidad y el número de contactos, mide **qué contactos** se hacen y **con qué residuos**, "
-         "y añade una medida de **cuánto fiarse** de cada resultado."),
-        ("El orden de trabajo",
-         "1. **Receptores** — descarga o sube la estructura, elige qué conservar y extrae el ligando "
-         "co-cristalizado como control.\n"
-         "2. **Ligandos** — construye la serie por reacción, genera péptidos o sube estructuras listas.\n"
-         "3. **Ejecutar** — define dónde buscar y lanza el acoplamiento.\n"
-         "4. **Resultados** — ajusta la ponderación y examina el ranking.\n\n"
-         "El panel derecho muestra siempre lo que corresponde a la etapa activa."),
-        ("Guardar y recuperar el trabajo",
-         "**Archivo › Guardar sesión** empaqueta el análisis en un archivo `.poliscreen`. Al restaurarlo "
-         "vuelven las tablas, los receptores y los ligandos, y puedes **cambiar la ponderación sin "
-         "repetir el docking**.\n\n"
-         "La sesión ligera ocupa unos pocos megabytes; la completa añade poses y complejos."),
-        ("La carpeta del proyecto",
-         "Todo se escribe ahí: poses, complejos, XML de PLIP y tablas. Cambiar de carpeta cambia de "
-         "análisis, y lo que ya haya preparado en ella (receptores, controles, ligandos) se detecta "
-         "solo al entrar.\n\n"
-         "PoliScreen se ejecuta dentro de Linux, así que la ruta es de Linux "
-         "(`/home/usuario/...`). Si pegas una de Windows —`\\\\wsl.localhost\\...`, `C:\\...` o el "
-         "trozo `home\\usuario\\...` que copia el Explorador— se traduce sola y se te avisa de cuál "
-         "se ha usado."),
-        ("Qué conviene descargar",
-         "**Archivo › Descargar resultados** arma un solo ZIP con lo que marques, sin dejar copias en "
-         "la carpeta del proyecto.\n\n"
-         "Casi todo lo que aparece ahí **ya está en esa carpeta**: descargarlo solo tiene sentido para "
-         "llevarte el análisis a otra máquina, adjuntarlo a un manuscrito o archivarlo. Por eso están "
-         "marcados como **recomendados** los elementos que forman ese paquete mínimo:\n\n"
-         "- La **sección de Métodos**, que es el único que no existe hasta que lo exportas.\n"
-         "- El **ranking**, la **matriz de interacciones** y la **tabla de ligandos**, que son el "
-         "resultado y su trazabilidad.\n"
-         "- La **validación por redocking**, lo primero que revisa un evaluador.\n"
-         "- **Receptores y ligandos de entrada**, para que otra persona pueda repetir la corrida.\n\n"
-         "Lo demás —poses, complejos fusionados, resumen y energías de todas las poses— se regenera "
-         "volviendo a ejecutar, y puede ocupar cientos de megabytes."),
+    "Getting started": [
+        ("What PoliScreen does",
+         "It chains the full screening cycle: prepare the target, obtain compounds, dock them and "
+         "evaluate binding quality.\n\n"
+         "The difference from an ordinary docking panel is how it scores. Instead of rewarding "
+         "affinity and contact count, it measures **which contacts** are made and **with which "
+         "residues**, and adds a measure of **how much to trust** each result."),
+        ("The order of work",
+         "1. **Receptors** — download or upload the structure, choose what to keep and extract the "
+         "co-crystallized ligand as the control.\n"
+         "2. **Ligands** — build the series by reaction, generate peptides or upload ready structures.\n"
+         "3. **Run** — define where to search and launch docking.\n"
+         "4. **Results** — adjust the weighting and examine the ranking.\n\n"
+         "The right-hand panel always shows what corresponds to the active step."),
+        ("Save and restore your work",
+         "**File › Save session** packs the analysis into a `.poliscreen` file. Restoring it brings "
+         "back the tables, receptors and ligands, and lets you **change the weighting without "
+         "repeating the docking**.\n\n"
+         "The light session is a few megabytes; the full one adds poses and complexes."),
+        ("The project folder",
+         "Everything is written there: poses, complexes, PLIP XML and tables. Changing folder changes "
+         "analysis, and anything already prepared in it (receptors, controls, ligands) is auto-detected "
+         "on entry.\n\n"
+         "PoliScreen runs inside Linux, so the path is a Linux path (`/home/user/...`). If you paste a "
+         "Windows one —`\\\\wsl.localhost\\...`, `C:\\...` or the `home\\user\\...` fragment the Explorer "
+         "copies— it is translated automatically and you are told which one was used."),
+        ("What is worth downloading",
+         "**File › Download results** builds a single ZIP with what you select, leaving no copies in the "
+         "project folder.\n\n"
+         "Almost everything there **already lives in that folder**: downloading only makes sense to move "
+         "the analysis to another machine, attach it to a manuscript or archive it. That is why the items "
+         "forming that minimal package are marked as **recommended**:\n\n"
+         "- The **Methods** section, the only one that does not exist until you export it.\n"
+         "- The **ranking**, the **interaction matrix** and the **ligand table**, which are the result "
+         "and its traceability.\n"
+         "- The **redocking validation**, the first thing a reviewer checks.\n"
+         "- **Input receptors and ligands**, so someone else can repeat the run.\n\n"
+         "The rest —poses, fused complexes, summary and energies of every pose— is regenerated by "
+         "running again, and can take hundreds of megabytes."),
     ],
-    "Receptores": [
-        ("Qué hace la preparación",
-         "Elimina las aguas, añade hidrógenos y conserva la numeración original de los residuos.\n\n"
-         "Conservar la numeración importa: si cambia, un residuo del sitio activo puede acabar "
-         "identificado con el nombre de otro y todo el análisis farmacofórico queda mal."),
-        ("Cofactores: cuándo conservarlos",
-         "Un cofactor que forma parte del sitio (NADP en una reductasa, por ejemplo) debe conservarse: "
-         "el ligando compite o coopera con él y quitarlo cambia la forma del bolsillo.\n\n"
-         "Los iones y las moléculas de cristalización que no participan se pueden retirar."),
-        ("El control co-cristalizado",
-         "Es la pieza más importante del montaje. Define la referencia contra la que se mide todo, "
-         "marca el sitio real de unión y permite validar el protocolo por redocking.\n\n"
-         "Al extraerlo conviene indicar su **SMILES**: el formato PDB no guarda los órdenes de enlace y, "
-         "sin esa plantilla, heterociclos como el N-óxido del benzofuroxano se leen mal."),
-        ("Por qué se quitan las aguas",
-         "Es la práctica habitual en acoplamiento rígido. AutoDock Vina no modela aguas explícitas ni "
-         "el coste de desplazarlas, así que dejarlas produce artefactos: bloquean el sitio o generan "
-         "contactos que no son reales.\n\n"
-         "La excepción son las **aguas estructurales conservadas** que median la unión en algunos "
-         "sistemas. Conservarlas es una decisión que hay que justificar caso por caso; si lo haces, "
-         "PoliScreen detectará los puentes mediados por agua automáticamente."),
+    "Receptors": [
+        ("What preparation does",
+         "Removes waters, adds hydrogens and keeps the original residue numbering.\n\n"
+         "Keeping the numbering matters: if it changes, an active-site residue can end up identified with "
+         "another's name and the whole pharmacophoric analysis is wrong."),
+        ("Cofactors: when to keep them",
+         "A cofactor that is part of the site (NADP in a reductase, for example) must be kept: the ligand "
+         "competes or cooperates with it, and removing it changes the pocket shape.\n\n"
+         "Ions and crystallization molecules that do not participate can be removed."),
+        ("The co-crystallized control",
+         "The most important piece of the setup. It defines the reference everything is measured against, "
+         "marks the real binding site and enables protocol validation by redocking.\n\n"
+         "When extracting it, provide its **SMILES**: the PDB format does not store bond orders and, "
+         "without that template, heterocycles such as the benzofuroxan N-oxide are read incorrectly."),
+        ("Why waters are removed",
+         "Standard practice in rigid docking. AutoDock Vina does not model explicit waters or the cost of "
+         "displacing them, so leaving them produces artifacts: they block the site or generate contacts "
+         "that are not real.\n\n"
+         "The exception is **conserved structural waters** that mediate binding in some systems. Keeping "
+         "them is a case-by-case decision that must be justified; if you do, PoliScreen detects "
+         "water-mediated bridges automatically."),
     ],
-    "Ligandos": [
-        ("Las tres vías",
-         "**Construir por reacción** — parte de un núcleo y una biblioteca de reactivos, y filtra por "
-         "viabilidad química real. Lo que se acopla es lo que se puede sintetizar.\n\n"
-         "**Generar péptidos** — enumera secuencias bajo reglas de composición y propiedades.\n\n"
-         "**Subir ligandos listos** — estructuras ya preparadas. Se lee su estructura química para "
-         "poder calcular ADMET y descriptores."),
-        ("Péptidos: las reglas",
-         "El alfabeto se restringe por clases (hidrofóbicos, catiónicos, aromáticos…) y se pueden fijar "
-         "un prefijo o un sufijo, prohibir repeticiones o limitar residuos consecutivos.\n\n"
-         "Los filtros fisicoquímicos son los que más discriminan en péptidos antimicrobianos: la "
-         "**carga neta positiva** (la membrana bacteriana es aniónica) y una hidrofobicidad moderada."),
-        ("Péptidos: los descriptores",
-         "**Carga neta** a pH 7.4 — el rasgo más asociado a la actividad antimicrobiana.\n\n"
-         "**GRAVY** — hidropatía media; positivo indica carácter hidrofóbico global.\n\n"
-         "**Momento hidrofóbico** — mide la anfipaticidad: si al plegarse en hélice los residuos "
-         "hidrofóbicos quedan en una cara y los polares en la otra. Es lo que permite insertarse en "
-         "la membrana.\n\n"
-         "**Índice de Boman** — tendencia a unirse a otras proteínas; por encima de 2.5 kcal/mol se "
-         "considera promiscuo."),
-        ("Péptidos: los extremos",
-         "**Amidar el extremo C** elimina la carga negativa terminal y suma +1 a la carga neta, lo que "
-         "suele aumentar la actividad antimicrobiana.\n\n"
-         "**Acetilar el extremo N** protege frente a aminopeptidasas.\n\n"
-         "**Ciclar cabeza-cola** rigidiza el péptido: reduce mucho los grados de libertad, resiste "
-         "proteasas y además hace más fiable el acoplamiento."),
-        ("Límite del acoplamiento de péptidos",
-         "Medido sobre saFtsZ con AutoDock Vina (caja de 23 Å, exhaustividad 8, un hilo):\n\n"
-         "| Residuos | Enlaces rotables | Tiempo |\n|---|---|---|\n"
-         "| 3 | 15 | ~98 s |\n| 5 | 23 | más de 2 min |\n| 10 | 43 | no termina |\n\n"
-         "Es una limitación de Vina, no de PoliScreen: trata el ligando como un árbol de torsiones "
-         "independientes y con muchas el muestreo deja de cubrir el espacio. **Para péptidos, el "
-         "acoplamiento sirve para ordenar candidatos, no para proponer un modo de unión.**"),
+    "Ligands": [
+        ("The three routes",
+         "**Build by reaction** — start from a core and a reagent library, and filter by real chemical "
+         "feasibility. What is docked is what can be synthesized.\n\n"
+         "**Generate peptides** — enumerate sequences under composition and property rules.\n\n"
+         "**Upload ready ligands** — already prepared structures. Their chemistry is read so ADMET and "
+         "descriptors can be computed."),
+        ("Peptides: the rules",
+         "The alphabet is restricted by class (hydrophobic, cationic, aromatic…); a prefix or a suffix can "
+         "be fixed, repeats forbidden or consecutive residues limited.\n\n"
+         "The physicochemical filters discriminate most in antimicrobial peptides: **net positive charge** "
+         "(the bacterial membrane is anionic) and moderate hydrophobicity."),
+        ("Peptides: the descriptors",
+         "**Net charge** at pH 7.4 — the trait most associated with antimicrobial activity.\n\n"
+         "**GRAVY** — mean hydropathy; positive indicates overall hydrophobic character.\n\n"
+         "**Hydrophobic moment** — amphipathicity: whether, folded into a helix, the hydrophobic residues "
+         "sit on one face and the polar ones on the other. This is what enables membrane insertion.\n\n"
+         "**Boman index** — tendency to bind other proteins; above 2.5 kcal/mol it is considered "
+         "promiscuous."),
+        ("Peptides: the termini",
+         "**C-terminal amidation** removes the terminal negative charge and adds +1 to the net charge, "
+         "which usually increases antimicrobial activity.\n\n"
+         "**N-terminal acetylation** protects against aminopeptidases.\n\n"
+         "**Head-to-tail cyclization** rigidifies the peptide: far fewer degrees of freedom, protease "
+         "resistance and more reliable docking."),
+        ("Peptides: the docking engine",
+         "Vina treats the ligand as an independent torsion tree, and with the many rotatable bonds of a "
+         "peptide the sampling stops covering the space (measured on saFtsZ, 23 Å box, exhaustiveness 8, "
+         "one thread):\n\n"
+         "| Residues | Rotatable bonds | Vina time |\n|---|---|---|\n"
+         "| 3 | 15 | ~98 s |\n| 5 | 23 | > 2 min |\n| 10 | 43 | does not finish |\n\n"
+         "That is why PoliScreen routes peptides of **5 to 20 residues automatically to AutoDock CrankPep "
+         "(ADCP)**, which builds the conformation with a rotamer library instead of a torsion tree; below "
+         "5 residues, or if ADCP is not installed, they fall back to Vina with a warning. Peptide docking "
+         "still ranks candidates rather than asserting an exact binding mode, but ADCP handles their "
+         "flexibility as Vina cannot."),
     ],
-    "Ejecutar": [
-        ("La caja de búsqueda",
-         "Lo más fiable es centrarla en el ligando co-cristalizado: marca el sitio real. El centro "
-         "geométrico de la proteína o un cofactor apuntan a otro lugar.\n\n"
-         "Los ejes X, Y y Z se dibujan en el visor para saber en qué dirección mueve cada control."),
-        ("Cavidades detectadas",
-         "`Cavidad` es la extensión real del bolsillo; `Caja` es la región de búsqueda que se le asigna, "
-         "con un **mínimo de 14 Å** porque por debajo no cabría un ligando. Cuando se aplica ese mínimo "
-         "se marca con `*`, y por eso cavidades de volumen distinto pueden compartir el mismo tamaño de caja.\n\n"
-         "La **drogabilidad** estima si el bolsillo tiene forma y química adecuadas para unir una molécula "
-         "pequeña. `Flexibility` no se muestra porque se deriva de los factores B, que la preparación deja a cero."),
-        ("Docking híbrido",
-         "Acopla los mismos compuestos en **varios bolsillos** del mismo receptor, cada uno con su ranking.\n\n"
-         "Sirve para responder si un compuesto prefiere el sitio catalítico o se cuela en uno alostérico: "
-         "es información de **selectividad de sitio** que un cribado de un solo sitio no da.\n\n"
-         "Cada sitio usa su propia referencia: el control si está ahí, un cofactor si cae dentro de la caja, "
-         "o los residuos catalíticos que designes."),
-        ("Parámetros de acoplamiento",
-         "**Exhaustividad** — cuánto explora la búsqueda. Más alto es más fino y más lento.\n\n"
-         "**Poses por ligando** — cuántos modos de unión se conservan. Por debajo de 3 la métrica de "
-         "confianza pierde resolución.\n\n"
-         "**Rango de energía** — ventana respecto a la mejor pose para reportar modos alternativos. No "
-         "cambia la mejor pose ni la profundidad de búsqueda.\n\n"
-         "**Semilla y un hilo** — garantizan que dos corridas iguales den el mismo resultado. Con más de "
-         "un hilo por acoplamiento, Vina deja de ser determinista."),
-        ("Segunda puntuación con gnina",
-         "Vuelve a evaluar con una **red neuronal** las poses que Vina ya generó, sin repetir la búsqueda.\n\n"
-         "Su valor no es la velocidad sino la independencia: la puntuación de Vina es empírica (términos "
-         "físicos ajustados a datos experimentales) y la de gnina se aprende de complejos cristalográficos. "
-         "Que dos métodos con supuestos distintos coincidan es una evidencia que ninguno da por separado, "
-         "y esa concordancia entra en la métrica de confianza.\n\n"
-         "**Limitación**: la red solo puede juzgar las poses que Vina encontró. Si el muestreo no dio con "
-         "la pose correcta, el re-puntuado no la recupera."),
+    "Run": [
+        ("The search box",
+         "Most reliable when centered on the co-crystallized ligand: it marks the real site. The protein's "
+         "geometric center or a cofactor point elsewhere.\n\n"
+         "The X, Y and Z axes are drawn in the viewer to show which direction each control moves."),
+        ("Detected cavities",
+         "`Cavity` is the pocket's real extent; `Box` is the search region assigned to it, with a "
+         "**14 Å minimum** because below that a ligand would not fit. When that minimum applies it is "
+         "marked with `*`, so cavities of different volume can share the same box size.\n\n"
+         "**Druggability** estimates whether the pocket has suitable shape and chemistry to bind a small "
+         "molecule. `Flexibility` is not shown because it derives from the B-factors, which preparation "
+         "sets to zero."),
+        ("Hybrid docking",
+         "Docks the same compounds into **several pockets** of the same receptor, each with its own "
+         "ranking.\n\n"
+         "It answers whether a compound prefers the catalytic site or slips into an allosteric one: "
+         "**site-selectivity** information that a single-site screen does not give.\n\n"
+         "Each site uses its own reference: the control if it is there, a cofactor if it falls inside the "
+         "box, or the catalytic residues you designate."),
+        ("Docking parameters",
+         "**Exhaustiveness** — how much the search explores. Higher is finer and slower.\n\n"
+         "**Poses per ligand** — how many binding modes are kept. Below 3 the confidence metric loses "
+         "resolution.\n\n"
+         "**Energy range** — window relative to the best pose for reporting alternative modes. It does not "
+         "change the best pose or the search depth.\n\n"
+         "**Seed and one thread** — guarantee that two identical runs give the same result. With more than "
+         "one thread per docking, Vina stops being deterministic."),
+        ("Second scoring with gnina",
+         "Re-evaluates with a **neural network** the poses Vina already generated, without repeating the "
+         "search.\n\n"
+         "Its value is not speed but independence: Vina's score is empirical (physical terms fitted to "
+         "experimental data) and gnina's is learned from crystallographic complexes. That two methods "
+         "with different assumptions agree is evidence neither gives alone, and that agreement enters the "
+         "confidence metric.\n\n"
+         "**Limitation**: the network can only judge the poses Vina found. If the sampling missed the "
+         "correct pose, re-scoring does not recover it."),
     ],
-    "Resultados": [
-        ("Efectividad",
-         "Porcentaje respecto al ligando de referencia de ese sitio, que queda en 100 %.\n\n"
-         "La calidad de interacción **no mide parecido al control**: suma cada contacto ponderado por su "
-         "tipo de enlace (salino > puente de hidrógeno > π > hidrofóbico) y por el rol del residuo "
-         "(catalítico, secundario, de cavidad o externo). Así se supera al control haciendo **más y "
-         "mejores contactos productivos**, no copiándolo."),
-        ("Confianza: qué es y por qué es distinta",
-         "Es **ortogonal a la efectividad**: no mide cuán bueno es el compuesto, sino cuánto fiarse del número.\n\n"
-         "Se calcula como media **geométrica** —basta que una evidencia falle para que baje— de:\n\n"
-         "- **conv**: convergencia del modo de unión, el solape de interacciones entre las mejores poses.\n"
-         "- **conc**: concordancia entre afinidad e interacción.\n"
-         "- **consenso**: acuerdo entre Vina y la red neuronal, si se activó el re-puntuado.\n\n"
-         "Se reduce si la diana no valida su redocking. **Un compuesto con efectividad alta y confianza "
-         "baja es una alarma**: buen score, pero evidencias que no concuerdan.\n\n"
-         "`geom` (dispersión geométrica de las poses) se muestra como diagnóstico pero no entra en el "
-         "cálculo: con Vina resulta casi constante y no discrimina."),
-        ("Las métricas de afinidad",
-         "**best_dock** — energía de Vina en kcal/mol; más negativo es mejor.\n\n"
-         "**pKi** — −log₁₀ de la Ki estimada. Es numérico y ordenable, a diferencia de la columna Ki, que "
-         "es texto con unidades mezcladas. La Ki **no entra en el puntaje**: se deriva del score de "
-         "docking y puntuarla sería contar lo mismo dos veces.\n\n"
-         "**LE** (−ΔG/átomos pesados) y **LLE** (pKi−LogP) premian la unión **por átomo**. Sirven de guarda "
-         "contra el sesgo de tamaño: sin ellas, la molécula más grande casi siempre gana."),
-        ("Residuos catalíticos y secundarios",
-         "**Catalíticos** — obligatorios: no tocarlos penaliza mediante la puerta catalítica. Son una "
-         "propiedad de la enzima, determinada experimentalmente, no del ligando.\n\n"
-         "**Secundarios** — anclas conocidas del bolsillo que suman más que un contacto cualquiera, pero "
-         "no se exigen.\n\n"
-         "Si no conoces el sitio catalítico, PoliScreen sugiere los residuos con los que el ligando "
-         "cristalográfico hace interacciones direccionales. Es un punto de partida, no una respuesta: "
-         "**esta lista influye en el ranking más que cualquier peso**."),
-        ("Ponderación",
-         "Los pesos de eje se **auto-normalizan**: no hace falta que sumen 1, y ponerlos todos a 1.0 "
-         "equivale a un promedio simple. Si los pones todos a 0 no hay puntaje y la aplicación avisa.\n\n"
-         "Un eje con peso pero **sin datos** (toxicidad sin haber predicho ADMET) se ignora, y también se avisa: "
-         "así la sección de Métodos no declara algo que no intervino."),
-        ("La columna pose",
-         "Indica de qué modelo salen **todos** los valores de esa fila. Docking, interacciones y Ki vienen "
-         "de la misma pose, nunca de modelos distintos."),
-        ("Percentil frente a porcentaje",
-         "El **porcentaje** se mide contra el control de esa diana, así que depende de lo fuerte que sea ese "
-         "control: no es comparable entre dianas.\n\n"
-         "El **percentil** sitúa al compuesto dentro de su propia biblioteca y sí permite comparar."),
+    "Results": [
+        ("Effectiveness",
+         "Percentage relative to that site's reference ligand, which sits at 100 %.\n\n"
+         "Interaction quality does **not** measure similarity to the control: it sums each contact "
+         "weighted by its bond type (salt bridge > H-bond > π > hydrophobic) and by the residue role "
+         "(catalytic, secondary, cavity or external). So a compound beats the control by making **more and "
+         "better productive contacts**, not by copying it."),
+        ("Confidence: what it is and why it differs",
+         "It is **orthogonal to effectiveness**: it measures not how good the compound is, but how much to "
+         "trust the number.\n\n"
+         "It is computed as a **geometric** mean —one failing piece of evidence pulls it down— of:\n\n"
+         "- **conv**: binding-mode convergence, the interaction overlap between the best poses.\n"
+         "- **conc**: agreement between affinity and interaction.\n"
+         "- **consensus**: agreement between Vina and the neural network, if re-scoring was enabled.\n\n"
+         "It drops if the target fails its redocking. **A compound with high effectiveness and low "
+         "confidence is an alarm**: good score, but evidence that does not agree.\n\n"
+         "`geom` (geometric spread of the poses) is shown as a diagnostic but does not enter the "
+         "calculation: with Vina it is almost constant and does not discriminate."),
+        ("The affinity metrics",
+         "**best_dock** — Vina energy in kcal/mol; more negative is better.\n\n"
+         "**pKi** — −log₁₀ of the estimated Ki. It is numeric and sortable, unlike the Ki column, which is "
+         "text with mixed units. Ki **does not enter the score**: it derives from the docking score, and "
+         "scoring it would count the same thing twice.\n\n"
+         "**LE** (−ΔG/heavy atoms) and **LLE** (pKi−LogP) reward binding **per atom**. They guard against "
+         "size bias: without them, the largest molecule almost always wins."),
+        ("Catalytic and secondary residues",
+         "**Catalytic** — mandatory: not touching them penalizes via the catalytic gate. They are a "
+         "property of the enzyme, determined experimentally, not of the ligand.\n\n"
+         "**Secondary** — known pocket anchors that add more than an ordinary contact, but are not "
+         "required.\n\n"
+         "If you do not know the catalytic site, PoliScreen suggests the residues with which the "
+         "crystallographic ligand makes directional interactions. It is a starting point, not an answer: "
+         "**this list influences the ranking more than any weight**."),
+        ("Weighting",
+         "The axis weights **auto-normalize**: they need not sum to 1, and setting them all to 1.0 is a "
+         "simple average. If you set them all to 0 there is no score and the app warns you.\n\n"
+         "An axis with weight but **no data** (toxicity without ADMET predicted) is ignored, and that is "
+         "also flagged: so the Methods section does not declare something that did not intervene."),
+        ("The pose column",
+         "It indicates which model **all** the values in that row come from. Docking, interactions and Ki "
+         "come from the same pose, never from different models."),
+        ("Percentile vs. percentage",
+         "The **percentage** is measured against that target's control, so it depends on how strong that "
+         "control is: it is not comparable across targets.\n\n"
+         "The **percentile** places the compound within its own library and does allow comparison."),
     ],
-    "Reproducibilidad": [
-        ("Qué se fija",
-         "Semilla constante y un hilo por acoplamiento; versiones fijadas del entorno y del binario de "
-         "AutoDock Vina, verificado por su suma SHA256.\n\n"
-         "Dos corridas con la misma configuración dan el mismo resultado."),
-        ("Exportar los métodos",
-         "**Archivo › Exportar Métodos** genera un documento con los parámetros, la caja, los pesos, la "
-         "referencia empleada y las versiones exactas de cada herramienta, listo para la sección de "
-         "Métodos de un artículo."),
-        ("Limitaciones declaradas",
-         "Acoplamiento **rígido**: el receptor no cambia de conformación.\n\n"
-         "**No covalente**: no se modelan enlaces covalentes con la diana.\n\n"
-         "**Ki estimada** a partir de la afinidad de Vina, que es una aproximación de ΔG: es informativa, "
-         "no medida.\n\n"
-         "**LD50 y toxicidad** proceden de un solo modelo predictivo y tienden a ser optimistas. Conviene "
-         "contrastarlas con un segundo predictor antes de afirmar baja toxicidad."),
+    "Reproducibility": [
+        ("What is fixed",
+         "Constant seed and one thread per docking; pinned environment and AutoDock Vina binary, verified "
+         "by its SHA256 sum.\n\n"
+         "Two runs with the same configuration give the same result."),
+        ("Export the methods",
+         "**File › Export Methods** generates a document with the parameters, the box, the weights, the "
+         "reference used and the exact version of each tool, ready for a paper's Methods section."),
+        ("Declared limitations",
+         "**Rigid** docking: the receptor does not change conformation.\n\n"
+         "**Non-covalent**: covalent bonds with the target are not modeled.\n\n"
+         "**Estimated Ki** from Vina's affinity, which is an approximation of ΔG: it is informative, not "
+         "measured.\n\n"
+         "**LD50 and toxicity** come from a single predictive model and tend to be optimistic. Contrast "
+         "them with a second predictor before claiming low toxicity."),
     ],
 }

@@ -1,30 +1,34 @@
-# Pruebas
+# Tests
 
 ```bash
-conda activate cribado && pytest tests/ -q
+conda activate poliscreen && pytest tests/ -q
 ```
 
-Tarda unos segundos. No necesita Vina, ADCP, gnina ni conexión: cubre la lógica, no los motores.
+Takes a few seconds. Needs no Vina, ADCP, gnina or network: it covers the logic,
+not the engines.
 
-## Qué cubre
+## What it covers
 
-- **`test_core.py`** — química de péptidos (ciclación cabeza-cola, protección de extremos, carga
-  neta), traducción de rutas de Windows, reparto de recursos por memoria y flexibilidad,
-  reconocimiento de péptidos por estructura y exportación en memoria.
-- **`test_interfaz.py`** — dibuja cada etapa y cada modo de ligandos buscando excepciones, con la
-  carpeta vacía y con datos, y comprueba que el estado sobrevive al cambiar de etapa.
+- **`test_core.py`** — peptide chemistry (head-to-tail cyclization, terminus
+  protection, net charge), Windows path translation, resource allocation by
+  memory and flexibility, peptide recognition from structure, and in-memory
+  export.
+- **`test_interfaz.py`** — renders every step and every ligand mode looking for
+  exceptions, with an empty folder and with data, and checks that state survives
+  switching steps.
 
-Cada prueba documenta en su cadena de texto **el fallo real que la motivó**. Una prueba sin ese
-contexto acaba borrándose cuando estorba.
+Each test documents in its docstring **the real failure that motivated it**. A
+test without that context ends up deleted when it gets in the way.
 
-## Qué NO cubre
+## What it does not cover
 
-Lo que depende de binarios externos y de una diana concreta: el acoplamiento en sí, PLIP, la
-preparación con AGFR y la predicción ADMET. Para eso hace falta una corrida real; estas pruebas
-solo garantizan que nada de lo que las rodea está roto.
+Anything depending on external binaries and a specific target: docking itself,
+PLIP, AGFR preparation and ADMET prediction. That needs a real run; these tests
+only guarantee that nothing around them is broken.
 
-## Al añadir una
+## When adding one
 
-Escribe primero la prueba que reproduce el fallo, compruébala en rojo y arregla después. Las tres
-cuartas partes de los fallos de esta aplicación han sido silenciosos —un resultado plausible pero
-equivocado, no una excepción—, así que comprueba el **valor**, no solo que no reviente.
+Write the test that reproduces the failure first, see it red, then fix. Three
+quarters of this application's failures have been silent — a plausible but wrong
+result, not an exception — so check the **value**, not just that it does not
+crash.
