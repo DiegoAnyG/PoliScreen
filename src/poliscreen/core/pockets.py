@@ -129,8 +129,8 @@ def detect(pdb, timeout: int = 300) -> list:
                 "residues": _residues_from_atm(atm) if atm.exists() else [],
                 "props": dict(p),                    # TODAS las propiedades de fpocket, sin filtrar
                 "size": round(max(sx, sy, sz), 1),   # compat: un solo número cuando se pide cubo
-                "label": f"Pocket {n} · drogabilidad {dr:.2f} · vol {p.get('Volume', 0):.0f} · "
-                         f"caja {sx:.0f}x{sy:.0f}x{sz:.0f}" if dr is not None else f"Pocket {n}",
+                "label": f"Pocket {n} · druggability {dr:.2f} · vol {p.get('Volume', 0):.0f} · "
+                         f"box {sx:.0f}x{sy:.0f}x{sz:.0f}" if dr is not None else f"Pocket {n}",
             })
         pockets.sort(key=lambda x: (x["druggability"] if x["druggability"] is not None else -1), reverse=True)
         return pockets

@@ -95,7 +95,7 @@ def _render_adme(admet, items, keyp):
             "malo": "background-color:rgba(214,70,70,0.22)", "info": ""}
     for titulo, fs in rp.sections(row):
         st.markdown(f"**{titulo}**")
-        dd = pd.DataFrame(fs, columns=["Propiedad", "Valor", "v"])
+        dd = pd.DataFrame(fs, columns=["Property", "Value", "v"])
         sty = dd.style.apply(lambda r: [_col.get(r["v"], ""), _col.get(r["v"], ""), ""], axis=1)
         st.dataframe(sty, width="stretch", hide_index=True, column_config={"v": None})
 
@@ -121,6 +121,13 @@ def _fmt_ki(ki):
     if ki < 1e-3:
         return f"{ki * 1e6:.2f} uM"
     return f"{ki * 1e3:.2f} mM"
+
+
+def _rname(p) -> str:
+    """Nombre de receptor para mostrar: quita el sufijo _listo y la extension (8HTB_listo.pdb -> 8HTB).
+    El archivo en disco no cambia; solo se abrevia en la interfaz."""
+    return Path(str(p)).stem.removesuffix("_listo")
+
 
 CITAS = f"""**PoliScreen v{__version__}** — Anaya Guerrero DC.
 
@@ -812,9 +819,9 @@ def _etapa_receptores():
         st.caption("The structure is shown in the right panel; there you can change the view and style.")
 
     if S["receptors"]:
-        st.write("**Receptores preparados:**", ", ".join(Path(p).name for p in S["receptors"]))
+        st.write("**Prepared receptors:**", ", ".join(_rname(p) for p in S["receptors"]))
     if S["controls"]:
-        st.write("**Controles:**", ", ".join(Path(p).name for p in S["controls"]))
+        st.write("**Controls:**", ", ".join(_rname(p) for p in S["controls"]))
 
 # ---------------------------------------------------------------- 2b. péptidos
 def _modo_peptidos():
@@ -1048,8 +1055,8 @@ def _etapa_ligandos():
                     info = S["reag_info"]
                     st.write(f"**{info['total']} reagents** — " +
                              " · ".join(f"{k}: {v}" for k, v in info["por_fuente"].items()))
-                    dfa = pd.DataFrame([{"nombre": n, "SMILES": s, "fuente": src} for n, s, src, ik in S["reagents"]])
-                    st.dataframe(_shade(dfa, "fuente"), width="stretch", height=240)
+                    dfa = pd.DataFrame([{"name": n, "SMILES": s, "source": src} for n, s, src, ik in S["reagents"]])
+                    st.dataframe(_shade(dfa, "source"), width="stretch", height=240)
                     st.caption("Highlighted = reagents you provided.")
             else:   # decoración: sin reactivo externo, usa sustituyentes internos
                 st.markdown("#### Substituents")
@@ -1123,8 +1130,11 @@ def _etapa_ligandos():
             dfp = pd.DataFrame(prods)
             cols = [c for c in ("producto", "iupac_name", "fuente", "oh_type", "viabilidad", "sintetizable", "smiles")
                     if c in dfp.columns]
-            st.dataframe(_shade(dfp[cols], "fuente"), width="stretch", height=320)
-            st.caption("Highlighted = products with YOUR reagents. `sintetizable`=False are infeasible by this reaction.")
+            st.dataframe(_shade(dfp[cols].rename(columns={"producto": "product", "fuente": "source",
+                                                          "viabilidad": "feasibility",
+                                                          "sintetizable": "synthesizable"}), "source"),
+                         width="stretch", height=320)
+            st.caption("Highlighted = products with YOUR reagents. `synthesizable`=False are infeasible by this reaction.")
 
             st.caption("The 2D structures of the products are shown in the right panel so you can check the bond and stereochemistry.")
 
@@ -1242,8 +1252,8 @@ def _etapa_ejecutar():
     recs = [Path(p) for p in S["receptors"]]
     ctrls = [Path(p) for p in S["controls"]]
     ligs = [Path(p) for p in S["ligands"]]
-    st.write(f"Receptores: **{len(recs)}** · Controles: **{len(ctrls)}** · "
-             + (f"Lead: `{S.get('lead')}`" if S.get("lead") else f"Ligandos: **{len(ligs)}**"))
+    st.write(f"Receptors: **{len(recs)}** · Controls: **{len(ctrls)}** · "
+             + (f"Lead: `{S.get('lead')}`" if S.get("lead") else f"Ligands: **{len(ligs)}**"))
     if recs and not ctrls:
         st.warning("No control loaded. The control is docked alongside the ligands and defines the reference; without it there is no baseline or validation. Extract the co-crystallized one in step 1 (or upload it below). If you already extracted it, check it is in the project's `receptores/` folder.")
 
@@ -1282,7 +1292,7 @@ def _etapa_ejecutar():
             # reindentar todo el cuerpo del bucle, que es fuente de errores.
             st.divider()
             _th, _tv = st.columns([3, 1], vertical_alignment="center")
-            _th.markdown(f"### ▸ {r.name}")
+            _th.markdown(f"### ▸ {_rname(r)}")
             # Enfocar el visor en el receptor que se esta editando, en vez de quedarse en otro.
             if _tv.button("Show in the viewer", key=f"verrec_{r.name}", use_container_width=True):
                 S["vis_box_rec"] = str(r)
@@ -1605,7 +1615,8 @@ def _etapa_resultados():
             msg = vl.resumen(val)
             (st.success if not msg.startswith("WARNING") else st.error)(msg)
             with st.expander("Redocking validation detail"):
-                st.dataframe(val, width="stretch", hide_index=True)
+                st.dataframe(val.rename(columns={"diana": "target", "validado": "validated"}),
+                             width="stretch", hide_index=True)
                 st.caption("RMSD against the co-crystallized ligand. Valid below 2 Å.")
 
         # Validación de INTERACCIONES: cuanto reproduce el control DOCKEADO la huella del Cristalográfico.
@@ -1883,7 +1894,7 @@ def _visualizador(etapa: str):
             if len(preparados) > 1:
                 _idx = preparados.index(_ult) if _ult in preparados else len(preparados) - 1
                 rsel = st.selectbox("Receptor", preparados, index=_idx,
-                                    format_func=lambda p: Path(p).name, key="vis_rec_sel")
+                                    format_func=_rname, key="vis_rec_sel")
             else:
                 rsel = preparados[0]
 
@@ -1987,7 +1998,7 @@ def _visualizador(etapa: str):
         cav_map = S.get("_cavidades") or {}
         if cajas:
             c1, c2, c3 = st.columns([2, 1, 1])
-            rsel = c1.selectbox("Receptor", list(cajas), format_func=lambda p: Path(p).name,
+            rsel = c1.selectbox("Receptor", list(cajas), format_func=_rname,
                                 key="vis_box_rec", label_visibility="collapsed")
             # Cada receptor tiene sus propias cavidades; se dibujan las del que esta seleccionado.
             grupos_r = cav_map.get(rsel)
