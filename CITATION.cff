@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+title: >-
+  PoliScreen: reproducible virtual screening with objective
+  interaction-quality scoring
+message: >-
+  If you use PoliScreen in published work, please cite it as
+  below. Cite also the tools it runs (AutoDock Vina, ADCP, PLIP,
+  RDKit, Open Babel, fpocket and, where applicable, gnina and
+  ADMET-AI); the full list with references is in the "How to
+  cite" panel of the interface and in the Methods file the
+  application exports.
+type: software
+authors:
+  - family-names: Anaya Guerrero
+    given-names: Diego César
+    email: diego.anayagro@gmail.com
+repository-code: 'https://github.com/DiegoAnyG/PoliScreen'
+abstract: >-
+  A virtual-screening platform that closes the loop of design,
+  synthesizability filtering, molecular docking, interaction-quality
+  evaluation and ADMET prediction. Unlike screening panels that rank
+  by affinity and contact count, PoliScreen scores binding quality by
+  weighting each contact by bond type and residue role, normalizes
+  against the fingerprint of the crystallographic ligand, and pairs
+  every result with a confidence metric built from independent lines
+  of evidence. It routes ligands to the engine suited to their nature
+  (AutoDock Vina for small molecules, AutoDock CrankPep for peptides)
+  and validates the setup by redocking the co-crystallized control.
+keywords:
+  - virtual screening
+  - molecular docking
+  - protein-ligand interactions
+  - peptide docking
+  - reproducibility
+  - cheminformatics
+license: GPL-3.0-or-later
+version: 1.0.0

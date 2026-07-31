@@ -1,0 +1,177 @@
+name,smiles,familia
+2-bromobenzyl alcohol,OCc1ccccc1Br,bencilico
+2-chlorobenzyl alcohol,OCc1ccccc1Cl,bencilico
+2-cyanobenzyl alcohol,N#Cc1ccccc1CO,bencilico
+2-ethoxybenzyl alcohol,CCOc1ccccc1CO,bencilico
+2-ethylbenzyl alcohol,CCc1ccccc1CO,bencilico
+2-fluorobenzyl alcohol,OCc1ccccc1F,bencilico
+2-hydroxybenzyl alcohol,OCc1ccccc1O,bencilico
+2-isopropylbenzyl alcohol,CC(C)c1ccccc1CO,bencilico
+2-methoxybenzyl alcohol,COc1ccccc1CO,bencilico
+2-methylbenzyl alcohol,Cc1ccccc1CO,bencilico
+2-nitrobenzyl alcohol,O=[N+]([O-])c1ccccc1CO,bencilico
+2-tert-butylbenzyl alcohol,CC(C)(C)c1ccccc1CO,bencilico
+2-trifluoromethylbenzyl alcohol,OCc1ccccc1C(F)(F)F,bencilico
+3-bromobenzyl alcohol,OCc1cccc(Br)c1,bencilico
+3-chlorobenzyl alcohol,OCc1cccc(Cl)c1,bencilico
+3-cyanobenzyl alcohol,N#Cc1cccc(CO)c1,bencilico
+3-ethoxybenzyl alcohol,CCOc1cccc(CO)c1,bencilico
+3-ethylbenzyl alcohol,CCc1cccc(CO)c1,bencilico
+3-fluorobenzyl alcohol,OCc1cccc(F)c1,bencilico
+3-hydroxybenzyl alcohol,OCc1cccc(O)c1,bencilico
+3-isopropylbenzyl alcohol,CC(C)c1cccc(CO)c1,bencilico
+3-methoxybenzyl alcohol,COc1cccc(CO)c1,bencilico
+3-methylbenzyl alcohol,Cc1cccc(CO)c1,bencilico
+3-nitrobenzyl alcohol,O=[N+]([O-])c1cccc(CO)c1,bencilico
+3-tert-butylbenzyl alcohol,CC(C)(C)c1cccc(CO)c1,bencilico
+3-trifluoromethylbenzyl alcohol,OCc1cccc(C(F)(F)F)c1,bencilico
+4-bromobenzyl alcohol,OCc1ccc(Br)cc1,bencilico
+4-chlorobenzyl alcohol,OCc1ccc(Cl)cc1,bencilico
+4-cyanobenzyl alcohol,N#Cc1ccc(CO)cc1,bencilico
+4-ethoxybenzyl alcohol,CCOc1ccc(CO)cc1,bencilico
+4-ethylbenzyl alcohol,CCc1ccc(CO)cc1,bencilico
+4-fluorobenzyl alcohol,OCc1ccc(F)cc1,bencilico
+4-hydroxybenzyl alcohol,OCc1ccc(O)cc1,bencilico
+4-isopropylbenzyl alcohol,CC(C)c1ccc(CO)cc1,bencilico
+4-methoxybenzyl alcohol,COc1ccc(CO)cc1,bencilico
+4-methylbenzyl alcohol,Cc1ccc(CO)cc1,bencilico
+4-nitrobenzyl alcohol,O=[N+]([O-])c1ccc(CO)cc1,bencilico
+4-tert-butylbenzyl alcohol,CC(C)(C)c1ccc(CO)cc1,bencilico
+4-trifluoromethylbenzyl alcohol,OCc1ccc(C(F)(F)F)cc1,bencilico
+"1,3-propanediol",OCCCO,curado
+"1,4-butanediol",OCCCCO,curado
+"1,6-hexanediol",OCCCCCCO,curado
+1-adamantanemethanol,OCC12CC3CC(CC(C3)C1)C2,curado
+1-butanol,CCCCO,curado
+1-decanol,CCCCCCCCCCO,curado
+1-dodecanol,CCCCCCCCCCCCO,curado
+1-heptanol,CCCCCCCO,curado
+1-hexanol,CCCCCCO,curado
+1-naphthalenemethanol,OCc1cccc2ccccc12,curado
+1-nonanol,CCCCCCCCCO,curado
+1-octanol,CCCCCCCCO,curado
+1-pentanol,CCCCCO,curado
+1-phenylethanol,CC(O)c1ccccc1,curado
+1-propanol,CCCO,curado
+17beta-estradiol,OC1=CC=C2CC[C@H]3CC[C@@H](O)[C@@H]3[C@@H]2CC1,curado
+1H-indole-3-methanol,OCc1c[nH]c2ccccc12,curado
+"2,2,2-trifluoroethanol",OCC(F)(F)F,curado
+2-(2-aminoethoxy)ethanol,NCCOCCO,curado
+2-(methylamino)ethanol,CNCCO,curado
+2-adamantanol,OC1C2CC3CC(C2)CC1C3,curado
+2-butanol,CCC(C)O,curado
+2-chloroethanol,OCCCl,curado
+2-ethylhexanol,CCCCC(CC)CO,curado
+2-methoxyethanol,COCCO,curado
+2-naphthalenemethanol,OCc1ccc2ccccc2c1,curado
+2-pentanol,CCCC(C)O,curado
+2-phenyl-2-propanol,CC(C)(O)c1ccccc1,curado
+2-phenylethanol,OCCc1ccccc1,curado
+2-propanol,CC(C)O,curado
+2-pyridinemethanol,OCc1ccccn1,curado
+2-thiophenemethanol,OCc1cccs1,curado
+3-amino-1-propanol,NCCCO,curado
+3-buten-1-ol,C=CCCO,curado
+3-phenyl-1-propanol,OCCCc1ccccc1,curado
+3-pyridinemethanol,OCc1cccnc1,curado
+4-fluorophenethyl alcohol,OCCc1ccc(F)cc1,curado
+4-hydroxymethylpiperidine,OCC1CCNCC1,curado
+4-pyridinemethanol,OCc1ccncc1,curado
+4-tert-butylcyclohexanol,CC(C)(C)C1CCC(O)CC1,curado
+5-methylfurfuryl alcohol,Cc1ccc(CO)o1,curado
+9-fluorenylmethanol,OCC1c2ccccc2-c2ccccc21,curado
+Ethanol,CCO,curado
+Methanol,CO,curado
+allyl alcohol,C=CCO,curado
+alpha-terpineol,CC1=CCC(C(C)(C)O)CC1,curado
+benzhydrol,OC(c1ccccc1)c1ccccc1,curado
+benzyl alcohol,OCc1ccccc1,curado
+borneol,CC1(C)C2CCC1(C)C(O)C2,curado
+cinnamyl alcohol,OC/C=C/c1ccccc1,curado
+cis-1-amino-2-indanol,N[C@H]1c2ccccc2C[C@H]1O,curado
+cis-decahydronaphthalen-1-ol,OC1CCCCC2CCCCC12,curado
+citronellol,CC(C)=CCCC(C)CCO,curado
+cyclobutanol,OC1CCC1,curado
+cycloheptanol,OC1CCCCCC1,curado
+cyclohexanemethanol,OCC1CCCCC1,curado
+cyclohexanol,OC1CCCCC1,curado
+cyclooctanol,OC1CCCCCCC1,curado
+cyclopentanol,OC1CCCC1,curado
+cyclopropanemethanol,OCC1CC1,curado
+ethanolamine,NCCO,curado
+ethylene glycol,OCCO,curado
+farnesol,CC(C)=CCC/C(C)=C/CC/C(C)=C/CO,curado
+furfuryl alcohol,OCc1ccco1,curado
+geraniol,CC(C)=CCC/C(C)=C/CO,curado
+glycerol,OCC(O)CO,curado
+isoamyl alcohol,CC(C)CCO,curado
+isobutanol,CC(C)CO,curado
+isopulegol,C=CC(C)C1CCC(O)CC1C,curado
+linalool,C=CC(C)(O)CCC=C(C)C,curado
+menthol,CC1CCC(C(C)C)C(O)C1,curado
+menthol-2,CC(C)[C@H]1CC[C@H](C)C[C@H]1O,curado
+myrtenol,CC1(C)C2CC=C(CO)C1C2,curado
+neopentyl alcohol,CC(C)(C)CO,curado
+nerol,CC(C)=CCC/C(C)=C\CO,curado
+nopol,CC1(C)C2CC=C(CCO)C1C2,curado
+perillyl alcohol,C=C(C)C1CC=C(CO)CC1,curado
+phenyl vinyl carbinol,C=CC(O)c1ccccc1,curado
+pinacol,CC(C)(O)C(C)(C)O,curado
+piperonyl alcohol,OCc1ccc2c(c1)OCO2,curado
+prenol,CC(C)=CCO,curado
+prolinol,OCC1CCCN1,curado
+propargyl alcohol,C#CCO,curado
+propylene glycol,CC(O)CO,curado
+quinolin-4-ylmethanol,OCc1ccnc2ccccc12,curado
+solketal,CC1(C)COC(CO)O1,curado
+tert-butanol,CC(C)(C)O,curado
+tetrahydrofurfuryl alcohol,OCC1CCCO1,curado
+thymol,Cc1ccc(C(C)C)cc1O,curado
+"trans-1,2-cyclohexanediol",OC1CCCCC1O,curado
+vanillyl alcohol,COc1cc(CO)ccc1O,curado
+xanthydrol,OC1c2ccccc2Oc2ccccc21,curado
+2-bromophenethyl alcohol,OCCc1ccccc1Br,fenetilico
+2-chlorophenethyl alcohol,OCCc1ccccc1Cl,fenetilico
+2-cyanophenethyl alcohol,N#Cc1ccccc1CCO,fenetilico
+2-ethoxyphenethyl alcohol,CCOc1ccccc1CCO,fenetilico
+2-ethylphenethyl alcohol,CCc1ccccc1CCO,fenetilico
+2-fluorophenethyl alcohol,OCCc1ccccc1F,fenetilico
+2-hydroxyphenethyl alcohol,OCCc1ccccc1O,fenetilico
+2-isopropylphenethyl alcohol,CC(C)c1ccccc1CCO,fenetilico
+2-methoxyphenethyl alcohol,COc1ccccc1CCO,fenetilico
+2-methylphenethyl alcohol,Cc1ccccc1CCO,fenetilico
+2-nitrophenethyl alcohol,O=[N+]([O-])c1ccccc1CCO,fenetilico
+2-tert-butylphenethyl alcohol,CC(C)(C)c1ccccc1CCO,fenetilico
+2-trifluoromethylphenethyl alcohol,OCCc1ccccc1C(F)(F)F,fenetilico
+3-bromophenethyl alcohol,OCCc1cccc(Br)c1,fenetilico
+3-chlorophenethyl alcohol,OCCc1cccc(Cl)c1,fenetilico
+3-cyanophenethyl alcohol,N#Cc1cccc(CCO)c1,fenetilico
+3-ethoxyphenethyl alcohol,CCOc1cccc(CCO)c1,fenetilico
+3-ethylphenethyl alcohol,CCc1cccc(CCO)c1,fenetilico
+3-fluorophenethyl alcohol,OCCc1cccc(F)c1,fenetilico
+3-hydroxyphenethyl alcohol,OCCc1cccc(O)c1,fenetilico
+3-isopropylphenethyl alcohol,CC(C)c1cccc(CCO)c1,fenetilico
+3-methoxyphenethyl alcohol,COc1cccc(CCO)c1,fenetilico
+3-methylphenethyl alcohol,Cc1cccc(CCO)c1,fenetilico
+3-nitrophenethyl alcohol,O=[N+]([O-])c1cccc(CCO)c1,fenetilico
+3-tert-butylphenethyl alcohol,CC(C)(C)c1cccc(CCO)c1,fenetilico
+3-trifluoromethylphenethyl alcohol,OCCc1cccc(C(F)(F)F)c1,fenetilico
+4-bromophenethyl alcohol,OCCc1ccc(Br)cc1,fenetilico
+4-chlorophenethyl alcohol,OCCc1ccc(Cl)cc1,fenetilico
+4-cyanophenethyl alcohol,N#Cc1ccc(CCO)cc1,fenetilico
+4-ethoxyphenethyl alcohol,CCOc1ccc(CCO)cc1,fenetilico
+4-ethylphenethyl alcohol,CCc1ccc(CCO)cc1,fenetilico
+4-hydroxyphenethyl alcohol,OCCc1ccc(O)cc1,fenetilico
+4-isopropylphenethyl alcohol,CC(C)c1ccc(CCO)cc1,fenetilico
+4-methoxyphenethyl alcohol,COc1ccc(CCO)cc1,fenetilico
+4-methylphenethyl alcohol,Cc1ccc(CCO)cc1,fenetilico
+4-nitrophenethyl alcohol,O=[N+]([O-])c1ccc(CCO)cc1,fenetilico
+4-tert-butylphenethyl alcohol,CC(C)(C)c1ccc(CCO)cc1,fenetilico
+4-trifluoromethylphenethyl alcohol,OCCc1ccc(C(F)(F)F)cc1,fenetilico
+1-naphthol,Oc1cccc2ccccc12,fenol
+2-naphthol,Oc1ccc2ccccc2c1,fenol
+4-cresol,Cc1ccc(O)cc1,fenol
+4-methoxyphenol,COc1ccc(O)cc1,fenol
+eugenol,C=CCc1ccc(O)c(OC)c1,fenol
+guaiacol,COc1ccccc1O,fenol
+phenol,Oc1ccccc1,fenol

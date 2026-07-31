@@ -1,0 +1,34 @@
+# Entorno de PoliScreen para Windows NATIVO (sin WSL ni Docker).
+#
+#   conda env create -f environment-windows.yml
+#   conda activate poliscreen
+#   pip install -e .
+#   powershell -ExecutionPolicy Bypass -File scripts\get_vina.ps1
+#
+# DIFERENCIA con environment.yml: no incluye **fpocket**, que no se distribuye para Windows
+# (conda-forge solo lo publica para linux-64, osx-64 y osx-arm64). Consecuencia unica: no hay
+# deteccion automatica de cavidades. Todo lo demas -preparacion, docking, PLIP, puntuacion,
+# confianza y ADMET- funciona igual, y la caja de busqueda puede centrarse en el ligando
+# co-cristalizado, que ademas es la opcion recomendada.
+#
+# Si necesitas deteccion de cavidades en Windows, usa la imagen Docker (docs/INSTALL.md).
+name: poliscreen
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - rdkit=2025.03
+  - openbabel=3.1         # provee obabel y obrms
+  - plip=3.0
+  - openmm=8.5
+  - pdbfixer
+  - biopython=1.87
+  - py3dmol=2.5
+  - pandas=3.0
+  - numpy=2.4
+  - scipy=1.17
+  - matplotlib=3.10
+  - openpyxl=3.1
+  - pip
+  - pip:
+      - streamlit==1.59.2

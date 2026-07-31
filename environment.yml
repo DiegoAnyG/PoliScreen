@@ -1,0 +1,35 @@
+# Entorno reproducible de PoliScreen (nucleo: preparacion, docking, interacciones y cribado).
+#
+#   conda env create -f environment.yml
+#   conda activate poliscreen
+#   pip install -e .
+#   bash scripts/get_vina.sh          # binario de AutoDock Vina (ver nota)
+#
+# NOTA sobre Vina: la serie 1.2.x NO esta disponible en conda (bioconda solo distribuye
+# autodock-vina 1.1.2, de 2011, con una funcion de puntuacion distinta). El binario oficial
+# se fija con scripts/get_vina.sh desde la release del repositorio de ccsb-scripps.
+#
+# El motor ADMET (admelab + ADMET-AI + torch) vive en un entorno APARTE por incompatibilidad
+# de dependencias; es opcional y se configura con POLISCREEN_ADME_PYTHON / POLISCREEN_ADME_ROOT.
+# Sin el, el cribado completo funciona; solo se desactivan diseno de analogos y prediccion ADMET.
+name: poliscreen
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - rdkit=2025.03         # quimioinformatica: SMILES, confomeros, descriptores, PAINS, SAscore
+  - openbabel=3.1         # provee obabel (conversion, protonacion) y obrms (RMSD)
+  - plip=3.0              # perfil de interacciones proteina-ligando
+  - fpocket=4.2           # deteccion de cavidades y drogabilidad
+  - openmm=8.5            # preparacion del receptor
+  - pdbfixer=1.12
+  - biopython=1.87
+  - py3dmol=2.5           # visor 3D embebido
+  - pandas=3.0
+  - numpy=2.4
+  - scipy=1.17
+  - matplotlib=3.10
+  - openpyxl=3.1          # lectura/escritura de xlsx
+  - pip
+  - pip:
+      - streamlit==1.59.2

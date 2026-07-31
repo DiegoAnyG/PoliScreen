@@ -1,0 +1,24 @@
+# Arranque en un comando:
+#   docker compose -f docker/docker-compose.yml up --build
+#   -> http://localhost:8501
+#
+# Los resultados persisten en ./proyectos del host (montado como /data en el contenedor),
+# asi que sobreviven a reconstruir o borrar la imagen.
+services:
+  poliscreen:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: poliscreen:latest
+    ports:
+      # Solo accesible desde este equipo. Para exponerlo en la red local, cambia a "8501:8501"
+      # (y ten en cuenta que la interfaz no tiene autenticacion).
+      - "127.0.0.1:8501:8501"
+    volumes:
+      - ../proyectos:/data
+    environment:
+      # Motor ADMET opcional (admelab + ADMET-AI). Sin el, el cribado funciona igual;
+      # solo se desactivan diseno de analogos y prediccion ADMET.
+      POLISCREEN_ADME_PYTHON: ${POLISCREEN_ADME_PYTHON:-}
+      POLISCREEN_ADME_ROOT: ${POLISCREEN_ADME_ROOT:-}
+    restart: unless-stopped

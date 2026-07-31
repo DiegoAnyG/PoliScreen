@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "poliscreen"
+version = "1.0.0"
+description = "Reproducible virtual screening: synthesizability-aware analogue design, molecular docking, and objective interaction-quality scoring against the control"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "Diego Cesar Anaya Guerrero", email = "diego.anayagro@gmail.com" }]
+keywords = ["docking", "virtual-screening", "cheminformatics", "ADMET", "PLIP", "peptides"]
+dependencies = ["numpy", "pandas"]
+
+[project.urls]
+Homepage = "https://github.com/DiegoAnyG/PoliScreen"
+Repository = "https://github.com/DiegoAnyG/PoliScreen"
+
+[project.optional-dependencies]
+analysis = ["matplotlib", "openpyxl"]
+ui = ["streamlit", "matplotlib"]
+api = ["fastapi", "uvicorn[standard]", "pydantic"]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+poliscreen = "poliscreen.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+poliscreen = ["data/*.csv"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120

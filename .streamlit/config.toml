@@ -1,0 +1,14 @@
+# Configuracion de la interfaz de PoliScreen.
+[theme]
+base = "light"
+primaryColor = "#2E9E7E" 
+showWidgetBorder = true
+borderColor = "#4A4A4A"
+baseRadius = "small"
+
+[server]
+address = "127.0.0.1"
+headless = true
+
+[browser]
+gatherUsageStats = false

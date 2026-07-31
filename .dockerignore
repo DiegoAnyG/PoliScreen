@@ -1,0 +1,20 @@
+# Fuera del contexto de construccion: acelera el build y evita hornear datos en la imagen.
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+
+# Resultados y proyectos: se montan como volumen, no forman parte de la imagen.
+proyectos/
+poliscreen_proyectos/
+**/poses/
+**/Complejos_Fusionados/
+**/xml_plip/
+**/san/
+**/prep/
+**/xtal/
+**/ligandos_entrada/

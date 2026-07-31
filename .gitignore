@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Entornos y credenciales
+.env
+*.key
+*.pem
+
+# Resultados y datos pesados (no van al repo)
+resultados/
+work/
+cribado*/
+poses/
+Complejos_Fusionados/
+xml_plip/
+san/
+*.pdbqt
+*.dcd
+*.zip
+
+# Modelos descargados
+*.pt
+*.ckpt
+
+# Notas de herramientas
+.ipynb_checkpoints/
+.claude/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Metadatos que Windows adjunta a los archivos descargados
+*:Zone.Identifier
+
+# Directorios y datos de trabajo de ADCP que se filtraron al arbol
+tmp_*/
+ramaprob.data

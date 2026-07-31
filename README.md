@@ -1,0 +1,120 @@
+# PoliScreen
+
+Reproducible virtual screening that closes the loop **design → synthesizability
+filter → docking → interaction-quality scoring → ADMET**, with an objective
+per-cavity scoring function and an orthogonal confidence metric.
+
+> **v1.0.0** — full cycle functional and validated on real targets.
+
+---
+
+## Why another docking front-end
+
+Most screening panels rank by *affinity* and *contact count*. That rewards
+promiscuity: a molecule touching many irrelevant residues can outrank one that
+anchors exactly where it should. PoliScreen is built on four ideas.
+
+1. **Objective per-cavity scoring, not similarity to the control.** Interaction
+   quality is the sum of each contact weighted by **bond type** (salt bridge >
+   H-bond > π > hydrophobic) and by **residue role** (catalytic, secondary,
+   cavity, external). It is normalized against the fingerprint of the
+   **crystallographic ligand in its real pose** — so a compound beats the
+   control by making **more and better productive contacts**, not by copying it.
+
+2. **Confidence metric, orthogonal to the score.** `confidence` (0–1) is the
+   **geometric** mean of binding-mode convergence across poses, affinity↔interaction
+   agreement, and (if enabled) Vina↔neural-network consensus, attenuated when the
+   control fails to reproduce its crystallographic pose. It quantifies **how much
+   to trust** a result, not its magnitude. A high score with low confidence is a
+   red flag.
+
+3. **Synthesizability from the design stage.** Analogues are filtered by real
+   reaction feasibility (regioselectivity, OH classification, steric hindrance),
+   so what gets docked is what a chemist can actually make.
+
+4. **Explicit reproducibility.** Fixed seed, one thread per docking, pinned
+   environment and Vina binary (SHA256-verified), and a Methods export with every
+   parameter and version.
+
+A single interaction engine (**PLIP**) feeds both the table and the diagrams:
+same author numbering, same bond types, no mismatch between what is measured and
+what is drawn.
+
+---
+
+## Install
+
+Docker (one command) or conda. Full guide: **[docs/INSTALL.md](docs/INSTALL.md)**.
+
+```bash
+git clone https://github.com/DiegoAnyG/PoliScreen.git
+cd PoliScreen
+docker compose -f docker/docker-compose.yml up --build   # http://localhost:8501
+```
+
+conda (development):
+
+```bash
+conda env create -f environment.yml
+conda activate poliscreen
+pip install -e .
+bash scripts/get_vina.sh
+poliscreen ui
+```
+
+---
+
+## Workflow
+
+PoliScreen is a Python library with a CLI; the web UI is a thin layer on top —
+everything the UI does is reproducible from the command line.
+
+1. **Receptors** — fetch or upload the structure, choose what to keep, extract
+   the co-crystallized ligand as the control.
+2. **Ligands** — build a series by reaction, enumerate peptides, or upload ready
+   structures.
+3. **Run** — define the search box and launch docking.
+4. **Results** — adjust the weighting and inspect the ranking.
+
+A step-by-step guide with the scientific rationale of each control is in
+**[docs/TUTORIAL.md](docs/TUTORIAL.md)**.
+
+---
+
+## Engines
+
+Small molecules are docked with **AutoDock Vina 1.2.5**; peptides (5–20 residues)
+are routed automatically to **AutoDock CrankPep (ADCP)**. Poses can be re-scored
+with the **gnina** neural network (optional, GPU) as an independent second
+opinion that feeds the confidence metric. Cavities are detected with **fpocket**;
+interactions profiled with **PLIP**.
+
+---
+
+## Limitations
+
+- **Rigid receptor**; no side-chain flexibility.
+- **No covalent docking** (Vina and compatible engines do not model covalent bonds).
+- **Peptide docking ranks candidates; it does not propose a reliable binding
+  mode** — Vina's torsion-tree sampling degrades with many rotatable bonds.
+- **ADMET predictions are estimates** for prioritization, not experimental
+  measurements.
+
+---
+
+## Citation
+
+See **[CITATION.cff](CITATION.cff)** (GitHub renders it under *Cite this
+repository*). Cite also the tools PoliScreen runs; the full list with references
+is in the app's *How to cite* panel and in the exported Methods file.
+
+## License
+
+**GNU GPL v3 or later** (see [LICENSE](LICENSE)). The scientific tools PoliScreen
+runs (Vina, ADCP, PLIP, RDKit, Open Babel, fpocket, gnina) are independent
+programs invoked as separate processes and keep their own licenses; PoliScreen
+does not incorporate their code.
+
+## Author
+
+**Diego Cesar Anaya Guerrero**
