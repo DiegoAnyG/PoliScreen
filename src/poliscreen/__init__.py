@@ -1,8 +1,8 @@
-"""PoliScreen - cribado virtual reproducible con diseño de análogos y control de calidad farmacofórica.
+"""PoliScreen - reproducible virtual screening with analogue design and pharmacophoric quality control.
 
-Nombre provisional. Flujo objetivo (ciclo cerrado):
-    disenar análogos -> filtrar por sintetizabilidad -> preparar receptor -> dockear
-    -> perfilar interacciones (PLIP) -> puntuar calidad vs. control -> ADMET/toxicidad
+Provisional name. Target workflow (closed loop):
+    design analogues -> filter by synthesizability -> prepare receptor -> dock
+    -> profile interactions (PLIP) -> score quality vs. control -> ADMET/toxicity
 """
 
 __version__ = "1.0.0"

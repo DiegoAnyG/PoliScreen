@@ -1,8 +1,8 @@
-"""Validación por redocking.
+"""Redocking validation.
 
-Si el control co-cristalizado no recupera su postura al reacoplarlo, el montaje de esa diana está
-mal (caja fuera del sitio, receptor mal preparado, ligando de otro cristal) y ningún número
-posterior es fiable. Se ejecuta en cada corrida para avisar antes, no después.
+If the co-crystallized control does not recover its pose when re-docked, that target's setup is
+wrong (box off the site, poorly prepared receptor, ligand from another crystal) and no downstream
+number is reliable. It runs on every screening to warn early, not late.
 """
 from __future__ import annotations
 
@@ -12,14 +12,14 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 
-from .screening import (base_of, compound_from_pose_name, model_of, normalize_key,
+from .screening import (base_of, compound_from_pose_name, display_name, model_of, normalize_key,
                         receptor_from_name, redocking_rmsd)
 
-RMSD_ACEPTABLE = 2.0
+RMSD_ACCEPTABLE = 2.0
 
 
 def _formula(pdb) -> dict:
-    """Recuento de átomos pesados por elemento, para comparar dos estructuras."""
+    """Heavy-atom count per element, to compare two structures."""
     out = {}
     try:
         for l in Path(pdb).read_text(errors="ignore").splitlines():
@@ -32,9 +32,9 @@ def _formula(pdb) -> dict:
     return out
 
 
-def _motivo_sin_rmsd(ref, pose) -> str:
-    """Por qué no hay RMSD. obrms devuelve infinito cuando no empareja los átomos, señal de que se
-    comparan dos moléculas distintas."""
+def _reason_no_rmsd(ref, pose) -> str:
+    """Why there is no RMSD. obrms returns infinity when it cannot match the atoms, a sign that two
+    different molecules are being compared."""
     fr, fp = _formula(ref), _formula(pose)
     if fr and fp and fr != fp:
         sobran = {e: n - fp.get(e, 0) for e, n in fr.items() if n > fp.get(e, 0)}
@@ -46,70 +46,97 @@ def _motivo_sin_rmsd(ref, pose) -> str:
 
 
 def redock_validation(controls: Sequence, control_assign: dict, poses_dir,
-                      rmsd_ok: float = RMSD_ACEPTABLE, max_poses: int = 10) -> pd.DataFrame:
-    """RMSD de cada control frente a su archivo co-cristalizado.
+                      rmsd_ok: float = RMSD_ACCEPTABLE, max_poses: int = 10) -> pd.DataFrame:
+    """RMSD of each control against its co-crystallized file.
 
-    rmsd_pose1 es la pose de mejor energía; rmsd_min la más parecida al cristal entre las primeras.
-    Valido si el RMSD baja de rmsd_ok (2 A por convencion).
+    rmsd_pose1 is the best-energy pose; rmsd_min the closest to the crystal among the first ones.
+    Valid if the RMSD drops below rmsd_ok (2 A by convention).
     """
     poses_dir = Path(poses_dir)
-    filas = []
+    rows_ = []
     for ref in controls:
         ref = Path(ref)
         ck = normalize_key(ref.stem)
-        diana = control_assign.get(ck)
-        # En híbrido el control se acopla en varios sitios ('receptor~sitio'). Se valida contra el
-        # que mejor recupera la postura —donde el control realmente une—; hacerlo contra otro
-        # bolsillo daría un fallo esperable que no dice nada del montaje.
-        todas = [p for p in poses_dir.glob("*-model*.pdb")
+        target_ = control_assign.get(ck)
+        all_of = [p for p in poses_dir.glob("*-model*.pdb")
                  if normalize_key(compound_from_pose_name(p.stem)) == ck
-                 and (not diana or base_of(receptor_from_name(p.stem)) == base_of(diana))]
-        por_sitio = {}
-        for p in todas:
-            por_sitio.setdefault(receptor_from_name(p.stem), []).append(p)
-        if not por_sitio:
-            filas.append({"control": ref.stem, "diana": diana or "unassigned", "rmsd_pose1_A": np.nan,
-                          "rmsd_min_A": np.nan, "validado": "faltan poses"})
+                 and (not target_ or base_of(receptor_from_name(p.stem)) == base_of(target_))]
+        by_site = {}
+        for p in all_of:
+            by_site.setdefault(receptor_from_name(p.stem), []).append(p)
+        if not by_site:
+            rows_.append({"control": ref.stem, "target": target_ or "unassigned", "rmsd_pose1_A": np.nan,
+                          "rmsd_min_A": np.nan, "validated": "missing poses"})
             continue
-        mejor = None
-        for sitio, ps in por_sitio.items():
+        best_ = None
+        for site, ps in by_site.items():
             ps = sorted(ps, key=lambda p: model_of(p.stem))[:max_poses]
             rs = [redocking_rmsd(ref, p) for p in ps]
             v = [r for r in rs if pd.notna(r)]
-            clave = min(v) if v else float("inf")
-            if mejor is None or clave < mejor[0]:
-                mejor = (clave, sitio, rs)
-        diana = mejor[1]
-        rmsds = mejor[2]
+            key_ = min(v) if v else float("inf")
+            if best_ is None or key_ < best_[0]:
+                best_ = (key_, site, rs)
+        target_ = best_[1]
+        rmsds = best_[2]
         validos = [r for r in rmsds if pd.notna(r)]
         r1 = rmsds[0] if rmsds else np.nan
         rmin = min(validos) if validos else np.nan
         if pd.notna(r1) and r1 <= rmsd_ok:
-            veredicto = "YES"
+            verdict = "YES"
         elif pd.notna(rmin) and rmin <= rmsd_ok:
-            veredicto = "YES (in another pose)"
+            verdict = "YES (in another pose)"
         elif validos:
-            veredicto = "NO"
+            verdict = "NO"
         else:
-            # Casi siempre la causa es que referencia y pose no son la misma molécula; se comprueba.
-            veredicto = _motivo_sin_rmsd(ref, por_sitio[diana][0])
-        filas.append({"control": ref.stem, "diana": diana or "sin asignar",
+            verdict = _reason_no_rmsd(ref, by_site[target_][0])
+        rows_.append({"control": ref.stem, "target": target_ or "unassigned",
                       "rmsd_pose1_A": round(r1, 3) if pd.notna(r1) else np.nan,
                       "rmsd_min_A": round(rmin, 3) if pd.notna(rmin) else np.nan,
-                      "validado": veredicto})
-    return pd.DataFrame(filas)
+                      "validated": verdict})
+    return pd.DataFrame(rows_)
 
 
-def resumen(val: pd.DataFrame) -> str:
-    """Frase corta para avisar al usuario en la interfaz o en la consola."""
+# Both spellings are accepted: tables written by earlier versions say SI.
+_VALID_PREFIXES = ("YES", "SI")
+LEGACY_COLUMNS = {"diana": "target", "validado": "validated"}
+
+
+def is_valid(verdict) -> bool:
+    """True if the verdict means the control recovered its pose, in any of the stored spellings."""
+    return str(verdict).strip().upper().startswith(_VALID_PREFIXES)
+
+
+def normalize(val: pd.DataFrame) -> pd.DataFrame:
+    """Renames the columns of a table written by an older version so it can be read today."""
     if val is None or val.empty:
+        return val
+    faltan = {k: v for k, v in LEGACY_COLUMNS.items() if k in val.columns and v not in val.columns}
+    return val.rename(columns=faltan) if faltan else val
+
+
+def summary(val: pd.DataFrame) -> dict:
+    """The verdict as data: {'ok', 'n', 'n_failing', 'targets'}.
+
+    The sentence is built by whoever displays it. Assembling it here would hand the
+    interface a finished English string with no way to translate it.
+    """
+    if val is None or val.empty:
+        return {"ok": None, "n": 0, "n_failing": 0, "targets": []}
+    val = normalize(val)
+    failing = val[~val["validated"].map(is_valid)]
+    return {"ok": failing.empty, "n": len(val), "n_failing": len(failing),
+            "targets": [display_name(x) for x in failing["target"].astype(str)]}
+
+
+def summary_text(val: pd.DataFrame) -> str:
+    """The same verdict as an English sentence, for the console."""
+    s = summary(val)
+    if s["ok"] is None:
         return "No controls: the setup cannot be validated."
-    malos = val[~val["validado"].astype(str).str.startswith("YES")]
-    n, m = len(val), len(malos)
-    sujeto = "The control recovers" if n == 1 else f"The {n} controls recover"
-    if malos.empty:
-        return f"{sujeto} the crystallographic pose: the setup is reliable."
-    nombres = ", ".join(malos["diana"].astype(str))
-    cuantos = "The control does not recover" if n == 1 else f"{m} of {n} controls do NOT recover"
-    return (f"WARNING: {cuantos} the pose ({nombres}). "
+    n, m = s["n"], s["n_failing"]
+    if s["ok"]:
+        subject_ = "The control recovers" if n == 1 else f"The {n} controls recover"
+        return f"{subject_} the crystallographic pose: the setup is reliable."
+    how_many = "The control does not recover" if n == 1 else f"{m} of {n} controls do NOT recover"
+    return (f"WARNING: {how_many} the pose ({', '.join(s['targets'])}). "
             "Check the box or the preparation of that target before trusting the ranking.")

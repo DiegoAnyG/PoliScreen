@@ -13,12 +13,13 @@ env/
 *.key
 *.pem
 
-# Resultados y datos pesados (no van al repo)
+# Results and heavy data
 resultados/
 work/
 cribado*/
 poses/
 Complejos_Fusionados/
+fused_complexes/
 xml_plip/
 san/
 *.pdbqt
@@ -37,9 +38,9 @@ san/
 .DS_Store
 Thumbs.db
 
-# Metadatos que Windows adjunta a los archivos descargados
+# Metadata Windows attaches to downloads
 *:Zone.Identifier
 
-# Directorios y datos de trabajo de ADCP que se filtraron al arbol
+# ADCP working files
 tmp_*/
 ramaprob.data

@@ -1,25 +1,24 @@
-"""Textos de ayuda de la interfaz.
+"""Interface help texts.
 
-Se mantienen fuera de streamlit_app.py por dos motivos: la interfaz queda legible, y las
-explicaciones largas dejan de repetirse junto a cada control. En pantalla solo va una línea
-breve; el desarrollo completo vive aquí y se consulta desde Ayuda.
+Kept out of streamlit_app.py for two reasons: the interface stays readable, and the long
+explanations stop repeating next to each control. On screen only a short line appears; the full
+development lives here and is consulted from Help.
 
-Estructura: SECCIONES = {sección: [(titulo, cuerpo markdown), ...]}
+Structure: SECCIONES = {section: [(title, markdown body), ...]}
 """
 
-# Frases cortas que acompanan a un control concreto. La explicacion larga esta en SECCIONES.
-BREVE = {
-    "confianza": "How much to trust the result, not how good it is. Detail in Help › Results.",
-    "efectividad": "Percentage relative to the site's reference ligand. Detail in Help › Results.",
+SHORT_HELP = {
+    "confidence": "How much to trust the result, not how good it is. Detail in Help › Results.",
+    "effectiveness": "Percentage relative to the site's reference ligand. Detail in Help › Results.",
     "pki": "−log₁₀ Ki: numeric and sortable. Detail in Help › Results.",
     "le": "Affinity per heavy atom. Detail in Help › Results.",
     "pose": "Every value in the row comes from this same pose.",
-    "cavidades": "Real extent vs. search box. Detail in Help › Run.",
-    "peptidos": "Rules and descriptors in Help › Ligands.",
+    "cavities": "Real extent vs. search box. Detail in Help › Run.",
+    "peptides": "Rules and descriptors in Help › Ligands.",
     "gnina": "Independent second score. Detail in Help › Run.",
 }
 
-SECCIONES = {
+SECTIONS = {
     "Getting started": [
         ("What PoliScreen does",
          "It chains the full screening cycle: prepare the target, obtain compounds, dock them and "

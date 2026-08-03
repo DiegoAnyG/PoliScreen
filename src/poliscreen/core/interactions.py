@@ -1,8 +1,8 @@
-"""Complejos receptor-pose e interacciones con PLIP.
+"""Receptor-pose complexes and interactions with PLIP.
 
-Un solo motor de interacciones. PLIP protona internamente y conserva la numeración de autor
-del PDB, que es la que aparece en la literatura y en los visores. El ligando acoplado se
-escribe como HETATM/LIG para que PLIP lo identifique y no confunda cofactores con el ligando.
+A single interaction engine. PLIP protonates internally and keeps the PDB author numbering, which is
+the one that appears in the literature and in the viewers. The docked ligand is written as HETATM/LIG
+so PLIP identifies it and does not confuse cofactors with the ligand.
 """
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ import subprocess
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+from . import layout as lay
 from typing import Optional, Sequence
 
 import pandas as pd
@@ -24,7 +26,6 @@ LIGAND_CHAIN = "Z"
 LIGAND_RESSEQ = 900
 WATERS = {"HOH", "WAT", "H2O", "DOD"}
 
-# etiqueta del XML de PLIP -> tipo de interacción que usamos como columna
 PLIP_TAGS = {
     "hbond": ["hydrogen_bond"],
     "hydrophobic": ["hydrophobic_interaction"],
@@ -41,9 +42,8 @@ class InteractionsError(RuntimeError):
     pass
 
 
-# ---------------------------------------------------------------- fusión
 def receptor_text(pdb, cache_dir=None) -> str:
-    """Cuerpo del receptor sin las líneas de cierre, convirtiendo a PDB si hace falta."""
+    """Receptor body without the closing lines, converting to PDB if needed."""
     pdb = Path(pdb)
     if pdb.suffix.lower() != ".pdb":
         cache = Path(cache_dir or pdb.parent)
@@ -57,7 +57,7 @@ def receptor_text(pdb, cache_dir=None) -> str:
 
 
 def ligand_text(pose_pdb) -> str:
-    """Reescribe la pose como HETATM/LIG en su propia cadena. Conserva los CONECT."""
+    """Rewrites the pose as HETATM/LIG in its own chain. Keeps the CONECT records."""
     out = []
     for l in Path(pose_pdb).read_text(errors="ignore").splitlines():
         if l.startswith(("ATOM", "HETATM")):
@@ -87,11 +87,10 @@ def fuse(receptor, pose_pdb, out_pdb, cache_dir=None) -> Path:
 
 def fuse_batch(receptors: Sequence, poses_dir, out_dir, cache_dir=None, on_progress=None,
                stem_to_file=None) -> list:
-    """Fusiona cada pose con su receptor. Salta las que ya existen.
+    """Fuses each pose with its receptor. Skips the ones that already exist.
 
-    El receptor se deduce del nombre de la pose. `stem_to_file` (id_sitio -> archivo) permite que
-    varios sitios de docking apunten al mismo PDB (docking hibrido); si no se pasa, cada receptor es
-    su propio sitio.
+    The receptor is inferred from the pose name. `stem_to_file` (site_id -> file) lets several docking
+    sites point to the same PDB (hybrid docking); if not passed, each receptor is its own site.
     """
     by_stem = dict(stem_to_file) if stem_to_file else {Path(r).stem: r for r in receptors}
     out_dir = Path(out_dir)
@@ -99,7 +98,7 @@ def fuse_batch(receptors: Sequence, poses_dir, out_dir, cache_dir=None, on_progr
     models = sorted(Path(poses_dir).glob("*-model*.pdb"))
     made = []
     for i, pose in enumerate(models, 1):
-        out = out_dir / f"Complejo_{pose.stem}.pdb"
+        out = out_dir / f"{lay.COMPLEX_PREFIX}{pose.stem}.pdb"
         if not out.exists():
             rec = by_stem.get(receptor_from_name(pose.name))
             if rec is None:
@@ -111,9 +110,8 @@ def fuse_batch(receptors: Sequence, poses_dir, out_dir, cache_dir=None, on_progr
     return made
 
 
-# ---------------------------------------------------------------- PLIP
 def sanitize_pdb(src, dst) -> bool:
-    """Reescribe el complejo con columnas limpias; PLIP es estricto con el formato."""
+    """Rewrites the complex with clean columns; PLIP is strict about the format."""
     clean = []
     for line in Path(src).read_text(errors="ignore").splitlines():
         if line.startswith(("ATOM", "HETATM")):
@@ -138,7 +136,7 @@ def sanitize_pdb(src, dst) -> bool:
 
 
 def parse_plip_xml(xml_path, ligand_resname: str = LIGAND_RESNAME) -> dict:
-    """Devuelve {Residuo+numero_tipo: conteo} solo del ligando acoplado; ignora cofactores."""
+    """Returns {Residue+number_type: count} only of the docked ligand; ignores cofactors."""
     feats = {}
     try:
         root = ET.parse(xml_path).getroot()
@@ -164,7 +162,7 @@ def plip_available() -> bool:
 
 
 def run_plip(complex_pdb, xml_dir, san_dir) -> Optional[Path]:
-    """Corre PLIP sobre un complejo y deja su XML. Reutiliza el que ya exista."""
+    """Runs PLIP on a complex and leaves its XML. Reuses the one that already exists."""
     complex_pdb = Path(complex_pdb)
     xml_dir, san_dir = Path(xml_dir), Path(san_dir)
     xml_dir.mkdir(parents=True, exist_ok=True)
@@ -186,36 +184,35 @@ def run_plip(complex_pdb, xml_dir, san_dir) -> Optional[Path]:
 
 
 def crystal_fingerprint(receptor, control_file, work_dir, cache_dir=None) -> dict:
-    """Huella PLIP del ligando Cristalográfico en su pose real (la del archivo del control, no una
-    pose dockeada). Fusiona receptor + control y perfila con PLIP. Es la línea base objetiva: las
-    interacciones de los compuestos se comparan contra esta, no contra el docking del control."""
+    """PLIP fingerprint of the crystallographic ligand in its real pose (the one from the control
+    file, not a docked pose). Fuses receptor + control and profiles with PLIP. It is the objective
+    baseline: the compounds' interactions are compared against this, not against the control's docking."""
     work = Path(work_dir); work.mkdir(parents=True, exist_ok=True)
     cf = Path(control_file)
-    if cf.suffix.lower() != ".pdb":                  # PLIP necesita el ligando en PDB para fusionarlo
+    if cf.suffix.lower() != ".pdb":
         pdbc = work / f"{cf.stem}_xtal.pdb"
         if not pdbc.exists():
-            # -r: fragmento mayor. Si el control salio fragmentado/duplicado, la huella de referencia
-            # no debe incluir esos restos espurios.
+            # Largest fragment: a fragmented control would put spurious remnants in the reference fingerprint.
             subprocess.run(["obabel", str(cf), "-O", str(pdbc), "-r"], capture_output=True)
         cf = pdbc
     if not cf.exists() or cf.stat().st_size == 0:
         return {}
-    comp = work / f"Complejo_xtal_{Path(receptor).stem}.pdb"
+    comp = work / f"{lay.COMPLEX_PREFIX}xtal_{Path(receptor).stem}.pdb"
     fuse(receptor, cf, comp, cache_dir)
     xml = run_plip(comp, work / "xml", work / "san")
     return parse_plip_xml(xml) if xml else {}
 
 
 def hetero_fingerprint(receptor_pdb, box, work_dir, min_atoms: int = 6) -> tuple:
-    """Huella PLIP de un cofactor/ligando co-cristalizado que quede DENTRO de la caja de un sitio.
-    Sirve de referencia objetiva para un bolsillo secundario del docking hibrido. Devuelve (feats, etiqueta)
-    o ({}, None) si no hay ninguno de tamaño suficiente (los iones de 1 átomo no cuentan).
+    """PLIP fingerprint of a co-crystallized cofactor/ligand that falls INSIDE a site's box. Serves as
+    an objective reference for a secondary pocket of the hybrid docking. Returns (feats, label) or
+    ({}, None) if there is none of sufficient size (1-atom ions do not count).
 
-    Se corre PLIP sobre el receptor tal cual (que ya contiene el cofactor) y se lee su sitio de unión,
-    en vez de re-anexarlo, para no contar el cofactor dos veces."""
+    PLIP is run on the receptor as is (which already contains the cofactor) and its binding site is
+    read, instead of re-attaching it, so the cofactor is not counted twice."""
     receptor_pdb = Path(receptor_pdb)
     hx, hy, hz = box.sx / 2.0, box.sy / 2.0, box.sz / 2.0
-    grupos = {}
+    groups_ = {}
     for l in receptor_pdb.read_text(errors="ignore").splitlines():
         if not l.startswith("HETATM"):
             continue
@@ -227,10 +224,10 @@ def hetero_fingerprint(receptor_pdb, box, work_dir, min_atoms: int = 6) -> tuple
         except ValueError:
             continue
         if abs(x - box.cx) <= hx and abs(y - box.cy) <= hy and abs(z - box.cz) <= hz:
-            grupos.setdefault((rn, (l[21].strip() or "_"), l[22:26].strip()), []).append(l)
-    if not grupos:
+            groups_.setdefault((rn, (l[21].strip() or "_"), l[22:26].strip()), []).append(l)
+    if not groups_:
         return {}, None
-    (rn, ch, seq), atoms = max(grupos.items(), key=lambda kv: len(kv[1]))
+    (rn, ch, seq), atoms = max(groups_.items(), key=lambda kv: len(kv[1]))
     if len(atoms) < min_atoms:
         return {}, None
     work = Path(work_dir); work.mkdir(parents=True, exist_ok=True)
@@ -242,8 +239,8 @@ def hetero_fingerprint(receptor_pdb, box, work_dir, min_atoms: int = 6) -> tuple
 
 def crystal_fingerprints(receptors: Sequence, controls: Sequence, control_assign: dict,
                          work_dir, cache_dir=None) -> dict:
-    """{stem_receptor: feats} tomando, para cada receptor, el control que tiene asignado.
-    Con un solo control se usa para el único receptor. Sirve de referencia objetiva del ranking."""
+    """{receptor_stem: feats} taking, for each receptor, the control assigned to it.
+    With a single control it is used for the only receptor. Serves as the objective ranking reference."""
     from .screening import normalize_key
     by_ck = {normalize_key(Path(c).stem): c for c in controls}
     out = {}
@@ -262,37 +259,35 @@ def crystal_fingerprints(receptors: Sequence, controls: Sequence, control_assign
 
 def plip_batch(complexes: Sequence, work_dir, workers: int = 0, force: bool = False,
                on_progress=None) -> pd.DataFrame:
-    """Perfila todos los complejos y devuelve la matriz pose x interacción.
+    """Profiles all complexes and returns the pose x interaction matrix.
 
-    Reutiliza interacciones.csv salvo que force=True. Escribe el CSV en work_dir.
+    Reuses interacciones.csv unless force=True. Writes the CSV in work_dir.
     """
     work = Path(work_dir)
-    csv = work / "interacciones.csv"
+    csv = lay.artifact(work, lay.INTERACTIONS_CSV)
     xml_dir, san_dir = work / "xml_plip", work / "san"
-    esperados = {Path(c).stem for c in complexes}
-    # La cache solo vale si cubre TODOS los complejos actuales. Devolver un CSV que no incluye
-    # los compuestos recien acoplados deja su huella vacia y falsea el ranking entero.
+    expected_items = {Path(c).stem for c in complexes}
+    # The cache is only reused if it covers every current complex; otherwise the ranking is falsified.
     if csv.exists() and not force:
-        previo = pd.read_csv(csv)
-        if esperados and esperados.issubset(set(previo.get("name", []))):
-            return previo
+        previous = pd.read_csv(csv)
+        if expected_items and expected_items.issubset(set(previous.get("name", []))):
+            return previous
     if force:
         for d in (xml_dir, san_dir):
             shutil.rmtree(d, ignore_errors=True)
     if not plip_available():
         raise InteractionsError(
-            "PLIP no esta instalado. Instalalo sin compilar OpenBabel: "
+            "PLIP is not installed. Install it without compiling OpenBabel: "
             "conda install -c conda-forge -c bioconda plip"
         )
     complexes = [Path(c) for c in complexes]
     if not complexes:
-        raise InteractionsError("No hay complejos que analizar. Corre antes la fusion.")
+        raise InteractionsError("No complexes to analyze. Run the fusion first.")
     n = workers if workers > 0 else max(1, (os.cpu_count() or 2) - 2)
     with ThreadPoolExecutor(max_workers=n) as ex:
         for i, _ in enumerate(ex.map(lambda c: run_plip(c, xml_dir, san_dir), complexes), 1):
             if on_progress:
                 on_progress(i, len(complexes))
-    # Solo los complejos de ESTA corrida: así el CSV nunca arrastra compuestos de corridas viejas.
     rows = []
     for c in complexes:
         x = xml_dir / f"{c.stem}.xml"
@@ -302,7 +297,7 @@ def plip_batch(complexes: Sequence, work_dir, workers: int = 0, force: bool = Fa
         row["name"] = x.stem
         rows.append(row)
     if not rows:
-        raise InteractionsError("PLIP no produjo resultados. Revisa que los complejos tengan el ligando como LIG.")
+        raise InteractionsError("PLIP produced no results. Check that the complexes have the ligand as LIG.")
     df = pd.DataFrame(rows).fillna(0)
     cols = ["name"] + sorted(c for c in df.columns if c != "name")
     df = df[cols]

@@ -1,12 +1,12 @@
-"""Diseño de análogos + ADMET: puente al motor `admelab`, aislado por entorno.
+"""Analogue design + ADMET: bridge to the `admelab` engine, isolated by environment.
 
-Por que un subproceso y no un import directo: `admelab` necesita torch/ADMET-AI
-(venv Python 3.12) y el motor de docking necesita openbabel/plip/vina (conda 3.11).
-No conviven bien. Aislarlo detras de esta interfaz permite:
-  - que HOY funcione sin Docker (llamando al venv existente),
-  - que MANANA sean dos contenedores, sin tocar el código que lo usa.
+Why a subprocess and not a direct import: `admelab` needs torch/ADMET-AI (Python 3.12 venv) and the
+docking engine needs openbabel/plip/vina (conda 3.11). They do not coexist well. Isolating it behind
+this interface allows:
+  - it to work TODAY without Docker (calling the existing venv),
+  - it to become two containers TOMORROW, without touching the code that uses it.
 
-Solo depende de la librería estandar (pandas es opcional, para `to_dataframe`).
+It only depends on the standard library (pandas is optional, for `to_dataframe`).
 """
 from __future__ import annotations
 
@@ -23,13 +23,65 @@ DEFAULT_PYTHON = Path.home() / "adme" / ".venv" / "bin" / "python"
 DEFAULT_ROOT = Path.home() / "adme"
 
 
+_EXTERNAL_VALUES = {
+    "primario": "primary", "secundario": "secondary", "terciario": "tertiary",
+    "buena": "good", "bueno": "good", "moderada": "moderate", "moderado": "moderate",
+    "desfavorable": "unfavorable", "dificil": "difficult", "difícil": "difficult",
+    "desconocida": "unknown", "desconocido": "unknown",
+    "fenol": "phenol", "fenolico": "phenolic", "fenólico": "phenolic",
+    "alilico": "allylic", "alílico": "allylic",
+    "bencilico": "benzylic", "bencílico": "benzylic",
+}
+# admelab qualifies a verdict with an explanation in Spanish, e.g.
+# 'dificil (fenol poco nucleofilo; usar cloruro de acilo/DMAP)'. The verdict is what the tables
+# read and sort by, so it is translated even when the explanation is not one we know.
+_EXTERNAL_NOTES = {
+    "fenol poco nucleofilo": "poorly nucleophilic phenol",
+    "usar cloruro de acilo": "use acyl chloride",
+    "impedimento esterico": "steric hindrance",
+    "impedimento estérico": "steric hindrance",
+    "alcohol terciario": "tertiary alcohol",
+}
+_GHS_WORDS = {
+    "Muy alta toxicidad": "Very high toxicity", "Alta toxicidad": "High toxicity",
+    "Toxicidad moderada": "Moderate toxicity", "Moderada toxicidad": "Moderate toxicity",
+    "Baja toxicidad": "Low toxicity", "Muy baja toxicidad": "Very low toxicity",
+    "No clasificado": "Not classified",
+}
+
+
+def english_value(v):
+    """One admelab label in English, or the value unchanged if it is not one."""
+    if not isinstance(v, str):
+        return v
+    hit = _EXTERNAL_VALUES.get(v.strip().lower())
+    if hit:
+        return hit
+    for es, en in _GHS_WORDS.items():
+        if es in v:
+            return v.replace(es, en)
+    # A verdict followed by its explanation: the verdict is what the tables read and sort by, so
+    # it is translated even when the note that follows is not one we know.
+    head, sep, rest = v.partition(" (")
+    verdict = _EXTERNAL_VALUES.get(head.strip().lower())
+    if verdict and sep:
+        for es, en in _EXTERNAL_NOTES.items():
+            rest = rest.replace(es, en)
+        return f"{verdict} ({rest}"
+    return v
+
+
+def english_values(row: dict) -> dict:
+    return {k: english_value(v) for k, v in row.items()} if isinstance(row, dict) else row
+
+
 class AdmelabError(RuntimeError):
-    """Fallo al invocar admelab; el mensaje incluye la causa probable."""
+    """Failure invoking admelab; the message includes the probable cause."""
 
 
 @dataclass
 class DesignResult:
-    """Análogos generados, ya puntuados por ADME/toxicidad y rankeados."""
+    """Generated analogues, already scored by ADME/toxicity and ranked."""
     rows: list = field(default_factory=list)
     columns: list = field(default_factory=list)
     n_generated: int = 0
@@ -43,16 +95,16 @@ class DesignResult:
         return pd.DataFrame(self.rows, columns=self.columns or None)
 
     def smiles(self) -> list:
-        """SMILES en el orden del ranking (lo que se manda a dockear)."""
+        """SMILES in ranking order (what is sent to dock)."""
         return [r.get("SMILES") for r in self.rows if r.get("SMILES")]
 
 
 class AdmelabBridge:
-    """Invoca admelab en su propio entorno.
+    """Invokes admelab in its own environment.
 
-    Parámetros por entorno (útiles en Docker):
-      POLISCREEN_ADME_PYTHON  ruta al python del venv de admelab
-      POLISCREEN_ADME_ROOT    carpeta que contiene el paquete admelab/
+    Environment parameters (useful in Docker):
+      POLISCREEN_ADME_PYTHON  path to admelab's venv python
+      POLISCREEN_ADME_ROOT    folder containing the admelab/ package
     """
 
     def __init__(self, python: Optional[os.PathLike] = None,
@@ -67,12 +119,10 @@ class AdmelabBridge:
     def _call(self, params: dict) -> dict:
         if not self.available():
             raise AdmelabError(
-                f"No encuentro admelab. Python esperado: {self.python} ; raiz: {self.root}. "
-                "Causa probable: rutas distintas en esta maquina. "
-                "Solucion: define POLISCREEN_ADME_PYTHON y POLISCREEN_ADME_ROOT."
+                f"Cannot find admelab. Expected python: {self.python} ; root: {self.root}. "
+                "Probable cause: different paths on this machine. "
+                "Solution: set POLISCREEN_ADME_PYTHON and POLISCREEN_ADME_ROOT."
             )
-        # `cwd` NO basta: python anade a sys.path el directorio del SCRIPT, no el de trabajo.
-        # Por eso la raiz de admelab se inyecta explicitamente vía PYTHONPATH.
         env = dict(os.environ)
         env["PYTHONPATH"] = os.pathsep.join([str(self.root)] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
         with tempfile.TemporaryDirectory() as td:
@@ -85,41 +135,43 @@ class AdmelabBridge:
                 )
             except subprocess.TimeoutExpired:
                 raise AdmelabError(
-                    f"admelab excedio el tiempo limite ({self.timeout}s). "
-                    "Causa probable: demasiados analogos o la primera descarga del modelo ADMET-AI."
+                    f"admelab exceeded the time limit ({self.timeout}s). "
+                    "Probable cause: too many analogues or the first download of the ADMET-AI model."
                 )
             if not pout.exists():
                 raise AdmelabError(
-                    f"admelab no produjo salida (codigo {r.returncode}). "
+                    f"admelab produced no output (code {r.returncode}). "
                     f"stderr: {(r.stderr or '')[-800:]}"
                 )
             out = json.loads(pout.read_text())
         if not out.get("ok"):
-            raise AdmelabError((out.get("error") or "error desconocido") + "\n" + (out.get("traceback") or ""))
+            raise AdmelabError((out.get("error") or "unknown error") + "\n" + (out.get("traceback") or ""))
         return out
 
     def info(self) -> dict:
-        """Comprueba el puente: modulos disponibles, versión de python, torch y CUDA."""
+        """Checks the bridge: available modules, python version, torch and CUDA."""
         return self._call({"action": "info"})
 
     def predict(self, smiles: Sequence, use_ml: bool = True) -> "DesignResult":
-        """ADMET completo de una lista de SMILES. Devuelve un DesignResult (rows/columns)."""
+        """Full ADMET of a list of SMILES. Returns a DesignResult (rows/columns)."""
         out = self._call({"action": "predict", "smiles": list(smiles), "use_ml": bool(use_ml)})
-        return DesignResult(out["rows"], out["columns"], len(out["rows"]), len(out["rows"]))
+        rows = [english_values(r) for r in out["rows"]]
+        return DesignResult(rows, out["columns"], len(rows), len(rows))
 
     def reaction_sites(self, smiles: str) -> dict:
-        """Sitios reactivos de una molécula: OH clasificados con su viabilidad y si tiene -COOH."""
+        """Reactive sites of a molecule: OHs classified with their feasibility and whether it has -COOH."""
         return self._call({"action": "reaction_sites", "smiles": smiles})
 
     def esterify(self, acid: str, alcohols: Sequence, policy: str = "preferred") -> list:
-        """Esterifica el acido con cada alcohol. policy 'preferred' usa solo el OH más favorable."""
-        return self._call({"action": "esterify", "acid": acid,
-                           "alcohols": list(alcohols), "policy": policy})["products"]
+        """Esterifies the acid with each alcohol. policy 'preferred' uses only the most favorable OH."""
+        products = self._call({"action": "esterify", "acid": acid,
+                               "alcohols": list(alcohols), "policy": policy})["products"]
+        return [english_values(p) for p in products]
 
     def name_esters(self, ester_smiles: Sequence, alcohol_smiles: Sequence,
                     acid_smiles: Optional[str] = None, alcohol_names: Optional[Sequence] = None,
                     use_web: bool = True) -> list:
-        """Nombre IUPAC verificado (OPSIN) de cada ester. Devuelve [{smiles, iupac_name, verified}]."""
+        """Verified IUPAC name (OPSIN) of each ester. Returns [{smiles, iupac_name, verified}]."""
         return self._call({"action": "name_esters", "ester_smiles": list(ester_smiles),
                            "alcohol_smiles": list(alcohol_smiles), "acid_smiles": acid_smiles,
                            "alcohol_names": list(alcohol_names) if alcohol_names else None,
@@ -137,11 +189,11 @@ class AdmelabBridge:
                filters: Optional[dict] = None,
                include_lead: bool = True,
                max_rows: Optional[int] = None) -> DesignResult:
-        """Genera análogos de una molécula lider y los devuelve con ADME/toxicidad y ranking.
+        """Generates analogues of a lead molecule and returns them with ADME/toxicity and ranking.
 
-        positions        punto(s) de crecimiento (indices de átomo); None = automático
-        n_substitutions  número de sustituciones (p. ej. [1, 2])
-        use_ml           True usa ADMET-AI (GPU si hay); False solo descriptores RDKit (rápido)
+        positions        growth point(s) (atom indices); None = automatic
+        n_substitutions  number of substitutions (e.g. [1, 2])
+        use_ml           True uses ADMET-AI (GPU if available); False only RDKit descriptors (fast)
         """
         out = self._call({
             "action": "design",

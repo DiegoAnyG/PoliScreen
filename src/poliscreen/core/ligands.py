@@ -1,7 +1,7 @@
-"""De SMILES a estructura 3D lista para acoplar.
+"""From SMILES to a 3D structure ready to dock.
 
-Determinista: semilla fija en la generación de confomeros y elección del de menor energía.
-Sin esto la reproducibilidad se rompe antes de llegar al docking.
+Deterministic: fixed seed for conformer generation and lowest-energy selection.
+Without this, reproducibility breaks before reaching the docking.
 """
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ def safe_name(text: str, fallback: str = "lig") -> str:
 
 def smiles_to_3d(smiles: str, name: str, out_dir, seed: int = 42, n_confs: int = 50,
                  max_iters: int = 2000) -> Optional[Path]:
-    """SMILES -> 3D optimizado. Anade hidrogenos, genera n_confs confomeros (ETKDGv3, semilla fija),
-    los optimiza con MMFF94s y escribe el de MENOR energía en SDF. 50 confomeros = misma receta que
-    ligand_prep.py del notebook (mejor geometría). La protonación a pH 7.4 se aplica después, al pasar
-    a pdbqt con obabel -p 7.4. Determinista con la semilla."""
+    """SMILES -> optimized 3D. Adds hydrogens, generates n_confs conformers (ETKDGv3, fixed seed),
+    optimizes them with MMFF94s and writes the LOWEST-energy one to SDF. 50 conformers = same recipe
+    as the notebook's ligand_prep.py (better geometry). Protonation at pH 7.4 is applied later, when
+    converting to pdbqt with obabel -p 7.4. Deterministic given the seed."""
     from rdkit import Chem, RDLogger
     from rdkit.Chem import AllChem
     RDLogger.DisableLog("rdApp.*")
@@ -29,9 +29,7 @@ def smiles_to_3d(smiles: str, name: str, out_dir, seed: int = 42, n_confs: int =
     if m is None:
         return None
     m = Chem.AddHs(m)
-    # En moléculas muy flexibles (péptidos) generar decenas de confomeros cuesta minutos y aporta
-    # poco: Vina vuelve a muestrear cada torsión durante el acoplamiento, así que el confomero de
-    # partida apenas influye. Se reduce el número según la flexibilidad, sin perder determinismo.
+    # The starting conformer barely matters: Vina re-samples every torsion while docking.
     from rdkit.Chem import rdMolDescriptors
     if rdMolDescriptors.CalcNumRotatableBonds(m) > 15 or m.GetNumHeavyAtoms() > 45:
         n_confs = min(n_confs, 8)
@@ -40,11 +38,6 @@ def smiles_to_3d(smiles: str, name: str, out_dir, seed: int = 42, n_confs: int =
     params.randomSeed = seed
     cids = list(AllChem.EmbedMultipleConfs(m, numConfs=n_confs, params=params))
     if not cids:
-        # El algoritmo de distancias falla en moléculas grandes y muy flexibles: no encuentra
-        # coordenadas que satisfagan todas las restricciones dentro del número de intentos por
-        # defecto. Partir de coordenadas aleatorias y ampliar los intentos lo resuelve casi siempre,
-        # y no altera lo anterior porque solo se recurre a ello cuando la vía normal no da nada.
-        # Sin este segundo intento, un péptido largo desaparecía del cribado sin mensaje alguno.
         params.useRandomCoords = True
         params.maxIterations = 2000
         params.enforceChirality = False
@@ -70,7 +63,7 @@ def smiles_to_3d(smiles: str, name: str, out_dir, seed: int = 42, n_confs: int =
 
 def materialize(smiles_list: Sequence[str], out_dir, names: Optional[Sequence[str]] = None,
                 seed: int = 42, prefix: str = "ana", on_progress=None) -> list:
-    """Convierte una lista de SMILES en archivos 3D. Devuelve [(nombre, ruta, smiles)]."""
+    """Converts a list of SMILES into 3D files. Returns [(name, path, smiles)]."""
     made = []
     for i, smi in enumerate(smiles_list):
         name = names[i] if names and i < len(names) else f"{prefix}{i + 1:03d}"

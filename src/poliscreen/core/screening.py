@@ -1,49 +1,84 @@
-"""Cribado: interacciones (PLIP) y puntuación de calidad frente al control.
+"""Screening: interactions (PLIP) and quality scoring against the control.
 
-Sin UI. Motor único de interacciones: PLIP, con numeración de autor.
-Puntuación: Tversky ponderada contra la huella del control; los contactos de más no suman.
-Sin dianas ni residuos cableados: todo se deriva del control y de lo que elija el usuario.
+No UI. Single interaction engine: PLIP, with author numbering.
+Scoring: weighted Tversky against the control fingerprint; extra contacts do not add.
+No hard-wired targets or residues: everything is derived from the control and from the user's choices.
 """
 import os, re, json, subprocess, shutil
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+from . import layout as lay
 import numpy as np, pandas as pd
 
 REC_EXT = (".pdb", ".pdbqt")
 LIG_EXT = (".mol2", ".sdf", ".smi", ".mol", ".pdbqt")
-# patrones de archivos GENERADOS (no son entradas): complejos, poses por modelo, intermedios de prep/PLIP
-GEN_PAT = re.compile(r"(^Complejo_|_compounds_a_|-model\d|_protH|_protonly|^fx_|^_cof_|_conv\.|_rec\.|_only\.)", re.I)
+GEN_PAT = re.compile(r"(^Complex_|^Complejo_|_compounds_a_|-model\d|_protH|_protonly|^fx_|^_cof_|_conv\.|_rec\.|_only\.)", re.I)
 PLIP_MAP = {"hbond": ["hydrogen_bond"], "hydrophobic": ["hydrophobic_interaction"], "saltbridge": ["salt_bridge"],
             "water": ["water_bridge"], "halogen": ["halogen_bond"], "pistack": ["pi_stack"],
             "pication": ["pi_cation_interaction"], "metal": ["metal_complex"]}
-# color, etiqueta, estilo de línea por tipo (para el diagrama 2D)
 TYPE_STYLE = {"hbond": ("#1f77b4", "H-bond", "-"), "hydrophobic": ("#7f7f7f", "Hydrophobic", "--"),
               "saltbridge": ("#d62728", "Salt bridge", "-"), "pistack": ("#2ca02c", "Pi-stacking", "-"),
               "pication": ("#9467bd", "Pi-cation", "-"), "halogen": ("#17becf", "Halogen", "-"),
               "water": ("#8c564b", "Water bridge", ":"), "metal": ("#e377c2", "Metal", "-")}
 
-# ---------------------------------------------------------------- parsers
-# Interacciones específicas y orientadas. Añadir una donde el control no la tiene es mérito real;
-# acumular hidrofóbicas o puentes de agua es promiscuidad y no cuenta.
-DIRECCIONALES = {"hbond", "saltbridge", "pistack", "pication", "halogen", "metal"}
+# Directional contacts are merit; accumulating hydrophobic ones is promiscuity.
+DIRECTIONAL = {"hbond", "saltbridge", "pistack", "pication", "halogen", "metal"}
 
-# Mérito relativo por tipo de interacción (heurístico, guiado por literatura, editable por el
-# usuario en weights["type_weights"]). Iónico y H-bond, fuertes y específicos; pi/halógeno,
-# intermedios; hidrofóbica, débil pero numerosa; agua, incierta. No son energías: son prioridades.
+# Merit per interaction type: priorities, not energies.
 TYPE_WEIGHTS = {"saltbridge": 1.00, "metal": 0.95, "hbond": 0.85, "pication": 0.80,
                 "pistack": 0.65, "halogen": 0.55, "hydrophobic": 0.35, "water": 0.30}
 
 
 def feat_type(feat):
-    """Tipo de interacción de una columna 'Residuo#_tipo' (p.ej. 'Tyr157_hbond' -> 'hbond')."""
+    """Interaction type of a 'Residue#_type' column (e.g. 'Tyr157_hbond' -> 'hbond')."""
     return str(feat).rsplit("_", 1)[-1]
 
 
 def normalize_key(v): return re.sub(r"[^a-z0-9]+", "", str(v).lower())
 def base_of(receptor):
-    """Receptor base de un id de sitio. En docking hibrido el id es 'receptor~PocketN'; así el control
-    y los cataliticos (asignados al receptor) se reconocen en todos sus sitios. Sin sufijo, identidad."""
+    """Base receptor of a site id. In hybrid docking the id is 'receptor~PocketN'; this way the control
+    and the catalytic residues (assigned to the receptor) are recognized at all its sites. No suffix, identity."""
     return str(receptor).split("~", 1)[0]
+READY_SUFFIX = "_ready"
+_LEGACY_READY_SUFFIXES = ("_ready", "_listo")
+
+
+def display_name(receptor) -> str:
+    """Receptor name as the user should read it: no path, no extension, no prepared-file tag
+    (8HTB_ready.pdb -> 8HTB). In hybrid docking the site is kept: '8HTB_ready~Pk3' -> '8HTB~Pk3'."""
+    site = str(receptor).split("~", 1)
+    stem = Path(site[0]).stem
+    for suf in _LEGACY_READY_SUFFIXES:
+        stem = stem.removesuffix(suf)
+    return stem + (f"~{site[1]}" if len(site) > 1 else "")
+
+
+LEGACY_COLUMNS = {
+    "efectividad_pct": "effectiveness_pct", "percentil": "percentile", "consenso": "consensus",
+    "es_control_del_target": "is_target_control", "motor": "engine", "tipo": "type",
+    "diana": "target", "validado": "validated", "fuente": "source", "producto": "product",
+    "viabilidad": "feasibility", "secuencia": "sequence", "longitud": "length",
+    "carga_neta": "net_charge", "momento_hidrofobico": "hydrophobic_moment",
+    "fraccion_hidrofobica": "hydrophobic_fraction", "indice_boman": "boman_index",
+}
+LEGACY_VALUES = {"source": {"péptido": "peptide", "peptido": "peptide", "núcleo": "core",
+                            "nucleo": "core", "tuyo": "yours", "interno": "internal"}}
+
+
+def normalize_columns(df):
+    """Renames legacy Spanish columns/values of a table read from disk. Idempotent."""
+    if df is None or getattr(df, "empty", True):
+        return df
+    ren = {k: v for k, v in LEGACY_COLUMNS.items() if k in df.columns and v not in df.columns}
+    if ren:
+        df = df.rename(columns=ren)
+    for col, mapping in LEGACY_VALUES.items():
+        if col in df.columns:
+            df[col] = df[col].replace(mapping)
+    return df
+
+
 def receptor_from_name(n):
     m = re.search(r"docking_(.+?)_compounds_a_", str(n)); return m.group(1) if m else "receptor"
 def compound_from_pose_name(v):
@@ -55,17 +90,16 @@ def compound_from_pose_name(v):
 def model_of(n):
     m = re.search(r"model(\d+)", str(n)); return int(m.group(1)) if m else 1
 def pose_key(n):
-    """Clave comun receptor|compuesto|modelo, tolerante a prefijos (Complejo_) y sufijos, para
-    casar filas de interacciones con filas de docking aunque el nombre no sea idéntico."""
+    """Common receptor|compound|model key, tolerant of prefixes (Complejo_) and suffixes, to match
+    interaction rows with docking rows even when the name is not identical."""
     return f"{normalize_key(receptor_from_name(n))}|{normalize_key(compound_from_pose_name(n))}|{model_of(n)}"
 def resname(feat): return feat.split("_")[0]
 def resnum(res):
     d = "".join(ch for ch in str(res) if ch.isdigit()); return int(d) if d else 0
 
-# ---------------------------------------------------------------- escaneo de entradas
 def scan_inputs(data_dir):
-    """Receptores (.pdb) y ligandos (.mol2/.sdf/.smi/.mol) de la carpeta de datos,
-    EXCLUYENDO archivos generados (complejos, poses, intermedios). Evita el problema de los 2000+."""
+    """Receptors (.pdb) and ligands (.mol2/.sdf/.smi/.mol) of the data folder,
+    EXCLUDING generated files (complexes, poses, intermediates). Avoids the 2000+ problem."""
     root = Path(data_dir); recs, ligs = [], []
     if not root.exists(): return recs, ligs
     for p in sorted(root.rglob("*"), key=lambda x: str(x).lower()):
@@ -75,16 +109,16 @@ def scan_inputs(data_dir):
         elif suf in (".mol2", ".sdf", ".smi", ".mol"): ligs.append(p)
     return recs, ligs
 
-# ---------------------------------------------------------------- carga de resultados existentes
 def load_results(work_dir):
-    """Lee interacciones.csv, resultados_docking.csv y selección.json de la carpeta de trabajo."""
+    """Reads interacciones.csv, resultados_docking.csv and seleccion.json from the working folder."""
     W = Path(work_dir)
-    inter = pd.read_csv(W / "interacciones.csv") if (W / "interacciones.csv").exists() else pd.DataFrame()
-    dock = pd.read_csv(W / "resultados_docking.csv") if (W / "resultados_docking.csv").exists() else pd.DataFrame()
-    sel = json.loads((W / "seleccion.json").read_text()) if (W / "seleccion.json").exists() else {}
+    inter_p, dock_p = lay.artifact(W, lay.INTERACTIONS_CSV), lay.artifact(W, lay.DOCKING_CSV)
+    sel_p = lay.artifact(W, lay.SELECTION_JSON)
+    inter = pd.read_csv(inter_p) if inter_p.exists() else pd.DataFrame()
+    dock = pd.read_csv(dock_p) if dock_p.exists() else pd.DataFrame()
+    sel = json.loads(sel_p.read_text()) if sel_p.exists() else {}
     return inter, dock, sel
 
-# ---------------------------------------------------------------- ADME / Ki
 def adme_score_from_smiles(smi):
     try:
         from rdkit import Chem
@@ -108,8 +142,8 @@ def adme_score_from_smiles(smi):
     return (100 * sum(comp[k] * wts[k] for k in wts), viol)
 
 def _sascore(m):
-    """Synthetic Accessibility score (Ertl & Schuffenhauer 2009): 1 fácil - 10 difícil.
-    Usa el sascorer que RDKit trae en Contrib; si no esta, devuelve NaN."""
+    """Synthetic Accessibility score (Ertl & Schuffenhauer 2009): 1 easy - 10 hard.
+    Uses the sascorer that RDKit ships in Contrib; if absent, returns NaN."""
     try:
         import os, sys
         from rdkit.Chem import RDConfig
@@ -123,8 +157,8 @@ def _sascore(m):
 
 
 def extra_props_from_smiles(smi):
-    """Sintetizabilidad (SAscore), alerta PAINS y booleanos de Lipinski. Todo offline con RDKit.
-    Booleanos por regla: 1 cumple, 0 incumple. pains: 1 = tiene subestructura promiscua (malo)."""
+    """Synthesizability (SAscore), PAINS alert and Lipinski booleans. All offline with RDKit.
+    Per-rule booleans: 1 passes, 0 fails. pains: 1 = has a promiscuous substructure (bad)."""
     out = dict(sa_score=np.nan, pains=np.nan, ro5_mw=np.nan, ro5_logp=np.nan,
                ro5_hbd=np.nan, ro5_hba=np.nan, ro5_pass=np.nan, logp=np.nan, n_heavy=np.nan)
     try:
@@ -142,7 +176,7 @@ def extra_props_from_smiles(smi):
     out["logp"] = round(float(logp), 2); out["n_heavy"] = int(m.GetNumHeavyAtoms())
     out["ro5_mw"] = int(mw <= 500); out["ro5_logp"] = int(logp <= 5)
     out["ro5_hbd"] = int(hbd <= 5); out["ro5_hba"] = int(hba <= 10)
-    out["ro5_pass"] = int((out["ro5_mw"] + out["ro5_logp"] + out["ro5_hbd"] + out["ro5_hba"]) >= 3)  # Ro5: <=1 violacion
+    out["ro5_pass"] = int((out["ro5_mw"] + out["ro5_logp"] + out["ro5_hbd"] + out["ro5_hba"]) >= 3)
     try:
         from rdkit.Chem import FilterCatalog
         params = FilterCatalog.FilterCatalogParams()
@@ -160,8 +194,8 @@ def ki_from_dg(dg, temp_k=298.15):
 
 
 def _fp_convergence(sub, icols, dscore, topk: int = 5):
-    """Convergencia del modo de unión: Tanimoto medio entre las huellas PLIP de las MEJORES poses de un
-    compuesto. Alto = el docking encuentra el mismo modo una y otra vez (senal de confianza). NaN si <2 poses."""
+    """Binding-mode convergence: mean Tanimoto between the PLIP fingerprints of a compound's BEST poses.
+    High = docking finds the same mode again and again (a confidence signal). NaN if <2 poses."""
     rows = sub.copy()
     rows["_sc"] = rows["name"].map(lambda n: dscore.get(pose_key(n), np.nan))
     rows = rows.sort_values("_sc").head(topk)
@@ -178,8 +212,8 @@ def _fp_convergence(sub, icols, dscore, topk: int = 5):
 
 
 def _geomean(vals):
-    """Media geométrica de las componentes disponibles (ignora NaN). Exige que TODAS concuerden: una
-    componente baja hunde el resultado, a diferencia de la media aritmetica. Suelo 1e-3 para evitar log(0)."""
+    """Geometric mean of the available components (ignores NaN). Requires that they ALL agree: one low
+    component sinks the result, unlike the arithmetic mean. Floor 1e-3 to avoid log(0)."""
     xs = [float(v) for v in vals if v is not None and not pd.isna(v) and float(v) >= 0]
     if not xs:
         return np.nan
@@ -187,9 +221,9 @@ def _geomean(vals):
 
 
 def fp_recovery(ref_feats, pose_feats) -> dict:
-    """Coincidencia entre dos huellas de interacción (conjuntos de features Res#_tipo).
-    recovery = |intersección|/|referencia| (cuanto del cristalográfico reproduce la pose dockeada);
-    tanimoto = |intersección|/|unión|. Es la Validación de que el docking recupera el modo real."""
+    """Overlap between two interaction fingerprints (sets of Res#_type features).
+    recovery = |intersection|/|reference| (how much of the crystallographic one the docked pose
+    reproduces); tanimoto = |intersection|/|union|. It is the validation that docking recovers the real mode."""
     ref, pose = set(ref_feats or []), set(pose_feats or [])
     if not ref:
         return dict(recovery=np.nan, tanimoto=np.nan, shared=0, ref_n=0, extra=len(pose))
@@ -199,13 +233,12 @@ def fp_recovery(ref_feats, pose_feats) -> dict:
                 tanimoto=round(len(shared) / len(union), 3) if union else np.nan,
                 shared=len(shared), ref_n=len(ref), extra=len(pose - ref))
 
-# ---------------------------------------------------------------- referencia (huella del control)
 def build_ref_info(inter, dc, control_keys, control_assign, crystal_feats=None):
-    """Por receptor: huella de REFERENCIA. Si se pasa crystal_feats[R] (huella PLIP del ligando
-    cristalográfico en su pose real), esa es la referencia objetiva. Si no, se cae a la mejor pose
-    DOCKEADA del control (compatibilidad). Devuelve también autocat: los residuos con los que la
-    referencia hace interacciones DIRECCIONALES, sugerencia de residuos clave cuando el usuario no
-    los conoce."""
+    """Per receptor: REFERENCE fingerprint. If crystal_feats[R] is passed (PLIP fingerprint of the
+    crystallographic ligand in its real pose), that is the objective reference. Otherwise it falls back
+    to the control's best DOCKED pose (compatibility). It also returns autocat: the residues with which
+    the reference makes DIRECTIONAL interactions, a suggestion of key residues when the user does not
+    know them."""
     crystal_feats = crystal_feats or {}
     icols = [c for c in inter.columns if "_" in c and c not in ("name", "compound", "ckey", "receptor", "is_control")]
     dscore = {}
@@ -226,45 +259,44 @@ def build_ref_info(inter, dc, control_keys, control_assign, crystal_feats=None):
             else:
                 refck0 = sorted(cks)[0]
         cfeats = crystal_feats.get(R)
-        if cfeats:                                   # referencia cristalográfica del sitio (ligando/cofactor)
+        if cfeats:
             feats = sorted(set(cfeats))
             freq = {c: 1.0 for c in feats}
-            src = "cristalografica"
-        elif crystal_feats:                          # modo sitio: este bolsillo no tiene ligando de referencia
-            info[R] = dict(ckey=refck0, feats=[], freq={}, residues=[], autocat=[], src="residuos/relativa")
+            src = "crystallographic"
+        elif crystal_feats:
+            info[R] = dict(ckey=refck0, feats=[], freq={}, residues=[], autocat=[], src="residues/relative")
             continue
-        else:                                        # compat (sin huellas): control dockeado
+        else:
             cpre = rin[rin["ckey"].isin(cks)]
             if cpre.empty:
-                info[R] = dict(ckey=refck0, feats=[], freq={}, residues=[], autocat=[], src="ninguna"); continue
+                info[R] = dict(ckey=refck0, feats=[], freq={}, residues=[], autocat=[], src="none"); continue
             cref = cpre[cpre["ckey"] == refck0]; best = best_row(cref)
             feats = [c for c in icols if best is not None and best[c] > 0]
             freq = {c: float((cref[c] > 0).mean()) for c in feats}
             src = "control dockeado"
         residues = sorted({resname(c) for c in feats}, key=lambda r: (resnum(r), r))
-        autocat = sorted({resname(c) for c in feats if feat_type(c) in DIRECCIONALES},
+        autocat = sorted({resname(c) for c in feats if feat_type(c) in DIRECTIONAL},
                          key=lambda r: (resnum(r), r))
         info[R] = dict(ckey=refck0, feats=feats, freq=freq, residues=residues, autocat=autocat, src=src)
     return info, icols, dscore
 
-# ---------------------------------------------------------------- ranking (Tversky calidad)
 def compute_ranking(inter, dc, control_keys, control_assign, ref_info, icols, dscore,
                     cat_map, weights, smiles_map=None, protox_map=None, temp_k=298.15,
                     pocket_res_map=None, sec_map=None, pose_stability=None, reliable_map=None,
                     cnn_map=None):
-    """Ranking OBJETIVO por pocket. La calidad de interacción no mide PARECIDO al control: suma el
-    valor de cada interacción (peso por TIPO) según el ROL del residuo -catalitico (gate, x w_cat),
-    secundario (ancla conocida, x w_sec), de pocket (x1) o externo (x w_out)- y se normaliza por la
-    calidad del ligando Cristalográfico (=100%). Así un compuesto supera al control haciendo Más/mejores
-    contactos productivos, no copiandolo. Los residuos los designa el usuario (cat_map / sec_map); si no,
-    los cataliticos se sugieren desde la referencia (ref_info)."""
+    """OBJECTIVE per-pocket ranking. Interaction quality does not measure SIMILARITY to the control: it
+    sums the value of each interaction (weight by TYPE) according to the residue ROLE -catalytic (gate,
+    x w_cat), secondary (known anchor, x w_sec), pocket (x1) or external (x w_out)- and normalizes by
+    the quality of the crystallographic ligand (=100%). So a compound beats the control by making more/
+    better productive contacts, not by copying it. The residues are designated by the user (cat_map /
+    sec_map); otherwise the catalytic ones are suggested from the reference (ref_info)."""
     smiles_map = smiles_map or {}; protox_map = protox_map or {}; pocket_res_map = pocket_res_map or {}
     sec_map = sec_map or {}
     TW = dict(TYPE_WEIGHTS); TW.update(weights.get("type_weights") or {})
-    W_CAT = float(weights.get("w_cat", weights.get("key", 3.0)))    # catalitico (gate): necesario y premiado
-    W_SEC = float(weights.get("w_sec", 1.5))                         # secundario: ancla conocida, no obligatoria
-    W_OUT = float(weights.get("w_out", 0.15))                        # contacto fuera del pocket: poco merito
-    CAT_GATE = float(weights.get("cat_gate", 0.5))                   # cuanto penaliza faltar a un catalitico (0..1)
+    W_CAT = float(weights.get("w_cat", weights.get("key", 3.0)))
+    W_SEC = float(weights.get("w_sec", 1.5))
+    W_OUT = float(weights.get("w_out", 0.15))
+    CAT_GATE = float(weights.get("cat_gate", 0.5))
     def best_row(sub):
         if sub is None or sub.empty: return None
         sc = sub["name"].map(lambda n: dscore.get(pose_key(n), np.nan))
@@ -276,13 +308,12 @@ def compute_ranking(inter, dc, control_keys, control_assign, ref_info, icols, ds
     def extra(k):
         if k not in _extra: _extra[k] = extra_props_from_smiles(smiles_map.get(k))
         return _extra[k]
-    bloques = []
+    blocks = []
     for R in sorted(inter["receptor"].unique()):
         rin = inter[inter["receptor"] == R].copy()
         info = ref_info.get(R, {}); feats = info.get("feats", [])
         cats = {s.lower() for s in cat_map.get(R, [])}
-        secs = {s.lower() for s in sec_map.get(R, [])} - cats   # el gate manda sobre lo secundario
-        # residuos del pocket: por geometría de la caja si se pasan; si no, los que toca cualquiera
+        secs = {s.lower() for s in sec_map.get(R, [])} - cats
         pocket = {s.lower() for s in pocket_res_map.get(R, [])} or {resname(c).lower() for c in icols}
         def role_mult(res):
             r = res.lower()
@@ -292,15 +323,11 @@ def compute_ranking(inter, dc, control_keys, control_assign, ref_info, icols, ds
         def quality(fs):
             return float(sum(TW.get(feat_type(c), 0.3) * role_mult(resname(c)) for c in fs))
         ctrl_cks = {ck for ck, rc in control_assign.items() if rc == base_of(R)} or set(rin[rin["is_control"]]["ckey"].unique())
-        Q0 = quality(feats)   # referencia cristalográfica (ligando/cofactor del sitio): la línea del 100%
-        # Sitio sin ligando de referencia (bolsillo secundario del híbrido): el 100% se define por
-        # sus residuos catalíticos (una interacción direccional con cada uno). Sin catalíticos en el
-        # pocket, se normaliza al mejor compuesto del sitio.
-        cats_en_pocket = cats & pocket
-        if Q0 <= 0 and cats_en_pocket:
-            Q0 = float(len(cats_en_pocket)) * TW.get("hbond", 0.85) * W_CAT
-        # Primera pasada: huella y calidad de cada compuesto (el control usa su huella cristalográfica
-        # solo si el sitio la tiene; en un sitio sin referencia usa su pose dockeada, como los demas).
+        Q0 = quality(feats)
+        # A site with no reference ligand takes its 100% from its catalytic residues, or from the best compound if it has none.
+        cats_in_pocket = cats & pocket
+        if Q0 <= 0 and cats_in_pocket:
+            Q0 = float(len(cats_in_pocket)) * TW.get("hbond", 0.85) * W_CAT
         comp = []
         for ck, sub in rin.groupby("ckey"):
             r0 = best_row(sub)
@@ -308,19 +335,19 @@ def compute_ranking(inter, dc, control_keys, control_assign, ref_info, icols, ds
             comp.append((ck, sub, r0, fs, quality(fs)))
         if Q0 <= 0:
             qmax = max((q for *_, q in comp), default=0.0)
-            Q0 = qmax if qmax > 0 else 1.0     # normalización relativa: el mejor del sitio = 100%
+            Q0 = qmax if qmax > 0 else 1.0
         recs = []
         for ck, sub, r0, fs, Q in comp:
             comp_res = {resname(c).lower() for c in fs}
             cov = (sum(1 for cr in cats if cr in comp_res) / len(cats)) if cats else np.nan
-            gate = 1.0 if not cats else ((1.0 - CAT_GATE) + CAT_GATE * cov)   # faltar a un catalitico penaliza
+            gate = 1.0 if not cats else ((1.0 - CAT_GATE) + CAT_GATE * cov)
             T = (Q / Q0 * gate) if Q0 > 0 else np.nan
             destacar = sorted([c for c in fs if resname(c).lower() in cats or resname(c).lower() in pocket],
                               key=lambda c: TW.get(feat_type(c), 0.0) * role_mult(resname(c)), reverse=True)
             recs.append(dict(ckey=ck, compound=sub["compound"].iloc[0], is_control=int(sub["is_control"].max()),
                              inter_quality=T, cat_coverage=cov, key_interaction="; ".join(destacar[:12]),
                              pose=(model_of(r0["name"]) if r0 is not None else None),
-                             conv=_fp_convergence(sub, icols, dscore)))   # convergencia del modo de unión
+                             conv=_fp_convergence(sub, icols, dscore)))
         isum = pd.DataFrame(recs)
         dR = dc[dc["receptor"] == R].groupby("ckey").agg(best_dock=("docking_score", "min")).reset_index() if not dc.empty else pd.DataFrame(columns=["ckey", "best_dock"])
         mR = isum.merge(dR, on="ckey", how="outer"); mR["receptor"] = R; mR["compound"] = mR["compound"].fillna(mR["ckey"])
@@ -330,17 +357,16 @@ def compute_ranking(inter, dc, control_keys, control_assign, ref_info, icols, ds
         mR["tox_class"] = mR["ckey"].map(lambda k: protox_map.get(k, {}).get("tox_class", np.nan))
         adv = mR["ckey"].apply(lambda k: pd.Series(adme(k), index=["adme", "lip_viol"])); mR = pd.concat([mR, adv], axis=1)
         ext = mR["ckey"].apply(lambda k: pd.Series(extra(k))); mR = pd.concat([mR, ext], axis=1)
-        # pKi (numérico, sortable, evita el lio de unidades), y eficiencia: LE = -dG/átomos pesados,
-        # LLE = pKi - LogP. Premian unión por átomo, no molécula grande: guarda anti-"greaseball".
+        # LE and LLE reward binding per atom: guard against size bias.
         bd = pd.to_numeric(mR["best_dock"], errors="coerce"); nh = pd.to_numeric(mR["n_heavy"], errors="coerce")
         mR["pKi"] = (-np.log10(pd.to_numeric(mR["pred_ki_M"], errors="coerce"))).round(2)
         mR["LE"] = (-bd / nh.where(nh > 0)).round(3)
         mR["LLE"] = (mR["pKi"] - pd.to_numeric(mR["logp"], errors="coerce")).round(2)
-        mR["es_control_del_target"] = mR.apply(lambda r: (r["is_control"] == 1) and (control_assign.get(r["ckey"]) == base_of(R)), axis=1)
+        mR["is_target_control"] = mR.apply(lambda r: (r["is_control"] == 1) and (control_assign.get(r["ckey"]) == base_of(R)), axis=1)
         refck = info.get("ckey")
         def refval(col, mode):
             v = pd.to_numeric(mR[mR["ckey"] == refck][col], errors="coerce").dropna() if refck else pd.Series(dtype=float)
-            if v.empty: v = pd.to_numeric(mR[mR["es_control_del_target"]][col], errors="coerce").dropna()
+            if v.empty: v = pd.to_numeric(mR[mR["is_target_control"]][col], errors="coerce").dropna()
             if v.empty: v = pd.to_numeric(mR[col], errors="coerce").dropna()
             return np.nan if v.empty else (v.min() if mode == "low" else v.max())
         ref_dock = refval("best_dock", "low"); ref_adme = refval("adme", "high"); ref_ki = refval("pred_ki_M", "low"); ref_tox = refval("ld50_mgkg", "high")
@@ -348,8 +374,6 @@ def compute_ranking(inter, dc, control_keys, control_assign, ref_info, icols, ds
             v = pd.to_numeric(mR[col], errors="coerce")
             if ref is None or pd.isna(ref) or ref == 0: return pd.Series(np.nan, index=mR.index)
             return (ref / v) if invert else (v / ref)
-        # Eje de afinidad: 'dock' (score crudo, sesgado hacia moléculas grandes) o 'le' (eficiencia
-        # de ligando, -dG/átomos pesados, corrige el sesgo). Ambos normalizados contra el control.
         if str(weights.get("dock_metric", "dock")).lower() == "le":
             dock_axis = eff("LE", refval("LE", "high"))
         else:
@@ -361,29 +385,20 @@ def compute_ranking(inter, dc, control_keys, control_assign, ref_info, icols, ds
                         ("adme", weights.get("adme", 0.0)), ("ki", weights.get("ki", 0.0)), ("tox", weights.get("tox", 0.0))]:
             if wt <= 0: continue
             v = pd.to_numeric(axes[key], errors="coerce"); ok = v.notna(); ws[ok] += v[ok] * wt; wa[ok] += wt
-        mR["efectividad_pct"] = np.where(wa > 0, 100 * ws / wa, np.nan)
-        # Percentil dentro de la biblioteca (por receptor): comparable entre dianas, al contrario que
-        # el % vs control, que varía con lo fuerte que sea el control de cada diana.
-        mR["percentil"] = (pd.to_numeric(mR["efectividad_pct"], errors="coerce").rank(pct=True) * 100).round(0)
+        mR["effectiveness_pct"] = np.where(wa > 0, 100 * ws / wa, np.nan)
+        # Percentile is comparable across targets; the % is not, it depends on each control.
+        mR["percentile"] = (pd.to_numeric(mR["effectiveness_pct"], errors="coerce").rank(pct=True) * 100).round(0)
         mR["best_inter"] = pd.to_numeric(mR["inter_quality"], errors="coerce").round(3)
         mR["cat_coverage"] = pd.to_numeric(mR["cat_coverage"], errors="coerce").round(3)
-        # --- Confianza (consenso multi-evidencia, 0-1). Ortogonal a la efectividad: no mide cuán
-        # bueno es el compuesto sino cuánto fiarse del número. Se reduce a la mitad si la diana no
-        # valida (su control no re-dockea).
         aff_pct = (-pd.to_numeric(mR["best_dock"], errors="coerce")).rank(pct=True)
         int_pct = pd.to_numeric(mR["inter_quality"], errors="coerce").rank(pct=True)
         mR["conc"] = (1.0 - (aff_pct - int_pct).abs()).round(3)
         ps = pose_stability or {}
         mR["geom"] = pd.to_numeric(mR["ckey"].map(lambda k: ps.get(k, np.nan)), errors="coerce")
-        # Confianza = media geométrica de conv (reproducibilidad del modo de unión vía huella PLIP) y
-        # conc (concordancia afinidad-interacción). geom (dispersión geométrica) se reporta aparte
-        # pero NO entra: con Vina es casi constante (~0.08, num_modes devuelve poses diversas) y no
-        # varía con la caja ni la exhaustividad, así que hundía la confianza de todos por igual.
-        # Tercera evidencia opcional (si se re-puntuó con gnina): consenso entre dos funciones
-        # independientes, la empírica de Vina y la red de gnina. Que dos métodos con supuestos
-        # distintos ordenen igual un compuesto es una señal que ninguno da por sí solo.
+        # Confidence = geometric mean of binding-mode reproducibility and affinity-interaction agreement.
+        # Geometric spread is excluded: with Vina it is nearly constant and does not discriminate.
         cm = cnn_map or {}
-        componentes = ["conv", "conc"]
+        components = ["conv", "conc"]
         if cm:
             mR["cnn_score"] = pd.to_numeric(mR["ckey"].map(lambda k: cm.get(k, {}).get("cnn_score")),
                                             errors="coerce")
@@ -391,21 +406,21 @@ def compute_ranking(inter, dc, control_keys, control_assign, ref_info, icols, ds
                                                errors="coerce")
             if mR["cnn_affinity"].notna().any():
                 cnn_pct = mR["cnn_affinity"].rank(pct=True)
-                mR["consenso"] = (1.0 - (aff_pct - cnn_pct).abs()).round(3)
-                componentes.append("consenso")
-        mR["confidence"] = mR.apply(lambda r: _geomean([r.get(c) for c in componentes]), axis=1)
+                mR["consensus"] = (1.0 - (aff_pct - cnn_pct).abs()).round(3)
+                components.append("consensus")
+        mR["confidence"] = mR.apply(lambda r: _geomean([r.get(c) for c in components]), axis=1)
         if reliable_map and not reliable_map.get(R, True):
             mR["confidence"] = (pd.to_numeric(mR["confidence"], errors="coerce") * 0.5).round(3)
-        mR = mR[(mR["is_control"] == 0) | (mR["es_control_del_target"])].copy()
-        bloques.append(mR)
-    rk = pd.concat(bloques, ignore_index=True)
-    rk["tipo"] = np.where(rk["is_control"] == 1, "Control",
-                 np.where(rk["efectividad_pct"] >= 105, "Supera control",
-                 np.where(rk["efectividad_pct"] >= 95, "Comparable", "Inferior")))
-    return rk.sort_values(["receptor", "efectividad_pct"], ascending=[True, False])
+        mR = mR[(mR["is_control"] == 0) | (mR["is_target_control"])].copy()
+        blocks.append(mR)
+    rk = pd.concat(blocks, ignore_index=True)
+    rk["type"] = np.where(rk["is_control"] == 1, "Control",
+                 np.where(rk["effectiveness_pct"] >= 105, "Beats control",
+                 np.where(rk["effectiveness_pct"] >= 95, "Comparable", "Below control")))
+    return rk.sort_values(["receptor", "effectiveness_pct"], ascending=[True, False])
 
 def prepare_interactions(inter, control_keys):
-    """Anade columnas compound/ckey/receptor/is_control a interacciones.csv."""
+    """Adds compound/ckey/receptor/is_control columns to interacciones.csv."""
     inter = inter.copy()
     inter["compound"] = inter["name"].apply(compound_from_pose_name)
     inter["ckey"] = inter["compound"].apply(normalize_key)
@@ -413,13 +428,12 @@ def prepare_interactions(inter, control_keys):
     inter["is_control"] = inter["ckey"].isin(control_keys)
     return inter
 
-# ---------------------------------------------------------------- diagrama 2D (PLIP, esquema radial)
 def draw_2d(row, title, fig=None, reference=None, figsize=(5.0, 5.0)):
-    """Esquema radial de las interacciones de una pose (fila de interacciones.csv).
+    """Radial layout of a pose's interactions (row of interacciones.csv).
 
-    Si se pasa `reference` (huella del control: conjunto de features residuo_tipo), colorea en VERDE lo
-    que la reproduce y en GRIS lo que no cuenta (contacto de más o mismo residuo con otro enlace). El
-    estilo de línea sigue codificando el tipo de interacción. Mismo motor y numeración que la tabla.
+    If `reference` is passed (control fingerprint: set of residue_type features), it colors GREEN what
+    reproduces it and GRAY what does not count (an extra contact or the same residue with another bond).
+    The line style still encodes the interaction type. Same engine and numbering as the table.
     """
     import matplotlib.pyplot as plt
     feats = [(c, int(row[c])) for c in row.index
@@ -468,7 +482,6 @@ def draw_2d(row, title, fig=None, reference=None, figsize=(5.0, 5.0)):
     ax.set_title(title, fontsize=11)
     return fig
 
-# ---------------------------------------------------------------- redocking RMSD (obrms)
 def redocking_rmsd(ref_file, pose_file):
     try:
         r = subprocess.run(["obrms", str(ref_file), str(pose_file)], capture_output=True, text=True)
@@ -480,13 +493,13 @@ def redocking_rmsd(ref_file, pose_file):
 
 
 def pose_stability_map(dc, poses_dir, soft: float = 4.0, topk: int = 20) -> dict:
-    """{ckey: estabilidad geométrica de las poses} (obrms vs la mejor pose). Componente de la confianza.
+    """{ckey: geometric stability of the poses} (obrms vs the best pose). A confidence component.
 
-    Crédito GRADUADO por pose: 1 si coincide con la mejor y decae linealmente a 0 en `soft` A, en vez
-    de un corte binario a 2 A que castigaba de más. Usa TODAS las poses generadas (hasta topk), no solo
-    unas pocas, para aprovechar el muestreo que pidio el usuario. Se precalcula (obrms es costoso).
-    Un valor bajo es informativo: significa que el docking no converge en un modo de unión (ligando
-    promiscuo, caja demasiado grande o busqueda poco exhaustiva)."""
+    GRADED credit per pose: 1 if it matches the best and decays linearly to 0 at `soft` A, instead of
+    a binary 2 A cut that penalized too much. Uses ALL generated poses (up to topk), not just a few, to
+    make use of the sampling the user asked for. It is precomputed (obrms is costly). A low value is
+    informative: it means docking does not converge on a binding mode (promiscuous ligand, too large a
+    box or a poorly exhaustive search)."""
     out = {}
     if dc is None or getattr(dc, "empty", True):
         return out
@@ -507,9 +520,8 @@ def pose_stability_map(dc, poses_dir, soft: float = 4.0, topk: int = 20) -> dict
         out[ck] = round(sum(cred) / len(cred), 3)
     return out
 
-# ---------------------------------------------------------------- SMILES para ADME
 def build_smiles_map(data_dir):
-    """SMILES por compuesto: primero de csv (name,smiles), luego de los propios archivos de ligando."""
+    """SMILES per compound: first from csv (name,smiles), then from the ligand files themselves."""
     smiles = {}
     root = Path(data_dir)
     if not root.exists(): return smiles
@@ -539,9 +551,7 @@ def build_smiles_map(data_dir):
                     else:
                         m = Chem.MolFromMolFile(str(lp))
                     s = Chem.MolToSmiles(Chem.RemoveHs(m)) if m is not None else None
-                    # RDKit no siempre percibe bien los heterociclos con carga formal (el N-oxido
-                    # del benzofuroxano hace que no pueda kekulizar). OpenBabel si los interpreta,
-                    # así que se usa como respaldo antes de dar el compuesto por ilegible.
+                    # RDKit cannot kekulize the benzofuroxan N-oxide; OpenBabel does interpret it.
                     if not s:
                         s = smiles_via_obabel(lp)
                     if s:
@@ -556,7 +566,7 @@ def build_smiles_map(data_dir):
 
 
 def smiles_via_obabel(archivo):
-    """SMILES leido con OpenBabel y validado con RDKit. Devuelve None si no sale nada utilizable."""
+    """SMILES read with OpenBabel and validated with RDKit. Returns None if nothing usable comes out."""
     try:
         r = subprocess.run(["obabel", str(archivo), "-osmi"], capture_output=True, text=True, timeout=60)
         bruto = (r.stdout or "").strip().split()
@@ -569,7 +579,7 @@ def smiles_via_obabel(archivo):
         return None
 
 def find_data_dir(work_dir):
-    """Busca la carpeta de entrada (la que tiene más .mol2 / *clean*.pdb) bajo work/entrada o work."""
+    """Looks for the input folder (the one with the most .mol2 / *clean*.pdb) under work/entrada or work."""
     W = Path(work_dir); cands = []
     for base in [W / "entrada", W]:
         if not base.exists(): continue
@@ -580,16 +590,11 @@ def find_data_dir(work_dir):
     return max(cands)[1] if cands else ""
 
 def controls_and_assign(sel):
-    """control_keys y control->receptor desde selección.json."""
+    """control_keys and control->receptor from seleccion.json."""
     return set(sel.get("control_keys", [])), dict(sel.get("control_target_map", {}))
 
-# ki a 0 a propósito: deriva del score de docking, así que puntuarla sería contarlo dos veces. Se
-# muestra en las tablas pero no entra en el ranking.
-# Ejes (dock/inter/adme/ki/tox): media ponderada auto-normalizada por su suma, así que no tienen que
-# sumar 1 y ponerlos todos a 1.0 = promedio simple. Perillas del modelo: w_cat (peso del catalítico),
-# w_out (contacto fuera del pocket), cat_gate (penalización por faltar a un catalítico).
+# Ki weighs 0 on purpose: it derives from the docking score and would be counted twice.
 DEFAULT_WEIGHTS = dict(dock=0.50, inter=0.50, adme=0.0, ki=0.0, tox=0.0,
-                       dock_metric="dock",   # 'dock' = score crudo | 'le' = eficiencia de ligando (corrige sesgo de tamaño)
+                       dock_metric="dock",
                        w_cat=3.0, w_sec=1.5, w_out=0.15, cat_gate=0.5,
-                       # compat con el modelo anterior (no intervienen en el modelo objetivo):
                        key=3.0, alpha=0.3, beta=1.0, bonus=0.25, type_rigor=1.0)

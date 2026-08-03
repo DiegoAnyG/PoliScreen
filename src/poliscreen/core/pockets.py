@@ -1,7 +1,7 @@
-"""Detección de cavidades (pockets) con fpocket y sus propiedades de drogabilidad.
+"""Cavity (pocket) detection with fpocket and their druggability properties.
 
-Como MolModa: lista los pockets con su Druggability Score, volumen y centro, para centrar la
-caja de docking en el sitio más prometedor sin adivinar coordenadas. fpocket es libre (conda-forge).
+Like MolModa: lists the pockets with their Druggability Score, volume and center, to center the
+docking box on the most promising site without guessing coordinates. fpocket is free (conda-forge).
 """
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ def fpocket_available() -> bool:
 
 
 def _spheres_from_pqr(pqr, max_n: int = 500) -> list:
-    """Esferas-alfa de un pocket: [(x, y, z, radio)]. Definen el VOLUMEN real de la cavidad;
-    renderizadas translucidas dan una isosuperficie (como CaverWeb/MolModa), no una caja."""
+    """Alpha-spheres of a pocket: [(x, y, z, radius)]. They define the real VOLUME of the cavity;
+    rendered translucent they give an isosurface (like CaverWeb/MolModa), not a box."""
     out = []
     for l in Path(pqr).read_text(errors="ignore").splitlines():
         if not l.startswith(("ATOM", "HETATM")):
@@ -37,23 +37,23 @@ def _spheres_from_pqr(pqr, max_n: int = 500) -> list:
 
 
 def _residues_from_atm(atm) -> list:
-    """Residuos que tapizan la cavidad, leidos del pocket{n}_atm.pdb de fpocket.
-    Permiten decir si una cavidad contiene residuos cataliticos, no solo donde esta."""
-    res, vistos = [], set()
+    """Residues lining the cavity, read from fpocket's pocket{n}_atm.pdb.
+    They let us say whether a cavity contains catalytic residues, not just where it is."""
+    res, seen_items = [], set()
     for l in Path(atm).read_text(errors="ignore").splitlines():
         if not l.startswith(("ATOM", "HETATM")):
             continue
         rt, rn = l[17:20].strip(), l[22:26].strip()
-        if rt and rn and (rt, rn) not in vistos:
-            vistos.add((rt, rn))
+        if rt and rn and (rt, rn) not in seen_items:
+            seen_items.add((rt, rn))
             res.append(f"{rt.capitalize()}{rn}")
     return sorted(res, key=lambda r: (int("".join(c for c in r if c.isdigit()) or 0), r))
 
 
 def _dims_from_pqr(pqr, pad: float = 6.0, lo: float = 14.0, hi: float = 30.0) -> Optional[tuple]:
-    """Centro y tamaño POR EJE de un pocket desde sus vertices (alpha spheres). Devuelve
-    (cx,cy,cz,sx,sy,sz): caja anisotropica que sigue la forma del bolsillo (como MolModa), no un cubo.
-    El centro es el de la caja envolvente; cada lado = extensión del eje + margen, acotado a [lo,hi]."""
+    """Center and PER-AXIS size of a pocket from its vertices (alpha spheres). Returns
+    (cx,cy,cz,sx,sy,sz): an anisotropic box that follows the pocket shape (like MolModa), not a cube.
+    The center is that of the bounding box; each side = axis extent + margin, clamped to [lo,hi]."""
     pts = []
     for l in Path(pqr).read_text(errors="ignore").splitlines():
         if l.startswith(("ATOM", "HETATM")):
@@ -66,7 +66,7 @@ def _dims_from_pqr(pqr, pad: float = 6.0, lo: float = 14.0, hi: float = 30.0) ->
     a = np.array(pts)
     mn, mx = a.min(0), a.max(0)
     c = (mn + mx) / 2.0
-    ext = mx - mn                       # extensión real de la cavidad, antes de acotar
+    ext = mx - mn
     dims = np.clip(ext + pad, lo, hi)
     return (round(float(c[0]), 2), round(float(c[1]), 2), round(float(c[2]), 2),
             round(float(dims[0]), 1), round(float(dims[1]), 1), round(float(dims[2]), 1),
@@ -89,10 +89,10 @@ def _parse_info(info_txt) -> dict:
 
 
 def detect(pdb, timeout: int = 300) -> list:
-    """Devuelve los pockets ordenados por drogabilidad (desc).
+    """Returns the pockets ordered by druggability (desc).
 
-    Cada uno: {n, druggability, score, volume, spheres, cx, cy, cz, size, label}.
-    Lista vacia si fpocket no esta o no encuentra nada.
+    Each one: {n, druggability, score, volume, spheres, cx, cy, cz, size, label}.
+    Empty list if fpocket is absent or finds nothing.
     """
     if not fpocket_available():
         return []
@@ -122,13 +122,11 @@ def detect(pdb, timeout: int = 300) -> list:
                 "n": n, "druggability": dr, "score": p.get("Score"), "volume": p.get("Volume"),
                 "spheres": int(p.get("Number of Alpha Spheres", 0)),
                 "cx": cx, "cy": cy, "cz": cz, "sx": sx, "sy": sy, "sz": sz,
-                # Extensión real de la cavidad. La caja tiene un mínimo (14 A) porque por debajo no
-                # cabe un ligando; sin este dato, dos cavidades muy distintas parecen iguales.
                 "ex": ex, "ey": ey, "ez": ez, "minimo_aplicado": bool(max(ex, ey, ez) + 6.0 < 14.0),
-                "alpha_xyz": alpha,                  # esferas-alfa para renderizar la cavidad como volumen
+                "alpha_xyz": alpha,
                 "residues": _residues_from_atm(atm) if atm.exists() else [],
-                "props": dict(p),                    # TODAS las propiedades de fpocket, sin filtrar
-                "size": round(max(sx, sy, sz), 1),   # compat: un solo número cuando se pide cubo
+                "props": dict(p),
+                "size": round(max(sx, sy, sz), 1),
                 "label": f"Pocket {n} · druggability {dr:.2f} · vol {p.get('Volume', 0):.0f} · "
                          f"box {sx:.0f}x{sy:.0f}x{sz:.0f}" if dr is not None else f"Pocket {n}",
             })
@@ -142,18 +140,18 @@ def detect(pdb, timeout: int = 300) -> list:
 
 def size_from_volume(volume, factor: float = 1.8, pad: float = 8.0,
                      lo: float = 16.0, hi: float = 30.0) -> float:
-    """Arista de caja a partir del volumen del pocket (A^3): lado del cubo equivalente x factor + margen.
-    El factor holgado deja sitio a la exploracion; se acota a [lo, hi] para no salir del sitio."""
+    """Box edge from the pocket volume (A^3): side of the equivalent cube x factor + margin.
+    The generous factor leaves room for exploration; clamped to [lo, hi] to stay within the site."""
     if not volume or volume <= 0:
         return 22.0
     return round(float(np.clip(volume ** (1.0 / 3.0) * factor + pad, lo, hi)), 1)
 
 
 def pocket_box(pocket: dict, sizing: str = "shape"):
-    """Convierte un pocket en una caja de docking (Box).
+    """Turns a pocket into a docking box (Box).
 
-    sizing='shape': caja ANISOTROPICA que sigue la forma del bolsillo (sx,sy,sz por eje; como MolModa).
-    sizing='cube': cubo del lado mayor. sizing='volume': cubo derivado del volumen fpocket.
+    sizing='shape': ANISOTROPIC box that follows the pocket shape (sx,sy,sz per axis; like MolModa).
+    sizing='cube': cube of the largest side. sizing='volume': cube derived from the fpocket volume.
     """
     from .docking import Box
     if sizing == "volume":

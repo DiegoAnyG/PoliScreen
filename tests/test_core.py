@@ -1,7 +1,7 @@
-"""Pruebas del nucleo: química, geometría y enrutado. No requieren binarios externos.
+"""Core tests: chemistry, geometry and routing. They need no external binaries.
 
-Cada prueba corresponde a un fallo que se detecto en uso real; el comentario dice cual, porque una
-prueba sin ese contexto acaba borrandose cuando estorba.
+Each test corresponds to a failure found in real use; the comment says which, because a test without
+that context ends up deleted when it gets in the way.
 """
 from pathlib import Path
 
@@ -12,135 +12,153 @@ from poliscreen.core import peptides as pp
 from poliscreen.core import session as ss
 
 
-# --------------------------------------------------------------- rutas escritas a mano
-@pytest.mark.parametrize("entrada,esperado", [
+# --------------------------------------------------------------- hand-typed paths
+@pytest.mark.parametrize("entry,expected", [
     (r"\\wsl.localhost\Ubuntu-24.04\home\u\proy", "/home/u/proy"),
     (r"\\wsl$\Ubuntu\home\u\proy", "/home/u/proy"),
     ("/home/u/proy", "/home/u/proy"),
     ('"/home/u/proy"', "/home/u/proy"),
 ])
-def test_rutas_de_windows_se_traducen(entrada, esperado):
-    """Una ruta de Windows creaba UNA carpeta con barras invertidas en el nombre."""
-    assert str(ss.normalizar_ruta(entrada)[0]) == esperado
+def test_windows_paths_are_translated(entry, expected):
+    """A Windows path created ONE folder with backslashes in the name."""
+    assert str(ss.normalize_path(entry)[0]) == expected
 
 
-def test_ruta_vacia_da_un_destino_valido():
-    p, _ = ss.normalizar_ruta("")
+def test_an_empty_path_gives_a_valid_destination():
+    p, _ = ss.normalize_path("")
     assert p.is_absolute()
 
 
-# --------------------------------------------------------------- química de péptidos
-def test_ciclacion_es_cabeza_cola_con_cadenas_laterales_reactivas():
-    """Buscar el COOH por su forma cerraba por el aspartato o el glutamato."""
+def test_the_default_root_follows_the_container_volume(monkeypatch):
+    """In Docker the home directory is not persistent: results written there would be lost
+    with the container, so the image points this at its mounted volume."""
+    monkeypatch.setenv("POLISCREEN_PROJECTS", "/data")
+    assert ss.default_root() == Path("/data")
+    assert ss.normalize_path("")[0] == Path("/data/demo")
+    monkeypatch.delenv("POLISCREEN_PROJECTS")
+    assert ss.default_root() == Path.home() / "poliscreen_proyectos"
+
+
+# --------------------------------------------------------------- peptide chemistry
+def test_cyclization_is_head_to_tail_with_reactive_side_chains():
+    """Looking for the COOH by its shape closed through aspartate or glutamate."""
     from rdkit import Chem, RDLogger
     from rdkit.Chem import Descriptors, rdMolDescriptors as rmd
     RDLogger.DisableLog("rdApp.*")
     for seq in ("SDCEFGQ", "ELQGRAK", "KWKLF", "ICIWDDS"):
         lin = Chem.MolFromSmiles(pp.to_smiles(seq))
-        cic = Chem.MolFromSmiles(pp.to_smiles(seq, ciclico=True))
+        cic = Chem.MolFromSmiles(pp.to_smiles(seq, cyclic=True))
         macro = max((len(r) for r in cic.GetRingInfo().AtomRings() if len(r) > 8), default=0)
-        assert macro == 3 * len(seq), f"{seq}: anillo de {macro}, esperado {3 * len(seq)}"
-        perdida = Descriptors.MolWt(lin) - Descriptors.MolWt(cic)
-        assert abs(perdida - 18.02) < 0.1, f"{seq}: perdio {perdida:.2f}, esperado una agua"
+        assert macro == 3 * len(seq), f"{seq}: ring of {macro}, expected {3 * len(seq)}"
+        loss = Descriptors.MolWt(lin) - Descriptors.MolWt(cic)
+        assert abs(loss - 18.02) < 0.1, f"{seq}: lost {loss:.2f}, expected one water"
         assert rmd.CalcNumRings(cic) == rmd.CalcNumRings(lin) + 1
 
 
-def test_los_extremos_se_modifican_solos():
-    """Acetilar tocaba la lisina y amidar el aspartato."""
+def test_only_the_termini_are_modified():
+    """Acetylating touched the lysine and amidating the aspartate."""
     from rdkit import Chem, RDLogger
     RDLogger.DisableLog("rdApp.*")
-    AMINA = Chem.MolFromSmarts("[NX3;H2;!$(N-C=O)]")
-    ACIDO = Chem.MolFromSmarts("[CX3](=O)[OX2H1]")
+    AMINE = Chem.MolFromSmarts("[NX3;H2;!$(N-C=O)]")
+    ACID = Chem.MolFromSmarts("[CX3](=O)[OX2H1]")
 
-    def cuenta(smi, patron):
+    def count_of(smi, patron):
         return len(Chem.MolFromSmiles(smi).GetSubstructMatches(patron))
 
-    assert cuenta(pp.to_smiles("KKKGG"), AMINA) - cuenta(pp.to_smiles("KKKGG", n_acetil=True), AMINA) == 1
-    assert cuenta(pp.to_smiles("DDEGG"), ACIDO) - cuenta(pp.to_smiles("DDEGG", c_amida=True), ACIDO) == 1
+    assert count_of(pp.to_smiles("KKKGG"), AMINE) - count_of(pp.to_smiles("KKKGG", n_acetil=True), AMINE) == 1
+    assert count_of(pp.to_smiles("DDEGG"), ACID) - count_of(pp.to_smiles("DDEGG", c_amida=True), ACID) == 1
 
 
-def test_la_carga_refleja_la_quimica_de_los_extremos():
-    """La tabla ignoraba acetilación y ciclación al calcular la carga."""
-    base = pp.propiedades("KWKLF")["carga_neta"]
-    assert pp.propiedades("KWKLF", n_acetil=True)["carga_neta"] == base - 1
-    assert pp.propiedades("KWKLF", c_amida=True)["carga_neta"] == base + 1
-    assert pp.propiedades("KWKLF", ciclico=True)["carga_neta"] == base
+def test_charge_reflects_the_termini_chemistry():
+    """The table ignored acetylation and cyclization when computing the charge."""
+    base = pp.properties("KWKLF")["net_charge"]
+    assert pp.properties("KWKLF", n_acetil=True)["net_charge"] == base - 1
+    assert pp.properties("KWKLF", c_amida=True)["net_charge"] == base + 1
+    assert pp.properties("KWKLF", cyclic=True)["net_charge"] == base
 
 
-def test_los_nombres_distinguen_las_variantes():
-    """Dos moléculas distintas compartian nombre en las tablas y en los archivos de poses."""
-    nombres = {pp.etiqueta("KWKLF", **kw) for kw in
+def test_names_tell_the_variants_apart():
+    """Two different molecules shared a name in the tables and in the pose files."""
+    names_ = {pp.label_for("KWKLF", **kw) for kw in
                ({}, {"n_acetil": True}, {"c_amida": True},
-                {"n_acetil": True, "c_amida": True}, {"ciclico": True})}
-    assert len(nombres) == 5
+                {"n_acetil": True, "c_amida": True}, {"cyclic": True})}
+    assert len(names_) == 5
 
 
-def test_smiles_falla_en_vez_de_devolver_el_lineal():
-    """Devolver el péptido abierto con nombre de ciclico ocultaba el error."""
+def test_smiles_fails_instead_of_returning_the_linear_peptide():
+    """Returning the open peptide with a cyclic name hid the error."""
     assert pp.to_smiles("") is None
 
 
-# --------------------------------------------------------------- reparto de recursos
-def test_el_paralelismo_baja_con_ligandos_flexibles(tmp_path):
-    """Repartir solo por nucleos agoto la memoria y el sistema mato el proceso."""
-    caja = dk.Box(0, 0, 0, 24, 24, 24)
-    assert dk.coste_memoria_gb(caja, 25) > dk.coste_memoria_gb(caja, 5)
-    grande = dk.Box(0, 0, 0, 60, 60, 60)
-    assert dk.coste_memoria_gb(grande, 5) > dk.coste_memoria_gb(caja, 5)
-    assert dk.paralelismo_seguro([caja], []) >= 1
+# --------------------------------------------------------------- resource allocation
+def test_parallelism_drops_with_flexible_ligands(tmp_path):
+    """Splitting only by cores exhausted the memory and the system killed the process."""
+    box_ = dk.Box(0, 0, 0, 24, 24, 24)
+    assert dk.memory_cost_gb(box_, 25) > dk.memory_cost_gb(box_, 5)
+    big_box = dk.Box(0, 0, 0, 60, 60, 60)
+    assert dk.memory_cost_gb(big_box, 5) > dk.memory_cost_gb(box_, 5)
+    assert dk.safe_parallelism([box_], []) >= 1
 
 
-def test_torsdof_se_lee_del_pdbqt(tmp_path):
+def test_parallelism_leaves_the_machine_room(monkeypatch):
+    """Vina takes whatever it is given. Filling every core throttles a laptop, and a throttled
+    run is slower than fewer jobs at full clock."""
+    monkeypatch.setattr(dk.os, "cpu_count", lambda: 16)
+    monkeypatch.setattr(dk, "available_memory_gb", lambda: 64.0)
+    assert dk.safe_parallelism([dk.Box(0, 0, 0, 20, 20, 20)], []) == 8
+
+
+def test_torsdof_is_read_from_the_pdbqt(tmp_path):
     f = tmp_path / "l.pdbqt"
     f.write_text("ATOM      1  C   LIG A   1       0.0   0.0   0.0\nTORSDOF 22\n")
     assert dk.torsdof(f) == 22
     assert dk.torsdof(tmp_path / "no_existe.pdbqt") == 0
 
 
-# --------------------------------------------------------------- reconocer péptidos
-def test_una_molecula_pequena_no_se_toma_por_peptido(tmp_path):
-    """El reconocimiento decide el motor: un falso positivo mandaria un ligando al motor erroneo."""
+# --------------------------------------------------------------- recognize peptides
+def test_a_small_molecule_is_not_taken_for_a_peptide(tmp_path):
+    """Recognition decides the engine: a false positive would send a ligand to the wrong engine."""
     f = tmp_path / "lig.pdb"
     f.write_text("HETATM    1  C1  LIG A   1       0.0   0.0   0.0  1.00  0.00           C\nEND\n")
-    assert pp.secuencia_de_estructura(f) is None
-    assert pp.secuencia_de_estructura(tmp_path / "x.sdf") is None
+    assert pp.sequence_from_structure(f) is None
+    assert pp.sequence_from_structure(tmp_path / "x.sdf") is None
 
 
-def test_se_reconoce_un_peptido_con_esqueleto_completo(tmp_path):
+def test_a_peptide_with_a_full_backbone_is_recognized(tmp_path):
     f = tmp_path / "pep.pdb"
-    filas = []
+    rows_ = []
     n = 1
     for i, (res, ) in enumerate([("ALA",), ("GLY",), ("LYS",), ("TRP",), ("PHE",)], start=1):
         for at in ("N", "CA", "C"):
-            filas.append("ATOM  %5d  %-3s %3s B%4d    %8.3f%8.3f%8.3f  1.00  0.00"
+            rows_.append("ATOM  %5d  %-3s %3s B%4d    %8.3f%8.3f%8.3f  1.00  0.00"
                          % (n, at, res, i, i * 3.0, 0.0, 0.0))
             n += 1
-    f.write_text("\n".join(filas) + "\nEND\n")
-    seq, ciclo = pp.secuencia_de_estructura(f)
+    f.write_text("\n".join(rows_) + "\nEND\n")
+    seq, ciclo = pp.sequence_from_structure(f)
     assert seq == "AGKWF"
     assert ciclo is False
 
 
-# --------------------------------------------------------------- exportación
-def test_el_paquete_se_arma_en_memoria(tmp_path):
-    """La exportación dejaba copias sueltas en la carpeta de resultados."""
+# --------------------------------------------------------------- export
+def test_the_package_is_built_in_memory(tmp_path):
+    """The export left loose copies in the results folder."""
     (tmp_path / "ranking.csv").write_text("compound,best_dock\na,-8.0\n")
-    datos, incluidos = ss.paquete(tmp_path, ["resultados_csv"], methods_text="# m")
+    datos, included_items = ss.package_bytes(tmp_path, ["results_csv"], methods_text="# m")
     assert datos[:2] == b"PK"
-    assert any("ranking.csv" in i for i in incluidos)
+    assert any("ranking.csv" in i for i in included_items)
     assert not list(tmp_path.glob("export_*"))
 
 
-def test_el_catalogo_marca_lo_recomendado(tmp_path):
+def test_the_catalog_marks_what_is_recommended(tmp_path):
     (tmp_path / "ranking.csv").write_text("a,b\n1,2\n")
-    cat = ss.catalogo(tmp_path)
-    assert cat["resultados_csv"]["hay"] and cat["resultados_csv"]["motivo"]
-    assert not cat["poses_zip"]["hay"]
+    cat = ss.catalog(tmp_path)
+    assert cat["results_csv"]["has"] and cat["results_csv"]["reason"]
+    assert not cat["poses_zip"]["has"]
 
 
-# --------------------------------------------------------------- residuos modificados
-def test_no_se_duplican_atomos_al_preparar(tmp_path):
-    """Un residuo modificado pedido como cofactor se anadia sobre el que ya estaba en la cadena."""
+# --------------------------------------------------------------- modified residues
+def test_preparation_does_not_duplicate_atoms(tmp_path):
+    """A modified residue requested as a cofactor was added on top of the one already in the chain."""
     from poliscreen.core import receptor as rc
     f = tmp_path / "r.pdb"
     f.write_text(
@@ -148,12 +166,12 @@ def test_no_se_duplican_atomos_al_preparar(tmp_path):
         "ATOM      2  CA  ALA A   1       1.500   0.000   0.000  1.00  0.00           C\n"
         "ATOM      3  C   ALA A   1       1.500   0.000   0.000  1.00  0.00           C\n"
         "END\n")
-    assert rc._quitar_superpuestos(f) == 1
-    assert rc._quitar_superpuestos(f) == 0        # idempotente
+    assert rc._remove_overlapping(f) == 1
+    assert rc._remove_overlapping(f) == 0        # idempotent
 
 
-def test_conect_solo_cuando_el_anillo_cierra(tmp_path):
-    """El visor dibujaba abierto un péptido ciclico; se cierra solo si la geometría lo justifica."""
+def test_conect_only_when_the_ring_closes(tmp_path):
+    """The viewer drew a cyclic peptide open; it is closed only if the geometry justifies it."""
     from poliscreen.core import adcp
 
     def pose(dist):
@@ -161,44 +179,44 @@ def test_conect_solo_cuando_el_anillo_cierra(tmp_path):
                 f"ATOM      2  CA  ALA A   1       1.500   0.000   0.000  1.00  0.00           C\n"
                 f"ATOM      3  C   ALA A   2       {dist:.3f}   0.000   0.000  1.00  0.00           C\n"
                 f"END\n")
-    cerrada = tmp_path / "cerrada.pdb"
-    cerrada.write_text(pose(1.5))                 # N(res1)-C(res2) a 1.5 A
-    d = adcp._cerrar_anillo(cerrada)
-    assert d is not None and "CONECT" in cerrada.read_text()
+    closed_pose = tmp_path / "cerrada.pdb"
+    closed_pose.write_text(pose(1.5))                 # N(res1)-C(res2) at 1.5 A
+    d = adcp._close_ring(closed_pose)
+    assert d is not None and "CONECT" in closed_pose.read_text()
 
     abierta = tmp_path / "abierta.pdb"
-    abierta.write_text(pose(4.0))                 # a 4 A: no se enlaza
-    adcp._cerrar_anillo(abierta)
+    abierta.write_text(pose(4.0))                 # at 4 A: no bond
+    adcp._close_ring(abierta)
     assert "CONECT" not in abierta.read_text()
 
 
-def test_se_explica_por_que_no_hay_rmsd(tmp_path):
-    """'no calculable' no decia nada; la causa habitual es comparar moléculas distintas."""
+def test_it_explains_why_there_is_no_rmsd(tmp_path):
+    """'not computable' said nothing; the usual cause is comparing different molecules."""
     from poliscreen.core import validation as vl
     a, b = tmp_path / "a.pdb", tmp_path / "b.pdb"
     a.write_text("ATOM      1  C1  LIG A   1       0.0   0.0   0.0  1.00  0.00           C\n"
                  "ATOM      2  P1  LIG A   1       1.0   0.0   0.0  1.00  0.00           P\n")
     b.write_text("ATOM      1  C1  LIG A   1       0.0   0.0   0.0  1.00  0.00           C\n")
-    assert "are not the same molecule" in vl._motivo_sin_rmsd(a, b)
-    assert vl._motivo_sin_rmsd(a, a) == "not computable"
+    assert "are not the same molecule" in vl._reason_no_rmsd(a, b)
+    assert vl._reason_no_rmsd(a, a) == "not computable"
 
 
-def test_un_peptido_largo_llega_a_estructura_3d(tmp_path):
-    """Dos tridecapeptidos de una biblioteca de diez desaparecian sin mensaje: fallaba el encaje."""
+def test_a_long_peptide_reaches_a_3d_structure(tmp_path):
+    """Two 13-mers from a library of ten disappeared with no message: the embedding failed."""
     from poliscreen.core import ligands as lg
     seqs = ["DHITYAVHVQIRW", "WMHSPRFKIVVKW"]
     smis = [pp.to_smiles(s, c_amida=True) for s in seqs]
     assert all(smis)
     made = lg.materialize(smis, tmp_path, names=seqs)
-    assert len(made) == len(seqs), "un ligando se perdio al generar la estructura 3D"
+    assert len(made) == len(seqs), "a ligand was lost while generating the 3D structure"
 
 
-def test_se_prefiere_el_envoltorio_de_gnina(tmp_path, monkeypatch):
-    """El binario suelto de gnina no es autocontenido: elegirlo obligaba a exportar una variable."""
-    herramientas = tmp_path / "poliscreen_tools"
-    herramientas.mkdir()
-    for nombre in ("gnina", "gnina-run"):
-        f = herramientas / nombre
+def test_the_gnina_wrapper_is_preferred(tmp_path, monkeypatch):
+    """The standalone gnina binary is not self-contained: choosing it forced exporting a variable."""
+    tools = tmp_path / "poliscreen_tools"
+    tools.mkdir()
+    for name_ in ("gnina", "gnina-run"):
+        f = tools / name_
         f.write_text("#!/bin/sh\n")
         f.chmod(0o755)
     monkeypatch.delenv("POLISCREEN_GNINA", raising=False)
@@ -206,8 +224,8 @@ def test_se_prefiere_el_envoltorio_de_gnina(tmp_path, monkeypatch):
     assert dk.gnina_exe().endswith("gnina-run")
 
 
-def test_los_modificados_se_detectan_sin_listas_propias(tmp_path):
-    """La detección usa la tabla de PDBFixer; sin estructura valida devuelve lista vacia, no falla."""
+def test_modified_residues_are_detected_without_our_own_lists(tmp_path):
+    """Detection uses PDBFixer's table; with no valid structure it returns an empty list, does not fail."""
     from poliscreen.core import receptor as rc
     f = tmp_path / "vacio.pdb"
     f.write_text("END\n")

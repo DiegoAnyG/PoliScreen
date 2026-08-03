@@ -1,7 +1,7 @@
-"""Docking: preparación de archivos, caja de búsqueda y motores.
+"""Docking: file preparation, search box and engines.
 
-Reproducible: semilla fija y un hilo por acoplamiento (Vina no es determinista con multihilo). El
-paralelismo va entre acoplamientos independientes, no dentro. Sin dianas ni rutas cableadas.
+Reproducible: fixed seed and one thread per docking (Vina is not deterministic with multithreading).
+Parallelism goes between independent dockings, not inside. No hard-wired targets or paths.
 """
 from __future__ import annotations
 
@@ -21,7 +21,6 @@ class DockingError(RuntimeError):
     pass
 
 
-# ---------------------------------------------------------------- caja
 @dataclass
 class Box:
     cx: float
@@ -62,9 +61,9 @@ def _coords(pdb, het_only=False):
 
 
 def hetero_groups(pdb) -> dict:
-    """Ligandos co-cristalizados (HETATM no agua) -> etiqueta: Box centrada en ellos.
+    """Co-crystallized ligands (non-water HETATM) -> label: Box centered on them.
 
-    Sirve para centrar la caja en el sitio correcto cuando una proteína tiene varios.
+    Used to center the box on the correct site when a protein has several.
     """
     groups = {}
     for line in Path(pdb).read_text(errors="ignore").splitlines():
@@ -82,7 +81,7 @@ def hetero_groups(pdb) -> dict:
 
 
 def coords_from_file(path) -> list:
-    """Coordenadas de cualquier formato habitual de ligando o estructura."""
+    """Coordinates from any common ligand or structure format."""
     p = Path(path)
     suf = p.suffix.lower()
     text = p.read_text(errors="ignore")
@@ -95,14 +94,14 @@ def coords_from_file(path) -> list:
                 except ValueError:
                     continue
     elif suf == ".mol2":
-        dentro = False
+        inside = False
         for l in text.splitlines():
             if l.startswith("@<TRIPOS>ATOM"):
-                dentro = True
+                inside = True
                 continue
             if l.startswith("@<TRIPOS>"):
-                dentro = False
-            if dentro:
+                inside = False
+            if inside:
                 f = l.split()
                 if len(f) >= 5:
                     try:
@@ -129,9 +128,9 @@ def coords_from_file(path) -> list:
 
 
 def residues_in_box(receptor_pdb, box, pad: float = 0.0) -> set:
-    """Residuos (etiqueta 'Tyr157', como los nombra PLIP) con al menos un átomo dentro de la caja.
-    Define el 'pocket' objetivo: el ranking premia contactos productivos con CUALQUIERA de estos,
-    no solo con los que toca el control."""
+    """Residues (label 'Tyr157', as PLIP names them) with at least one atom inside the box.
+    Defines the objective 'pocket': the ranking rewards productive contacts with ANY of these,
+    not only with the ones the control touches."""
     hx, hy, hz = box.sx / 2 + pad, box.sy / 2 + pad, box.sz / 2 + pad
     res = set()
     for l in Path(receptor_pdb).read_text(errors="ignore").splitlines():
@@ -149,21 +148,21 @@ def residues_in_box(receptor_pdb, box, pad: float = 0.0) -> set:
 
 
 def box_from_file(path, pad: float = 10.0, lo: float = 16.0, hi: float = 30.0) -> Box:
-    """Caja centrada en un ligando concreto: lo más fiable cuando se tiene el co-cristalizado."""
+    """Box centered on a specific ligand: the most reliable when the co-crystallized one is available."""
     return Box.around(coords_from_file(path), pad=pad, lo=lo, hi=hi)
 
 
 def load_boxes_xlsx(path, receptors: Sequence) -> dict:
-    """Carga cajas de un xlsx con columnas receptor,cx,cy,cz,sx,sy,sz (formato de MolModa).
+    """Loads boxes from an xlsx with columns receptor,cx,cy,cz,sx,sy,sz (MolModa format).
 
-    Empareja por nombre de archivo sin extensión; ignora filas incompletas.
+    Matches by file name without extension; ignores incomplete rows.
     """
     import pandas as pd
     t = pd.read_excel(path)
     cols = {str(c).lower().strip(): c for c in t.columns}
     need = ("receptor", "cx", "cy", "cz", "sx", "sy", "sz")
     if any(k not in cols for k in need):
-        raise DockingError(f"Al xlsx le faltan columnas. Se requieren: {', '.join(need)}.")
+        raise DockingError(f"The xlsx is missing columns. Required: {', '.join(need)}.")
     porclave = {}
     for _, row in t.iterrows():
         try:
@@ -182,27 +181,25 @@ def load_boxes_xlsx(path, receptors: Sequence) -> dict:
 
 
 def auto_box(pdb) -> Box:
-    """Caja automática: centrada en el ligando co-cristalizado si lo hay, si no en la proteína."""
+    """Automatic box: centered on the co-crystallized ligand if there is one, otherwise on the protein."""
     het = _coords(pdb, het_only=True)
     if len(het) >= 3:
         return Box.around(het)
     pts = _coords(pdb)
     if not pts:
-        raise DockingError(f"{Path(pdb).name}: sin coordenadas legibles.")
+        raise DockingError(f"{Path(pdb).name}: no readable coordinates.")
     return Box.around(pts, pad=0.0, lo=24.0, hi=24.0)
 
 
-# ---------------------------------------------------------------- preparación
 def to_pdbqt(src, dst, receptor: bool = False, ph: float = 7.4) -> bool:
-    """Convierte a pdbqt con OpenBabel. Receptor: rigido; ligando: cargas Gasteiger."""
+    """Converts to pdbqt with OpenBabel. Receptor: rigid; ligand: Gasteiger charges."""
     src, dst = Path(src), Path(dst)
     if src.suffix.lower() == ".pdbqt":
         shutil.copy(src, dst)
         return dst.exists()
     dst.parent.mkdir(parents=True, exist_ok=True)
     cmd = ["obabel", str(src), "-O", str(dst)]
-    # -r (ligando) conserva solo el fragmento conectado mayor: un ligando extraído de un PDB puede
-    # salir fragmentado o duplicado y dar un pdbqt multi-molécula que Vina rechaza.
+    # Keeps the largest fragment: a ligand extracted from a PDB can come out fragmented and Vina rejects it.
     cmd += ["-xr", "-p", str(ph)] if receptor else ["-r", "-p", str(ph), "--partialcharge", "gasteiger"]
     if src.suffix.lower() == ".smi":
         cmd += ["--gen3d"]
@@ -211,7 +208,7 @@ def to_pdbqt(src, dst, receptor: bool = False, ph: float = 7.4) -> bool:
 
 
 def scores_from_pdbqt(path) -> list:
-    """Energías de las poses, leidas de las líneas REMARK del propio pdbqt."""
+    """Pose energies, read from the REMARK lines of the pdbqt itself."""
     out = []
     for line in Path(path).read_text(errors="ignore").splitlines():
         if line.startswith("REMARK VINA RESULT"):
@@ -223,7 +220,7 @@ def scores_from_pdbqt(path) -> list:
 
 
 def split_models(pose_pdbqt, out_dir) -> list:
-    """Separa el pdbqt multi-pose en un PDB por modelo."""
+    """Splits the multi-pose pdbqt into one PDB per model."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = Path(pose_pdbqt).stem
@@ -235,9 +232,8 @@ def split_models(pose_pdbqt, out_dir) -> list:
     return sorted(out_dir.glob(f"{stem}-model*.pdb"))
 
 
-# ---------------------------------------------------------------- motores
 class VinaEngine:
-    """AutoDock Vina en CPU. Determinista con semilla fija y un hilo."""
+    """AutoDock Vina on CPU. Deterministic with a fixed seed and one thread."""
 
     name = "vina"
 
@@ -261,27 +257,27 @@ class VinaEngine:
                   "--seed", str(self.seed), "--cpu", str(self.cpu), "--out", str(out_pdbqt)])
         r = subprocess.run(cmd, capture_output=True, text=True)
         if not Path(out_pdbqt).exists():
-            raise DockingError(f"vina no produjo salida. Causa probable: caja fuera del sitio o receptor mal "
-                               f"preparado. stderr: {(r.stderr or '')[-300:]}")
+            raise DockingError(f"vina produced no output. Probable cause: box off the site or poorly "
+                               f"prepared receptor. stderr: {(r.stderr or '')[-300:]}")
         return scores_from_pdbqt(out_pdbqt)
 
 
 class GninaEngine(VinaEngine):
-    """gnina: motor derivado de Vina cuya puntuación la da una red neuronal convolucional
-    entrenada sobre complejos cristalograficos, con aceleracion por GPU.
+    """gnina: a Vina-derived engine whose scoring is given by a convolutional neural network trained on
+    crystallographic complexes, with GPU acceleration.
 
-    Su interes en PoliScreen no es la velocidad sino ser una función de puntuación INDEPENDIENTE
-    de la de Vina: dos metodos distintos que coinciden son más creibles que uno solo.
+    Its interest in PoliScreen is not speed but being a scoring function INDEPENDENT of Vina's: two
+    different methods that agree are more credible than one alone.
     """
 
     name = "gnina"
 
     def __init__(self, exe: Optional[str] = None, cpu: int = 1, seed: int = 42,
                  exhaustiveness: int = 24, n_poses: int = 10, energy_range: float = 3.0,
-                 usar_gpu: bool = True):
+                 use_gpu: bool = True):
         super().__init__(exe=exe or gnina_exe(), cpu=cpu, seed=seed,
                          exhaustiveness=exhaustiveness, n_poses=n_poses, energy_range=energy_range)
-        self.usar_gpu = usar_gpu
+        self.use_gpu = use_gpu
 
     def dock(self, receptor_pdbqt, ligand_pdbqt, box: Box, out_pdbqt) -> list:
         if not self.available():
@@ -291,27 +287,27 @@ class GninaEngine(VinaEngine):
                + box.args()
                + ["--exhaustiveness", str(self.exhaustiveness), "--num_modes", str(self.n_poses),
                   "--seed", str(self.seed), "--cpu", str(self.cpu), "-o", str(out_pdbqt)])
-        if not self.usar_gpu:
+        if not self.use_gpu:
             cmd.append("--no_gpu")
         r = subprocess.run(cmd, capture_output=True, text=True)
         if not Path(out_pdbqt).exists():
-            raise DockingError(f"gnina no produjo salida. stderr: {(r.stderr or '')[-300:]}")
+            raise DockingError(f"gnina produced no output. stderr: {(r.stderr or '')[-300:]}")
         return scores_from_pdbqt(out_pdbqt)
 
 
 def gnina_exe() -> Optional[str]:
-    """Ruta al ejecutable de gnina: variable de entorno, envoltorio local, PATH o binario suelto.
+    """Path to the gnina executable: environment variable, local wrapper, PATH or standalone binary.
 
-    El envoltorio va antes que el binario: el ejecutable oficial no es autocontenido (necesita cuDNN
-    y librerías de CUDA en LD_LIBRARY_PATH) y aborta al arrancar sin ellas; el envoltorio las
-    configura. Priorizar el binario lo daba por disponible y fallaba solo al usarlo.
+    The wrapper goes before the binary: the official executable is not self-contained (it needs cuDNN
+    and CUDA libraries in LD_LIBRARY_PATH) and aborts at startup without them; the wrapper sets them
+    up. Prioritizing the binary reported it as available and failed only when used.
     """
     env = os.environ.get("POLISCREEN_GNINA")
     if env and Path(env).exists():
         return env
     base = Path.home() / "poliscreen_tools"
-    for nombre in ("gnina-run", "gnina"):
-        local = base / nombre
+    for name_ in ("gnina-run", "gnina"):
+        local = base / name_
         if local.exists() and os.access(local, os.X_OK):
             return str(local)
     return shutil.which("gnina")
@@ -321,15 +317,15 @@ def gnina_available() -> bool:
     return gnina_exe() is not None
 
 
-_RE_PUNTUACION = re.compile(r"^\s*(Affinity|CNNscore|CNNaffinity|CNN_VS)\s*:?\s*([-\d.]+)", re.M)
+_RE_SCORE = re.compile(r"^\s*(Affinity|CNNscore|CNNaffinity|CNN_VS)\s*:?\s*([-\d.]+)", re.M)
 
 
-def rescore_poses(receptor, poses: Sequence, usar_gpu: bool = True, timeout: int = 900) -> dict:
-    """Re-puntúa con gnina poses ya generadas por Vina, sin volver a buscar.
+def rescore_poses(receptor, poses: Sequence, use_gpu: bool = True, timeout: int = 900) -> dict:
+    """Re-scores with gnina poses already generated by Vina, without searching again.
 
-    Segunda opinión barata y reproducible: el muestreo sigue siendo el de Vina; solo cambia la
-    función que evalúa cada pose. Devuelve {nombre_pose: {cnn_score, cnn_affinity, affinity}}, con
-    cnn_score como probabilidad de pose correcta (0-1) y cnn_affinity en unidades de pK.
+    A cheap, reproducible second opinion: the sampling is still Vina's; only the function that
+    evaluates each pose changes. Returns {pose_name: {cnn_score, cnn_affinity, affinity}}, with
+    cnn_score as the probability of a correct pose (0-1) and cnn_affinity in pK units.
     """
     exe = gnina_exe()
     out = {}
@@ -340,16 +336,16 @@ def rescore_poses(receptor, poses: Sequence, usar_gpu: bool = True, timeout: int
         if not p.exists():
             continue
         cmd = [exe, "-r", str(receptor), "-l", str(p), "--score_only"]
-        if not usar_gpu:
+        if not use_gpu:
             cmd.append("--no_gpu")
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired:
             continue
         vals = {}
-        for clave, valor in _RE_PUNTUACION.findall(r.stdout or ""):
+        for key_, value_ in _RE_SCORE.findall(r.stdout or ""):
             try:
-                vals.setdefault(clave, float(valor))
+                vals.setdefault(key_, float(value_))
             except ValueError:
                 pass
         if vals:
@@ -362,15 +358,14 @@ def rescore_poses(receptor, poses: Sequence, usar_gpu: bool = True, timeout: int
 ENGINES = {"vina": VinaEngine, "gnina": GninaEngine}
 
 
-# ---------------------------------------------------------------- lote
-def extension_maxima(archivos: Sequence) -> float:
-    """Eje mayor del mayor de los ligandos, en ángstrom. 0 si no se puede medir.
+def max_extent(archivos: Sequence) -> float:
+    """Longest axis of the largest ligand, in angstrom. 0 if it cannot be measured.
 
-    Dimensiona la caja: el ligando no solo debe caber, debe poder reorientarse. Una caja apenas
-    mayor limita la búsqueda a las orientaciones que entran, y el mal resultado parece del
-    acoplamiento cuando es una restricción geométrica impuesta sin querer.
+    Sizes the box: the ligand must not only fit, it must be able to reorient. A box barely larger
+    limits the search to the orientations that fit, and the poor result looks like docking when it is
+    an unintended geometric restriction.
     """
-    mayor = 0.0
+    largest = 0.0
     for f in archivos:
         try:
             pts = coords_from_file(f)
@@ -378,19 +373,19 @@ def extension_maxima(archivos: Sequence) -> float:
             continue
         if not pts:
             continue
-        ejes = [max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3)]
-        mayor = max(mayor, max(ejes))
-    return mayor
+        axes_ = [max(p[i] for p in pts) - min(p[i] for p in pts) for i in range(3)]
+        largest = max(largest, max(axes_))
+    return largest
 
 
-def caja_minima(archivos: Sequence, margen: float = 4.0) -> float:
-    """Lado mínimo recomendable para que el mayor de esos ligandos pueda girar dentro de la caja."""
-    ext = extension_maxima(archivos)
-    return round(ext + margen, 1) if ext else 0.0
+def min_box(archivos: Sequence, margin: float = 4.0) -> float:
+    """Minimum recommended side so the largest of those ligands can rotate inside the box."""
+    ext = max_extent(archivos)
+    return round(ext + margin, 1) if ext else 0.0
 
 
-def memoria_disponible_gb() -> Optional[float]:
-    """GB realmente disponibles, leidos de /proc/meminfo. None si no se puede saber."""
+def available_memory_gb() -> Optional[float]:
+    """GB actually available, read from /proc/meminfo. None if it cannot be known."""
     try:
         for l in Path("/proc/meminfo").read_text().splitlines():
             if l.startswith("MemAvailable:"):
@@ -400,11 +395,11 @@ def memoria_disponible_gb() -> Optional[float]:
     return None
 
 
-TORSDOF_LIMITE = 15
+TORSDOF_LIMIT = 15
 
 
 def torsdof(pdbqt) -> int:
-    """Grados de libertad torsionales que Vina declara para un ligando ya preparado."""
+    """Torsional degrees of freedom Vina declares for an already prepared ligand."""
     try:
         for l in Path(pdbqt).read_text(errors="ignore").splitlines():
             if l.startswith("TORSDOF"):
@@ -414,41 +409,45 @@ def torsdof(pdbqt) -> int:
     return 0
 
 
-def coste_memoria_gb(box: "Box", tors: int = 6) -> float:
-    """Memoria estimada de un acoplamiento, en GB.
+def memory_cost_gb(box: "Box", tors: int = 6) -> float:
+    """Estimated memory of a docking, in GB.
 
-    Dos sumandos: los mapas de afinidad, que crecen con el volumen de la caja (rejilla de 0,375 Å
-    por tipo de átomo), y el árbol de conformaciones, que domina en cuanto el ligando deja de ser
-    pequeño y se modela cuadrático en los grados de libertad, porque los estados vivos durante la
-    búsqueda crecen mucho más deprisa que las torsiones.
+    Two terms: the affinity maps, which grow with the box volume (0.375 A grid per atom type), and the
+    conformation tree, which dominates as soon as the ligand stops being small and is modeled quadratic
+    in the degrees of freedom, because the states alive during the search grow much faster than the
+    torsions.
 
-    Cota generosa a propósito: pasarse cuesta tiempo; quedarse corto hace que el sistema mate el
-    proceso a media tanda y se pierda todo el trabajo.
+    A generous bound on purpose: overshooting costs time; undershooting makes the system kill the
+    process mid-run and all the work is lost.
     """
-    puntos = ((box.sx / 0.375) + 1) * ((box.sy / 0.375) + 1) * ((box.sz / 0.375) + 1)
-    mapas = puntos * 22 * 4 / 1e9 * 3.0          # ~22 tipos de átomo, float de 4 bytes
+    points_ = ((box.sx / 0.375) + 1) * ((box.sy / 0.375) + 1) * ((box.sz / 0.375) + 1)
+    maps = points_ * 22 * 4 / 1e9 * 3.0
     conformaciones = 0.05 * max(1, tors) ** 2 / 36.0
-    return max(0.30, mapas + conformaciones)
+    return max(0.30, maps + conformaciones)
 
 
-def paralelismo_seguro(cajas: Sequence["Box"], ligandos_pdbqt: Sequence,
-                       reserva_gb: float = 2.0) -> int:
-    """Cuántos acoplamientos lanzar a la vez sin agotar la memoria.
+def safe_parallelism(boxes_: Sequence["Box"], ligand_pdbqts: Sequence,
+                       reserve_gb: float = 2.0) -> int:
+    """How many dockings to launch at once without exhausting memory.
 
-    Repartir solo por núcleos es lo que hace que el sistema mate el proceso: muchos hilos con poca
-    RAM es corriente (WSL toma por defecto la mitad del equipo, y 16 núcleos conviven con 7 GB). Se
-    usa el límite más restrictivo entre núcleos y memoria disponible, con margen para el intérprete.
+    Splitting only by cores is what makes the system kill the process: many threads with little RAM is
+    common (WSL takes half the machine by default, and 16 cores coexist with 7 GB). The more
+    restrictive limit between cores and available memory is used, with margin for the interpreter.
+
+    Half the cores, not all of them: Vina saturates whatever it is given, and on a laptop a
+    sustained all-core run throttles, which ends up slower than fewer jobs at full clock. Raise it
+    with `workers` on a machine with cooling to spare.
     """
-    por_nucleos = max(1, (os.cpu_count() or 2) - 2)
-    libre = memoria_disponible_gb()
+    by_cores = max(1, (os.cpu_count() or 2) // 2)
+    libre = available_memory_gb()
     if not libre:
-        return por_nucleos
-    cajas = list(cajas) or [Box(0, 0, 0, 24, 24, 24)]
-    mayor = max(cajas, key=lambda b: b.sx * b.sy * b.sz)
-    tors = max([torsdof(l) for l in ligandos_pdbqt if l] or [6])
-    coste = coste_memoria_gb(mayor, tors)
-    por_memoria = max(1, int((libre - reserva_gb) / coste))
-    return max(1, min(por_nucleos, por_memoria))
+        return by_cores
+    boxes_ = list(boxes_) or [Box(0, 0, 0, 24, 24, 24)]
+    largest = max(boxes_, key=lambda b: b.sx * b.sy * b.sz)
+    tors = max([torsdof(l) for l in ligand_pdbqts if l] or [6])
+    coste = memory_cost_gb(largest, tors)
+    by_memory = max(1, int((libre - reserve_gb) / coste))
+    return max(1, min(by_cores, by_memory))
 
 
 def pose_name(receptor_stem: str, ligand_stem: str) -> str:
@@ -457,12 +456,12 @@ def pose_name(receptor_stem: str, ligand_stem: str) -> str:
 
 def dock_batch(receptors: Sequence, ligands: Sequence, boxes: dict, work_dir,
                engine=None, workers: int = 0, on_progress=None, ph: float = 7.4, targets=None) -> list:
-    """Acopla cada ligando contra cada sitio. Reanudable: salta lo que ya existe en disco.
+    """Docks each ligand against each site. Resumable: skips what already exists on disk.
 
-    Un sitio es (ruta_receptor, id_sitio, Box). Por defecto, uno por receptor derivado de `boxes`.
-    Con `targets` se acopla el mismo ligando en varios bolsillos del mismo receptor (híbrido); el
-    id_sitio los distingue y aparece como 'receptor' en los resultados, separando el ranking por
-    sitio. ph protona receptor y ligando al pasar a pdbqt. Devuelve una fila por pose.
+    A site is (receptor_path, site_id, Box). By default, one per receptor derived from `boxes`. With
+    `targets` the same ligand is docked in several pockets of the same receptor (hybrid); the site_id
+    tells them apart and appears as 'receptor' in the results, separating the ranking per site. ph
+    protonates receptor and ligand when converting to pdbqt. Returns one row per pose.
     """
     engine = engine or VinaEngine()
     work = Path(work_dir)
@@ -473,7 +472,6 @@ def dock_batch(receptors: Sequence, ligands: Sequence, boxes: dict, work_dir,
     if targets is None:
         targets = [(r, Path(r).stem, boxes[str(r)]) for r in receptors if str(r) in boxes]
 
-    # Un pdbqt por archivo de receptor, aunque varios sitios lo compartan.
     rec_pdbqt = {}
     for rpath, _sid, _box in targets:
         if str(rpath) in rec_pdbqt:
@@ -481,25 +479,22 @@ def dock_batch(receptors: Sequence, ligands: Sequence, boxes: dict, work_dir,
         dst = prep / f"{Path(rpath).stem}.pdbqt"
         rec_pdbqt[str(rpath)] = dst if (dst.exists() or to_pdbqt(rpath, dst, receptor=True, ph=ph)) else None
 
-    # Ligandos a pdbqt ANTES de paralelizar: con varios sitios el mismo ligando entra en varias
-    # tareas, y dos hilos escribiéndolo a la vez lo dejarían a medias, perdiéndolo en ese sitio.
     lig_pdbqt = {}
     for l in ligands:
         dst = prep / f"{Path(l).stem}.pdbqt"
         lig_pdbqt[str(l)] = dst if (dst.exists() or to_pdbqt(l, dst, ph=ph)) else None
 
-    # Ligandos demasiado flexibles para Vina, apartados ANTES de lanzar nada: además de dar una pose
-    # sin sentido, pueden agotar la memoria y tumbar la tanda entera, perdiendo el trabajo ya hecho.
-    errors_previos = []
+    # Ligands too flexible for Vina are set aside: their pose would be meaningless and they can exhaust memory.
+    previous_errors = []
     for k, v in list(lig_pdbqt.items()):
         if v is None:
             continue
         t = torsdof(v)
-        if t > TORSDOF_LIMITE:
+        if t > TORSDOF_LIMIT:
             lig_pdbqt[k] = None
-            errors_previos.append((Path(k).stem,
-                                   f"{t} grados de libertad torsionales, por encima del límite "
-                                   f"practicable de {TORSDOF_LIMITE} para Vina; usa ADCP"))
+            previous_errors.append((Path(k).stem,
+                                   f"{t} torsional degrees of freedom, above the practicable "
+                                   f"limit of {TORSDOF_LIMIT} for Vina; use ADCP"))
 
     tasks = []
     for rpath, sid, box in targets:
@@ -507,7 +502,7 @@ def dock_batch(receptors: Sequence, ligands: Sequence, boxes: dict, work_dir,
             continue
         for l in ligands:
             if lig_pdbqt.get(str(l)) is None:
-                continue          # sin preparar o apartado por flexibilidad; ya esta reportado
+                continue
             base = pose_name(sid, Path(l).stem)
             out = poses / f"{base}.pdbqt"
             if out.exists() and list(poses.glob(f"{base}-model*.pdb")):
@@ -518,7 +513,7 @@ def dock_batch(receptors: Sequence, ligands: Sequence, boxes: dict, work_dir,
         rpath, l, box, base, out = t
         lp = lig_pdbqt.get(str(l))
         if lp is None:
-            return (base, "no se pudo preparar el ligando")
+            return (base, "the ligand could not be prepared")
         try:
             engine.dock(rec_pdbqt[str(rpath)], lp, box, out)
             split_models(out, poses)
@@ -526,10 +521,14 @@ def dock_batch(receptors: Sequence, ligands: Sequence, boxes: dict, work_dir,
         except Exception as e:
             return (base, str(e)[:200])
 
-    n = workers if workers > 0 else paralelismo_seguro(
+    n = workers if workers > 0 else safe_parallelism(
         [b for _r, _s, b in targets], [v for v in lig_pdbqt.values() if v])
-    errors = list(errors_previos)
+    errors = list(previous_errors)
     if tasks:
+        if on_progress:
+            # done=0 announces the plan: how many jobs and how many at a time, so what the engine
+            # actually does is visible instead of guessed at.
+            on_progress(0, len(tasks), f"workers={n}", None)
         with ThreadPoolExecutor(max_workers=n) as ex:
             for i, (base, err) in enumerate(ex.map(run, tasks), 1):
                 if err:

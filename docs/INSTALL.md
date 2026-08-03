@@ -27,10 +27,13 @@ cd PoliScreen
 docker compose -f docker/docker-compose.yml up --build
 ```
 
-Open <http://localhost:8501>. Inside the app, use `/data` as the project folder:
-it is mounted to `./proyectos` on your machine, so results persist even if you
-delete the image. The image pins AutoDock Vina 1.2.5 and every environment
-version, so two people on different machines obtain the same result.
+Open <http://localhost:8501>. Projects are created under `/data`, which is mounted
+to `./proyectos` on your machine, so results persist even if you delete the image;
+leaving the project field empty already puts them there. To use another location,
+set `POLISCREEN_PROJECTS`.
+
+The image pins AutoDock Vina 1.2.5 and every environment version, so two people on
+different machines obtain the same result.
 
 ---
 

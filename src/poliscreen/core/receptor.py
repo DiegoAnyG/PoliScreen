@@ -1,8 +1,8 @@
-"""Preparación de receptores: descarga del PDB, inspección y limpieza tipo DockPrep.
+"""Receptor preparation: PDB download, inspection and DockPrep-style cleanup.
 
-La protonación usa PDBFixer porque conserva la numeración de autor, la que aparece en la literatura
-y la que reporta PLIP. PDBFixer elimina todo lo no proteico, así que los cofactores a conservar se
-extraen, se protonan y se vuelven a unir aparte.
+Protonation uses PDBFixer because it keeps the author numbering, the one that appears in the
+literature and that PLIP reports. PDBFixer strips everything non-protein, so the cofactors to keep are
+extracted, protonated and reattached separately.
 """
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ class ReceptorError(RuntimeError):
 
 @dataclass(frozen=True)
 class Het:
-    """Un grupo heteroatomico: ligando, cofactor, ion o agua."""
+    """A hetero group: ligand, cofactor, ion or water."""
     resname: str
     chain: str
     resseq: str
@@ -43,16 +43,17 @@ class Het:
 
 
 @dataclass(frozen=True)
-class Modificado:
-    """Un residuo modificado de una cadena: fosfotirosina, selenometionina, fosfoserina...
+class ModifiedResidue:
+    """A modified residue of a chain: phosphotyrosine, selenomethionine, phosphoserine...
 
-    Aunque el PDB lo declare como heteroátomo, forma parte de la cadena y su modificación suele ser
-    funcional. Se distingue para decidir si se conserva o se sustituye por el aminoácido de origen.
+    Even though the PDB declares it as a heteroatom, it is part of the chain and its modification is
+    usually functional. It is distinguished to decide whether to keep it or replace it with the parent
+    amino acid.
     """
     resname: str
     chain: str
     resseq: str
-    estandar: str
+    standard: str
 
     @property
     def key(self) -> str:
@@ -60,14 +61,14 @@ class Modificado:
 
     @property
     def label(self) -> str:
-        return f"{self.resname} {self.chain}:{self.resseq} (deriva de {self.estandar})"
+        return f"{self.resname} {self.chain}:{self.resseq} (derives from {self.standard})"
 
 
 def modified_residues(pdb) -> list:
-    """Residuos modificados de las cadenas, detectados con la tabla de PDBFixer.
+    """Modified residues of the chains, detected with PDBFixer's table.
 
-    Se usa su misma detección, no una lista propia, para que lo ofrecido al usuario coincida con lo
-    que ocurriría sin intervenir. El PDB los declara también en MODRES, pero ese registro falta a veces.
+    Its own detection is used, not a separate list, so what is offered to the user matches what would
+    happen without intervening. The PDB also declares them in MODRES, but that record is sometimes missing.
     """
     try:
         from pdbfixer import PDBFixer
@@ -76,8 +77,8 @@ def modified_residues(pdb) -> list:
     try:
         f = PDBFixer(filename=str(pdb))
         f.findNonstandardResidues()
-        return [Modificado(r.name, r.chain.id, str(r.id).strip(), nuevo)
-                for r, nuevo in f.nonstandardResidues]
+        return [ModifiedResidue(r.name, r.chain.id, str(r.id).strip(), new_)
+                for r, new_ in f.nonstandardResidues]
     except Exception:
         return []
 
@@ -86,7 +87,7 @@ def modified_residues(pdb) -> list:
 class Structure:
     path: Path
     chains: list = field(default_factory=list)
-    het: list = field(default_factory=list)     # sin aguas
+    het: list = field(default_factory=list)
     n_waters: int = 0
     n_atoms: int = 0
 
@@ -94,14 +95,14 @@ class Structure:
         return next((h for h in self.het if h.key == key), None)
 
     def summary(self) -> str:
-        lines = [f"{self.path.name}: {self.n_atoms} atomos, cadenas {','.join(self.chains) or '-'}, "
-                 f"{self.n_waters} aguas"]
+        lines = [f"{self.path.name}: {self.n_atoms} atoms, chains {','.join(self.chains) or '-'}, "
+                 f"{self.n_waters} waters"]
         lines += [f"  {h.label}" for h in self.het]
         return "\n".join(lines)
 
 
 def fetch_pdb(pdb_id: str, out_dir) -> Path:
-    """Descarga un PDB por su identificador. Reutiliza el archivo si ya existe."""
+    """Downloads a PDB by its identifier. Reuses the file if it already exists."""
     pdb_id = pdb_id.strip().upper()
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -111,13 +112,13 @@ def fetch_pdb(pdb_id: str, out_dir) -> Path:
     try:
         urllib.request.urlretrieve(RCSB_URL.format(pdb_id), dest)
     except Exception as e:
-        raise ReceptorError(f"No pude descargar {pdb_id}: {e}. "
-                            "Causa probable: identificador invalido o sin conexion.")
+        raise ReceptorError(f"Could not download {pdb_id}: {e}. "
+                            "Probable cause: invalid identifier or no connection.")
     return dest
 
 
 def inspect(pdb) -> Structure:
-    """Lee cadenas, heterogrupos y aguas sin modificar nada."""
+    """Reads chains, hetero groups and waters without modifying anything."""
     pdb = Path(pdb)
     chains, counts, n_atoms, n_waters = [], {}, 0, 0
     for line in pdb.read_text(errors="ignore").splitlines():
@@ -148,10 +149,10 @@ def _het_lines(pdb, het: Het) -> list:
 
 
 def extract_ligand(pdb, het: Het, out_path, ph: float = 7.4, smiles: Optional[str] = None) -> Path:
-    """Extrae un heterogrupo como molécula independiente, útil como control de referencia.
+    """Extracts a hetero group as a standalone molecule, useful as a reference control.
 
-    Con `smiles` se corrigen los ordenes de enlace desde una plantilla: el PDB no los guarda
-    y sin ellos algunos ligandos quedan con valencias imposibles.
+    With `smiles` the bond orders are corrected from a template: the PDB does not store them and
+    without them some ligands end up with impossible valences.
     """
     lines = _het_lines(pdb, het)
     if not lines:
@@ -179,60 +180,59 @@ def extract_ligand(pdb, het: Het, out_path, ph: float = 7.4, smiles: Optional[st
                     if out_path.exists() and out_path.stat().st_size > 0:
                         return out_path
             except Exception:
-                pass  # si la plantilla no aplica, se cae a obabel
-        # -r: se queda con el fragmento conectado mayor. Extraer por geometría (sin plantilla SMILES)
-        # puede fragmentar o duplicar el ligando; el control debe ser una sola molécula limpia.
+                pass
+        # Keeps the largest fragment: extracting by geometry can split or duplicate the ligand.
         subprocess.run(["obabel", str(raw), "-O", str(out_path), "-p", str(ph), "-r"], capture_output=True)
     if not out_path.exists() or out_path.stat().st_size == 0:
-        raise ReceptorError(f"No pude escribir el ligando {het.label}.")
+        raise ReceptorError(f"Could not write the ligand {het.label}.")
     return out_path
 
 
-def extract_chain(pdb, chain: str, out_path, solo_polipeptido: bool = True,
-                  on_aviso=None) -> Path:
-    """Extrae una cadena como control de referencia. Devuelve la ruta escrita.
+def extract_chain(pdb, chain: str, out_path, polypeptide_only: bool = True,
+                  on_notice=None) -> Path:
+    """Extracts a chain as a reference control. Returns the written path.
 
-    Un péptido cocristalizado es una cadena del modelo, no un heteroátomo, así que no figura entre
-    los cofactores extraíbles. Sin esta vía, un cribado de péptidos tendría que compararse con una
-    molécula pequeña —otro motor, otro quimiotipo— en vez de con el propio péptido del cristal.
+    A co-crystallized peptide is a chain of the model, not a heteroatom, so it does not appear among
+    the extractable cofactors. Without this route, a peptide screening would have to be compared with a
+    small molecule —another engine, another chemotype— instead of with the crystal's own peptide.
 
-    solo_polipeptido descarta los heteroátomos de la cadena. Una cadena puede llevar grupos
-    conjugados (un análogo de nucleótido unido por un conector, en un inhibidor bisustrato) que el
-    motor peptídico no reproduce; conservarlos haría a referencia y pose moléculas distintas y el
-    RMSD de validación no existiría. Se escribe en PDB, no SDF, para conservar nombres de residuo y
-    átomo, que son los que permiten reconocer la secuencia y derivar el control al motor peptídico.
+    solo_polipeptido discards the chain's heteroatoms. A chain may carry conjugated groups (a
+    nucleotide analogue linked by a connector, in a bisubstrate inhibitor) that the peptide engine does
+    not reproduce; keeping them would make reference and pose different molecules and the validation
+    RMSD would not exist. It is written in PDB, not SDF, to keep residue and atom names, which are what
+    allow recognizing the sequence and routing the control to the peptide engine.
     """
     pdb, out_path = Path(pdb), Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    de_la_cadena = [l for l in pdb.read_text(errors="ignore").splitlines()
+    chain_lines = [l for l in pdb.read_text(errors="ignore").splitlines()
                     if l.startswith(("ATOM", "HETATM")) and l[21] == chain
                     and l[17:20].strip() not in WATERS]
-    if not de_la_cadena:
-        raise ReceptorError(f"La cadena {chain} no tiene atomos en {pdb.name}.")
+    if not chain_lines:
+        raise ReceptorError(f"Chain {chain} has no atoms in {pdb.name}.")
 
-    lineas = [l for l in de_la_cadena if l.startswith("ATOM")] if solo_polipeptido else de_la_cadena
-    if not lineas:
-        lineas = de_la_cadena
-    fuera = {l[17:20].strip() for l in de_la_cadena if l not in lineas}
-    if fuera and on_aviso:
-        on_aviso(f"La cadena {chain} lleva grupos no peptídicos ({', '.join(sorted(fuera))}) que se "
-                 f"han excluido del control: el acoplamiento de péptidos reproduce solo la parte "
-                 f"peptídica, y conservarlos haría que la referencia y la pose fuesen moléculas "
-                 f"distintas.")
-    out_path.write_text("\n".join(lineas) + "\nEND\n")
+    lines_ = [l for l in chain_lines if l.startswith("ATOM")] if polypeptide_only else chain_lines
+    if not lines_:
+        lines_ = chain_lines
+    outside = {l[17:20].strip() for l in chain_lines if l not in lines_}
+    if outside and on_notice:
+        on_notice(f"Chain {chain} carries non-peptide groups ({', '.join(sorted(outside))}) that have "
+                 f"been excluded from the control: peptide docking reproduces only the peptide "
+                 f"part, and keeping them would make the reference and the pose different "
+                 f"molecules.")
+    out_path.write_text("\n".join(lines_) + "\nEND\n")
     return out_path
 
 
 def prepare(pdb, out_path, keep_chains: Optional[Sequence[str]] = None,
             keep_het: Sequence[str] = (), ph: float = 7.4, add_hydrogens: bool = True,
-            keep_modified: Sequence[str] = (), on_aviso=None,
+            keep_modified: Sequence[str] = (), on_notice=None,
             add_missing_residues: bool = False) -> Path:
-    """Deja el receptor listo para acoplar: sin aguas, con hidrogenos y con lo que se pida conservar.
+    """Leaves the receptor ready to dock: no waters, with hydrogens and with whatever is kept.
 
-    keep_chains           cadenas a conservar (None = todas)
-    keep_het              claves de heterogrupos a conservar, p. ej. un cofactor
-    add_missing_residues  reconstruir lazos ausentes; por defecto no, para no inventar
-                          geometría cerca del sitio de unión
+    keep_chains           chains to keep (None = all)
+    keep_het              hetero-group keys to keep, e.g. a cofactor
+    add_missing_residues  rebuild missing loops; off by default, so as not to invent
+                          geometry near the binding site
     """
     pdb, out_path = Path(pdb), Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -240,7 +240,7 @@ def prepare(pdb, out_path, keep_chains: Optional[Sequence[str]] = None,
         from openmm.app import PDBFile
         from pdbfixer import PDBFixer
     except Exception as e:
-        raise ReceptorError(f"Falta PDBFixer/OpenMM: {e}. Instalalos con conda para preparar receptores.")
+        raise ReceptorError(f"PDBFixer/OpenMM missing: {e}. Install them with conda to prepare receptors.")
 
     fixer = PDBFixer(filename=str(pdb))
     if keep_chains:
@@ -251,24 +251,20 @@ def prepare(pdb, out_path, keep_chains: Optional[Sequence[str]] = None,
     fixer.findMissingResidues()
     if not add_missing_residues:
         fixer.missingResidues = {}
-    # Residuos modificados (fosfotirosina, selenometionina...). Por defecto se sustituyen por su
-    # aminoácido estándar, que es lo que piden los campos de fuerza; pero eso ELIMINA la
-    # modificación, y a menudo la modificación es la función (un bucle de activación fosforilado deja
-    # de estarlo). Lo decide quien prepara, y para eso los ve: se listan aparte de los cofactores.
+    # PDBFixer replaces a modified residue with its standard amino acid, losing the modification.
     fixer.findNonstandardResidues()
-    todos_mod = list(getattr(fixer, "nonstandardResidues", []))
+    all_modified = list(getattr(fixer, "nonstandardResidues", []))
 
     def _clave(res):
         return f"{res.name}|{res.chain.id}|{str(res.id).strip()}"
 
-    conservar = set(keep_modified or ())
-    fixer.nonstandardResidues = [(r, n) for r, n in todos_mod if _clave(r) not in conservar]
-    # Todos los modificados se excluyen del paso de cofactores: ya están en la cadena, y reañadirlos
-    # pondría dos átomos en la misma posición, lo que rompe el cálculo de ángulos y duplica contactos.
-    reemplazados = set()
-    for res, _n in todos_mod:
+    keep_keys = set(keep_modified or ())
+    fixer.nonstandardResidues = [(r, n) for r, n in all_modified if _clave(r) not in keep_keys]
+    # A modified residue is already in the chain: adding it as a cofactor would duplicate its atoms.
+    replaced = set()
+    for res, _n in all_modified:
         try:
-            reemplazados.add((res.chain.id, str(res.id).strip()))
+            replaced.add((res.chain.id, str(res.id).strip()))
         except Exception:
             continue
     fixer.replaceNonstandardResidues()
@@ -278,83 +274,76 @@ def prepare(pdb, out_path, keep_chains: Optional[Sequence[str]] = None,
     if add_hydrogens:
         fixer.addMissingHydrogens(ph)
     with open(out_path, "w") as fh:
-        # keepIds imprescindible: sin él OpenMM renumera desde 1 y TYR157 pasa a VAL157, un fallo
-        # silencioso que arruina el análisis farmacofórico.
         PDBFile.writeFile(fixer.topology, fixer.positions, fh, keepIds=True)
 
-    # Los modificados conservados hay que reponerlos: PDBFixer no los sustituye, pero su limpieza de
-    # heteroátomos los borra por no ser residuos estándar y deja un hueco. Se reponen con sus líneas
-    # originales (traen la modificación completa) y no se duplican porque ya no están en el archivo.
-    repuestos = []
-    for res, _n in todos_mod:
-        clave = _clave(res)
-        if clave not in conservar:
+    kept_modified = []
+    for res, _n in all_modified:
+        key_ = _clave(res)
+        if key_ not in keep_keys:
             continue
-        lineas = [l for l in Path(pdb).read_text(errors="ignore").splitlines()
+        lines_ = [l for l in Path(pdb).read_text(errors="ignore").splitlines()
                   if l.startswith(("ATOM", "HETATM")) and l[21] == res.chain.id
                   and l[22:27].strip() == str(res.id).strip()
                   and l[17:20].strip() == res.name]
-        if not lineas:
+        if not lines_:
             continue
-        cuerpo = "".join(l for l in out_path.read_text().splitlines(keepends=True)
+        body_ = "".join(l for l in out_path.read_text().splitlines(keepends=True)
                          if not l.strip().startswith(("END", "ENDMDL")))
-        out_path.write_text(cuerpo + "".join(l + "\n" for l in lineas) + "END\n")
-        repuestos.append(f"{res.name} {res.chain.id}:{str(res.id).strip()}")
+        out_path.write_text(body_ + "".join(l + "\n" for l in lines_) + "END\n")
+        kept_modified.append(f"{res.name} {res.chain.id}:{str(res.id).strip()}")
 
-    omitidos = []
+    skipped = []
     for key in keep_het:
         st = inspect(pdb)
         het = st.find(key)
         if het is None:
             raise ReceptorError(f"No existe el heterogrupo {key} en {pdb.name}.")
-        if (het.chain, str(het.resseq).strip()) in reemplazados:
-            # Residuo modificado de la cadena, no cofactor: ya está; reañadirlo duplicaría sus átomos.
-            omitidos.append(het.label)
+        if (het.chain, str(het.resseq).strip()) in replaced:
+            skipped.append(het.label)
             continue
-        # Líneas originales tal cual: protonar el fragmento con obabel lo renombraría y PLIP dejaría
-        # de distinguir el cofactor del ligando acoplado. Sus hidrógenos los pone PLIP internamente.
+        # The cofactor keeps its original lines: protonating it renames the residue and PLIP would confuse it with the ligand.
         body = "".join(l for l in out_path.read_text().splitlines(keepends=True)
                        if not l.strip().startswith(("END", "ENDMDL")))
         extra = "".join(l + "\n" for l in _het_lines(pdb, het))
         out_path.write_text(body + extra + "END\n")
 
-    n_dup = _quitar_superpuestos(out_path)
-    if on_aviso:
-        for lab in omitidos:
-            on_aviso(f"{lab} es un residuo modificado de la cadena, no un cofactor: se trata en su "
-                     f"propia sección y no se añade por separado.")
-        sustituidos = [f"{r.name} {r.chain.id}:{str(r.id).strip()}"
-                       for r, _n in todos_mod if _clave(r) not in conservar]
-        if sustituidos:
-            on_aviso("Sustituidos por su aminoácido estándar (se pierde la modificación): "
-                     + ", ".join(sustituidos))
-        if repuestos:
-            on_aviso("Conservados con su modificación: " + ", ".join(repuestos))
+    n_dup = _remove_overlapping(out_path)
+    if on_notice:
+        for lab in skipped:
+            on_notice(f"{lab} is a modified residue of the chain, not a cofactor: it is handled in its "
+                     f"own section and not added separately.")
+        replaced_res = [f"{r.name} {r.chain.id}:{str(r.id).strip()}"
+                       for r, _n in all_modified if _clave(r) not in keep_keys]
+        if replaced_res:
+            on_notice("Replaced by their standard amino acid (the modification is lost): "
+                     + ", ".join(replaced_res))
+        if kept_modified:
+            on_notice("Kept with their modification: " + ", ".join(kept_modified))
         if n_dup:
-            on_aviso(f"Se eliminaron {n_dup} átomo(s) superpuestos del receptor preparado.")
+            on_notice(f"Removed {n_dup} overlapping atom(s) from the prepared receptor.")
     return out_path
 
 
-def _quitar_superpuestos(pdb: Path, tol: float = 1e-3) -> int:
-    """Elimina átomos que ocupan la misma posición. Devuelve cuántos quitó.
+def _remove_overlapping(pdb: Path, tol: float = 1e-3) -> int:
+    """Removes atoms occupying the same position. Returns how many were removed.
 
-    Dos átomos en el mismo punto hacen fallar el cálculo de ángulos que asigna tipos e hibridación
-    (ADFRsuite aborta con división por cero) y duplican cada contacto. Siempre es patológico.
+    Two atoms at the same point make the angle calculation that assigns types and hybridization fail
+    (ADFRsuite aborts with a division by zero) and double every contact. It is always pathological.
     """
-    vistos, salida, quitados = set(), [], 0
+    seen_items, output, removed = set(), [], 0
     for l in pdb.read_text(errors="ignore").splitlines(keepends=True):
         if l.startswith(("ATOM", "HETATM")):
             try:
                 k = (round(float(l[30:38]) / tol), round(float(l[38:46]) / tol),
                      round(float(l[46:54]) / tol))
             except ValueError:
-                salida.append(l)
+                output.append(l)
                 continue
-            if k in vistos:
-                quitados += 1
+            if k in seen_items:
+                removed += 1
                 continue
-            vistos.add(k)
-        salida.append(l)
-    if quitados:
-        pdb.write_text("".join(salida))
-    return quitados
+            seen_items.add(k)
+        output.append(l)
+    if removed:
+        pdb.write_text("".join(output))
+    return removed

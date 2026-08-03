@@ -1,7 +1,7 @@
-"""CLI de PoliScreen.
+"""PoliScreen CLI.
 
-Todo lo que haga la interfaz web debe poder hacerse también aquí: la línea de comandos
-es lo que hace el flujo scriptable, reproducible y citable en un articulo.
+Everything the web interface does must also be possible here: the command line is what makes the
+workflow scriptable, reproducible and citable in an article.
 """
 from __future__ import annotations
 
@@ -19,20 +19,18 @@ def cmd_info(args) -> int:
 
     print(f"PoliScreen {__version__}")
 
-    # Herramientas externas del nucleo: se listan con su versión para verificar la instalación
-    # y para poder citarlas en la sección de Metodos.
-    herramientas = [
+    tools = [
         ("vina", ["--version"], "docking", True),
-        ("obabel", ["-V"], "conversion y protonacion", True),
-        ("obrms", [], "RMSD entre poses (estabilidad de la confianza)", False),
-        ("plip", [], "interacciones proteina-ligando", True),   # sin --versión limpio
-        ("fpocket", [], "deteccion de cavidades", False),
+        ("obabel", ["-V"], "conversion and protonation", True),
+        ("obrms", [], "RMSD between poses (confidence stability)", False),
+        ("plip", [], "protein-ligand interactions", True),
+        ("fpocket", [], "cavity detection", False),
     ]
-    print("herramientas externas:")
+    print("external tools:")
     faltan = []
-    for exe, flags, para, critica in herramientas:
+    for exe, flags, para, critica in tools:
         if not shutil.which(exe):
-            print(f"  {exe:8s} NO ENCONTRADO  ({para})")
+            print(f"  {exe:8s} NOT FOUND  ({para})")
             if critica:
                 faltan.append(exe)
             continue
@@ -46,19 +44,19 @@ def cmd_info(args) -> int:
         print(f"  {exe:8s} OK  {ver[:60]}")
 
     b = AdmelabBridge()
-    print(f"motor de diseno/ADMET (admelab): {'disponible' if b.available() else 'NO disponible (opcional)'}")
+    print(f"design/ADMET engine (admelab): {'available' if b.available() else 'NOT available (optional)'}")
     print(f"  python: {b.python}")
-    print(f"  raiz  : {b.root}")
+    print(f"  root  : {b.root}")
     if b.available():
         i = b.info()
-        print(f"  entorno aislado: python {i.get('python')} | torch {i.get('torch')} | cuda: {i.get('cuda')}")
-        print(f"  modulos: {', '.join(i.get('modules', []))}")
+        print(f"  isolated environment: python {i.get('python')} | torch {i.get('torch')} | cuda: {i.get('cuda')}")
+        print(f"  modules: {', '.join(i.get('modules', []))}")
     else:
-        print("  sin el, el cribado funciona; solo se desactivan diseno de analogos y ADMET.")
-        print("  define POLISCREEN_ADME_PYTHON y POLISCREEN_ADME_ROOT si las rutas son otras.")
+        print("  without it, screening works; only analogue design and ADMET are disabled.")
+        print("  set POLISCREEN_ADME_PYTHON and POLISCREEN_ADME_ROOT if the paths differ.")
 
     if faltan:
-        print(f"\nFALTAN herramientas necesarias: {', '.join(faltan)}. Ver docs/INSTALL.md.")
+        print(f"\nMISSING required tools: {', '.join(faltan)}. See docs/INSTALL.md.")
         return 1
     return 0
 
@@ -73,10 +71,10 @@ def cmd_design(args) -> int:
         max_decor=args.max_decor,
         max_rows=args.top,
     )
-    print(f"generados: {r.n_generated} | puntuados: {r.n_scored}")
+    print(f"generated: {r.n_generated} | scored: {r.n_scored}")
     if args.out:
         r.to_dataframe().to_csv(args.out, index=False)
-        print("escrito:", args.out)
+        print("written:", args.out)
     else:
         keys = [k for k in ("SMILES", "score", "MW", "LogP", "LD50_mg_per_kg", "GHS_category") if k in r.columns]
         for row in r.rows[: args.top]:
@@ -88,9 +86,6 @@ def cmd_ui(args) -> int:
     import subprocess
     from pathlib import Path
 
-    # Por defecto el servidor escucha SOLO en la maquina local (127.0.0.1): no es alcanzable
-    # desde la red ni desde internet. --expose lo abre a la red local, que carece de
-    # autenticación y solo debería usarse en una red de confianza.
     address = "0.0.0.0" if getattr(args, "expose", False) else "127.0.0.1"
     app = Path(__file__).parent / "ui" / "streamlit_app.py"
     cmd = [sys.executable, "-m", "streamlit", "run", str(app),
@@ -99,9 +94,9 @@ def cmd_ui(args) -> int:
            "--server.port", str(args.port),
            "--browser.gatherUsageStats", "false"]
     if address == "127.0.0.1":
-        print(f"Interfaz local en http://localhost:{args.port} (solo este equipo). Ctrl+C para cerrar.")
+        print(f"Local interface at http://localhost:{args.port} (this machine only). Ctrl+C to close.")
     else:
-        print(f"AVISO: expuesto en la red local, sin autenticacion. http://<tu-ip>:{args.port}")
+        print(f"WARNING: exposed on the local network, no authentication. http://<your-ip>:{args.port}")
     return subprocess.call(cmd)
 
 
@@ -109,6 +104,7 @@ def cmd_prep(args) -> int:
     from pathlib import Path
 
     from .core import receptor as rc
+    from .core import screening as sc
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -116,20 +112,20 @@ def cmd_prep(args) -> int:
     st = rc.inspect(src)
     print(st.summary())
     if args.list:
-        print("\nUsa --chains, --keep-het y --extract con las claves de arriba "
-              "(formato RESNAME|CADENA|NUMERO).")
+        print("\nUse --chains, --keep-het and --extract with the keys above "
+              "(format RESNAME|CHAIN|NUMBER).")
         return 0
-    dest = out / f"{src.stem}_listo.pdb"
+    dest = out / f"{src.stem}{sc.READY_SUFFIX}.pdb"
     rc.prepare(src, dest, keep_chains=args.chains, keep_het=args.keep_het or (),
                ph=args.ph, add_missing_residues=args.add_loops)
-    print(f"\nreceptor listo: {dest}")
+    print(f"\nreceptor ready: {dest}")
     for key in (args.extract or []):
         het = st.find(key)
         if het is None:
-            print(f"  aviso: no existe el grupo {key}")
+            print(f"  notice: group {key} does not exist")
             continue
         p = rc.extract_ligand(src, het, out / f"control_{het.resname}.sdf", ph=args.ph, smiles=args.smiles)
-        print(f"  control extraido: {p}")
+        print(f"  control extracted: {p}")
     return 0
 
 
@@ -151,7 +147,7 @@ def cmd_run(args) -> int:
         vals = [float(v) for v in nums.split(",")]
         target = next((r for r in receptors if r.stem == stem or stem in r.stem), None)
         if target is None or len(vals) != 6:
-            raise SystemExit(f"--box invalido: {spec}. Formato: STEM:cx,cy,cz,sx,sy,sz")
+            raise SystemExit(f"--box invalid: {spec}. Format: STEM:cx,cy,cz,sx,sy,sz")
         boxes[str(target)] = pl.dk.Box(*vals)
 
     cfg = pl.RunConfig(
@@ -173,67 +169,67 @@ def cmd_run(args) -> int:
     )
     r = pl.run(cfg, on_step=lambda n, d: print(f"[{n}] {d}"))
     if r.ranking is not None and not r.ranking.empty:
-        cols = [c for c in ("receptor", "compound", "best_dock", "best_inter", "efectividad_pct", "tipo")
+        cols = [c for c in ("receptor", "compound", "best_dock", "best_inter", "effectiveness_pct", "type")
                 if c in r.ranking.columns]
         print()
         print(r.ranking[cols].head(15).to_string(index=False))
-    print(f"\nresultados en: {r.out_dir}")
+    print(f"\nresults in: {r.out_dir}")
     return 0
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(prog="poliscreen", description="Cribado virtual reproducible")
+    p = argparse.ArgumentParser(prog="poliscreen", description="Reproducible virtual screening")
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    pi = sub.add_parser("info", help="estado del entorno y de los motores")
+    pi = sub.add_parser("info", help="environment and engine status")
     pi.set_defaults(func=cmd_info)
 
-    pdsg = sub.add_parser("design", help="genera analogos de una molecula lider con ADME y toxicidad")
-    pdsg.add_argument("lead", help="SMILES de la molecula lider")
-    pdsg.add_argument("--no-ml", action="store_true", help="solo descriptores RDKit (rapido, sin ADMET-AI)")
-    pdsg.add_argument("--n-sub", type=int, nargs="+", default=[1], help="numero de sustituciones, p. ej. 1 2")
-    pdsg.add_argument("--positions", type=int, nargs="*", default=None, help="puntos de crecimiento (indices de atomo)")
-    pdsg.add_argument("--max-decor", type=int, default=300, help="tope de analogos por decoracion")
-    pdsg.add_argument("--top", type=int, default=10, help="cuantas filas mostrar/guardar")
-    pdsg.add_argument("--out", help="CSV de salida")
+    pdsg = sub.add_parser("design", help="generate analogues of a lead molecule with ADME and toxicity")
+    pdsg.add_argument("lead", help="SMILES of the lead molecule")
+    pdsg.add_argument("--no-ml", action="store_true", help="RDKit descriptors only (fast, no ADMET-AI)")
+    pdsg.add_argument("--n-sub", type=int, nargs="+", default=[1], help="number of substitutions, e.g. 1 2")
+    pdsg.add_argument("--positions", type=int, nargs="*", default=None, help="growth points (atom indices)")
+    pdsg.add_argument("--max-decor", type=int, default=300, help="cap on analogues per decoration")
+    pdsg.add_argument("--top", type=int, default=10, help="how many rows to show/save")
+    pdsg.add_argument("--out", help="output CSV")
     pdsg.set_defaults(func=cmd_design)
 
-    pui = sub.add_parser("ui", help="abre la interfaz grafica (solo en este equipo)")
+    pui = sub.add_parser("ui", help="open the graphical interface (this machine only)")
     pui.add_argument("--port", type=int, default=8501)
     pui.add_argument("--expose", action="store_true",
-                     help="escucha en la red local (sin autenticacion); por defecto solo 127.0.0.1")
+                     help="listen on the local network (no authentication); by default only 127.0.0.1")
     pui.set_defaults(func=cmd_ui)
 
-    pprep = sub.add_parser("prep", help="prepara un receptor: descarga, inspecciona y limpia")
-    pprep.add_argument("--pdb-id", help="identificador del PDB, p. ej. 4D44")
-    pprep.add_argument("--pdb", help="archivo .pdb local (alternativa a --pdb-id)")
-    pprep.add_argument("--out", required=True, help="carpeta de salida")
-    pprep.add_argument("--list", action="store_true", help="solo inspeccionar y salir")
-    pprep.add_argument("--chains", nargs="*", help="cadenas a conservar (por defecto todas)")
-    pprep.add_argument("--keep-het", nargs="*", help="heterogrupos a conservar, p. ej. NAP|A|400")
-    pprep.add_argument("--extract", nargs="*", help="heterogrupos a extraer como control, p. ej. JA3|A|1259")
-    pprep.add_argument("--smiles", help="plantilla SMILES del ligando extraido, corrige los enlaces")
+    pprep = sub.add_parser("prep", help="prepare a receptor: download, inspect and clean")
+    pprep.add_argument("--pdb-id", help="PDB identifier, e.g. 4D44")
+    pprep.add_argument("--pdb", help="local .pdb file (alternative to --pdb-id)")
+    pprep.add_argument("--out", required=True, help="output folder")
+    pprep.add_argument("--list", action="store_true", help="inspect only and exit")
+    pprep.add_argument("--chains", nargs="*", help="chains to keep (all by default)")
+    pprep.add_argument("--keep-het", nargs="*", help="hetero groups to keep, e.g. NAP|A|400")
+    pprep.add_argument("--extract", nargs="*", help="hetero groups to extract as control, e.g. JA3|A|1259")
+    pprep.add_argument("--smiles", help="SMILES template of the extracted ligand, fixes the bonds")
     pprep.add_argument("--ph", type=float, default=7.4)
-    pprep.add_argument("--add-loops", action="store_true", help="reconstruir lazos ausentes")
+    pprep.add_argument("--add-loops", action="store_true", help="rebuild missing loops")
     pprep.set_defaults(func=cmd_prep)
 
-    prun = sub.add_parser("run", help="ciclo completo: diseno, docking, interacciones y ranking")
-    prun.add_argument("--lead", help="SMILES de la molecula lider (omitelo si das --ligands)")
-    prun.add_argument("--ligands", nargs="*", help="ligandos ya preparados")
-    prun.add_argument("--receptor", nargs="+", required=True, help="receptores (.pdb)")
-    prun.add_argument("--control", nargs="*", help="controles co-cristalizados: definen la huella de referencia")
-    prun.add_argument("--out", required=True, help="carpeta de resultados")
-    prun.add_argument("--catalytic", nargs="*", help="residuos ancla por receptor, p. ej. 4D44:Tyr157,Tyr147")
-    prun.add_argument("--box", nargs="*", help="caja por receptor: STEM:cx,cy,cz,sx,sy,sz (por defecto automatica)")
+    prun = sub.add_parser("run", help="full cycle: design, docking, interactions and ranking")
+    prun.add_argument("--lead", help="SMILES of the lead molecule (omit it if you pass --ligands)")
+    prun.add_argument("--ligands", nargs="*", help="already prepared ligands")
+    prun.add_argument("--receptor", nargs="+", required=True, help="receptors (.pdb)")
+    prun.add_argument("--control", nargs="*", help="co-crystallized controls: define the reference fingerprint")
+    prun.add_argument("--out", required=True, help="results folder")
+    prun.add_argument("--catalytic", nargs="*", help="anchor residues per receptor, e.g. 4D44:Tyr157,Tyr147")
+    prun.add_argument("--box", nargs="*", help="box per receptor: STEM:cx,cy,cz,sx,sy,sz (automatic by default)")
     prun.add_argument("--n-analogs", type=int, default=20)
     prun.add_argument("--n-sub", type=int, nargs="+", default=[1])
-    prun.add_argument("--no-ml", action="store_true", help="sin ADMET-AI (rapido)")
+    prun.add_argument("--no-ml", action="store_true", help="no ADMET-AI (fast)")
     prun.add_argument("--seed", type=int, default=42)
     prun.add_argument("--exhaustiveness", type=int, default=24)
     prun.add_argument("--poses", type=int, default=10)
-    prun.add_argument("--cpu", type=int, default=1, help="hilos por acoplamiento; 1 = reproducible")
-    prun.add_argument("--workers", type=int, default=0, help="acoplamientos en paralelo; 0 = automatico")
+    prun.add_argument("--cpu", type=int, default=1, help="threads per docking; 1 = reproducible")
+    prun.add_argument("--workers", type=int, default=0, help="dockings in parallel; 0 = automatic")
     prun.set_defaults(func=cmd_run)
 
     args = p.parse_args(argv)

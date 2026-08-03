@@ -1,7 +1,7 @@
-"""Visor 3D. Devuelve HTML autocontenido, así que sirve en cualquier interfaz web.
+"""3D viewer. Returns self-contained HTML, so it works in any web interface.
 
-Ver la estructura es la única forma barata de comprobar que la preparación hizo lo que dice:
-que se fueron las aguas, que el cofactor sigue ahi y que el ligando cae donde debe.
+Seeing the structure is the only cheap way to check that preparation did what it says: that the
+waters are gone, that the cofactor is still there and that the ligand lands where it should.
 """
 from __future__ import annotations
 
@@ -9,21 +9,18 @@ from pathlib import Path
 from typing import Optional
 
 WATERS = {"HOH", "WAT", "H2O", "DOD"}
-COLOR_PROTEINA = "spectrum"
+PROTEIN_COLOR = "spectrum"
 
-# py3Dmol carga 3Dmol desde un CDN, lo que ata el visor a la red: si la descarga tarda o se bloquea,
-# el panel sale en blanco sin mensaje, de forma intermitente. Con una copia local se trabaja sin
-# conexión y se fija la versión usada en un análisis publicado.
 _JS_LOCAL = Path(__file__).resolve().parent.parent / "assets" / "3Dmol-min.js"
 _JS_CACHE: Optional[str] = None
 
 
-def _incrustar_js(html: str) -> str:
-    """Antepone la librería incrustada para que el cargador remoto de py3Dmol no llegue a usarse.
+def _embed_js(html: str) -> str:
+    """Prepends the embedded library so py3Dmol's remote loader is never used.
 
-    py3Dmol llama a loadScriptAsync() y guarda la promesa en $3Dmolpromise, protegida por
-    `if (typeof $3Dmolpromise === 'undefined')`. Definir esa variable ya resuelta evita la descarga
-    sin tener que reescribir el código generado, que cambia entre versiones.
+    py3Dmol calls loadScriptAsync() and stores the promise in $3Dmolpromise, guarded by
+    `if (typeof $3Dmolpromise === 'undefined')`. Defining that variable already resolved avoids the
+    download without having to rewrite the generated code, which changes between versions.
     """
     global _JS_CACHE
     if not _JS_LOCAL.exists() or "$3Dmolpromise" not in html:
@@ -34,23 +31,23 @@ def _incrustar_js(html: str) -> str:
             "<script>var $3Dmolpromise = Promise.resolve();</script>\n") + html
 
 
-def js_local_disponible() -> bool:
+def local_js_available() -> bool:
     return _JS_LOCAL.exists()
 
 
-def _leer(path) -> tuple:
+def _read(path) -> tuple:
     p = Path(path)
     fmt = {".pdb": "pdb", ".pdbqt": "pdb", ".sdf": "sdf", ".mol": "sdf", ".mol2": "mol2"}.get(p.suffix.lower())
     if fmt is None:
-        raise ValueError(f"Formato no soportado para visualizar: {p.suffix}")
+        raise ValueError(f"Unsupported format to visualize: {p.suffix}")
     return p.read_text(errors="ignore"), fmt
 
 
-def _box_dims(caja) -> Optional[dict]:
-    """Normaliza una caja (Box o dict con cx..sz) a {centro, dimensiones} para py3Dmol."""
-    if caja is None:
+def _box_dims(box_) -> Optional[dict]:
+    """Normalizes a box (Box or dict with cx..sz) to {center, dimensions} for py3Dmol."""
+    if box_ is None:
         return None
-    g = caja.as_dict() if hasattr(caja, "as_dict") else dict(caja)
+    g = box_.as_dict() if hasattr(box_, "as_dict") else dict(box_)
     try:
         return {"center": {"x": float(g["cx"]), "y": float(g["cy"]), "z": float(g["cz"])},
                 "dimensions": {"w": float(g["sx"]), "h": float(g["sy"]), "d": float(g["sz"])}}
@@ -58,41 +55,38 @@ def _box_dims(caja) -> Optional[dict]:
         return None
 
 
-# Colores para distinguir cavidades a la vez. El primero se reserva a la elegida para acoplar.
-COLOR_ELEGIDA = "#f4d35e"
-EMOJI_ELEGIDA = "🟡"
-# Cada color va emparejado con un circulo del mismo tono: la tabla puede mostrar el circulo y
-# el usuario reconoce la cavidad en el visor sin leer un código hexadecimal.
-PALETA_CAVIDADES = ["#4C9BE8", "#B06FD6", "#54B87A", "#E8823C", "#D65C7A", "#B4885E", "#E8E8E8"]
-EMOJI_CAVIDADES = ["🔵", "🟣", "🟢", "🟠", "🔴", "🟤", "⚪"]
+CHOSEN_COLOR = "#f4d35e"
+CHOSEN_EMOJI = "🟡"
+CAVITY_PALETTE = ["#4C9BE8", "#B06FD6", "#54B87A", "#E8823C", "#D65C7A", "#B4885E", "#E8E8E8"]
+CAVITY_EMOJI = ["🔵", "🟣", "🟢", "🟠", "🔴", "🟤", "⚪"]
 
 
-def emoji_de_color(color: str) -> str:
-    """Circulo de color equivalente al usado en el visor 3D."""
-    if color == COLOR_ELEGIDA:
-        return EMOJI_ELEGIDA
+def emoji_for_color(color: str) -> str:
+    """Colored circle equivalent to the one used in the 3D viewer."""
+    if color == CHOSEN_COLOR:
+        return CHOSEN_EMOJI
     try:
-        return EMOJI_CAVIDADES[PALETA_CAVIDADES.index(color)]
+        return CAVITY_EMOJI[CAVITY_PALETTE.index(color)]
     except ValueError:
         return "⚫"
 
 
-def _ejes_xyz(v, receptor, largo: float = 10.0):
-    """Dibuja los ejes X, Y, Z en una esquina. Sin ellos no se sabe qué significa mover cx, cy o cz;
-    con ellos la caja se ajusta mirando, no adivinando."""
+def _xyz_axes(v, receptor, largo: float = 10.0):
+    """Draws the X, Y, Z axes in a corner. Without them you cannot tell what moving cx, cy or cz means;
+    with them the box is adjusted by looking, not guessing."""
     try:
         import numpy as np
         pts = np.array(_coords_pdb(receptor))
         if pts.size == 0:
             return
         o = pts.min(0) - 6.0
-        for d, color, nombre in ((0, "#E05C5C", "X"), (1, "#5CE07A", "Y"), (2, "#5C8CE0", "Z")):
+        for d, color, name_ in ((0, "#E05C5C", "X"), (1, "#5CE07A", "Y"), (2, "#5C8CE0", "Z")):
             fin = o.copy()
             fin[d] += largo
             v.addArrow({"start": {"x": float(o[0]), "y": float(o[1]), "z": float(o[2])},
                         "end": {"x": float(fin[0]), "y": float(fin[1]), "z": float(fin[2])},
                         "color": color, "radius": 0.28})
-            v.addLabel(nombre, {"position": {"x": float(fin[0]), "y": float(fin[1]), "z": float(fin[2])},
+            v.addLabel(name_, {"position": {"x": float(fin[0]), "y": float(fin[1]), "z": float(fin[2])},
                                 "fontSize": 13, "fontColor": color, "backgroundOpacity": 0.0})
     except Exception:
         pass
@@ -109,54 +103,46 @@ def _coords_pdb(path) -> list:
     return pts
 
 
-def view_html(receptor=None, ligando=None, alto: int = 480, ancho="100%",
-              estilo_proteina: str = "cartoon", mostrar_aguas: bool = True,
-              mostrar_hetero: bool = True, caja=None, pocket_spheres=None,
-              cavidades=None, opacidad: float = 0.95, ejes: bool = False,
-              superficie: bool = False) -> str:
-    """HTML de un visor con receptor, ligando o ambos. Cualquiera puede omitirse.
+def view_html(receptor=None, ligand_=None, height_: int = 480, width_="100%",
+              protein_style: str = "cartoon", show_waters: bool = True,
+              show_hetero: bool = True, box_=None, pocket_spheres=None,
+              cavities=None, opacity: float = 0.95, axes_: bool = False,
+              surface: bool = False) -> str:
+    """HTML of a viewer with receptor, ligand or both. Any of them can be omitted.
 
-    caja: si se pasa (Box o dict cx,cy,cz,sx,sy,sz), dibuja la caja de docking en malla.
-    pocket_spheres: lista [(x,y,z,radio)] de esferas-alfa (fpocket); se renderizan translucidas
-    como el VOLUMEN de la cavidad (isosuperficie tipo CaverWeb), no una caja rectangular.
-    superficie: superficie molecular del receptor, translucida. Con la cinta sola no se distingue
-    si un ligando queda dentro de la cavidad o apoyado por fuera, porque la cinta solo dibuja el
-    esqueleto y deja pasar la vista entre las cadenas laterales. Es la comprobación visual
-    inmediata para un péptido, que por su tamaño puede quedar mayormente expuesto.
+    box_: Box or dict cx..sz, drawn as a wireframe.
+    pocket_spheres: [(x,y,z,radius)] alpha spheres (fpocket), drawn as the cavity volume.
+    surface: molecular surface. The ribbon alone does not show whether a ligand sits inside the
+    cavity or rests outside it.
     """
     import py3Dmol
-    v = py3Dmol.view(width=ancho, height=alto)
+    v = py3Dmol.view(width=width_, height=height_)
     if receptor is not None:
-        texto, fmt = _leer(receptor)
-        v.addModel(texto, fmt)
-        v.setStyle({"model": -1}, {estilo_proteina: {"color": COLOR_PROTEINA}})
-        if mostrar_hetero:
-            # Heteroatomos que no son agua: cofactores, iones, ligandos co-cristalizados
+        text_, fmt = _read(receptor)
+        v.addModel(text_, fmt)
+        v.setStyle({"model": -1}, {protein_style: {"color": PROTEIN_COLOR}})
+        if show_hetero:
             v.addStyle({"model": -1, "hetflag": True},
                        {"stick": {"radius": 0.18, "colorscheme": "greenCarbon"}})
-        if mostrar_aguas:
+        if show_waters:
             for w in WATERS:
                 v.addStyle({"model": -1, "resn": w}, {"sphere": {"radius": 0.28, "color": "lightblue"}})
-    if ligando is not None:
-        texto, fmt = _leer(ligando)
-        v.addModel(texto, fmt)
-        # Bolas y varillas siempre, también cuando el ligando es un péptido. Un péptido llega en
-        # formato PDB con residuos de aminoacido, así que dibujado como proteína saldría en cinta y
-        # sería indistinguible del receptor; lo que interesa de un ligando son sus átomos.
+    if ligand_ is not None:
+        text_, fmt = _read(ligand_)
+        v.addModel(text_, fmt)
         v.setStyle({"model": -1}, {"stick": {"radius": 0.22, "colorscheme": "yellowCarbon"},
                                    "sphere": {"radius": 0.42, "colorscheme": "yellowCarbon"}})
-    dims = _box_dims(caja)
+    dims = _box_dims(box_)
     if dims:
-        # Malla gruesa y opaca: con líneas finas y translucidas la caja se perdía sobre el cartoon.
-        v.addBox({**dims, "color": "#FF3DDA", "opacity": 1.0, "wireframe": True, "linewidth": 6.0})
-    # Cavidades: lista de {alpha, color, elegida}. Se dibujan todas a la vez, cada una de un color,
-    # y la elegida para acoplar se resalta más opaca para distinguirla de un vistazo.
-    grupos = list(cavidades or [])
+        # Edges only: a filled box, however faint, hides the alpha spheres of the cavities it is
+        # meant to frame. Thick lines make it readable without occluding anything.
+        v.addBox({**dims, "color": "#FF3DDA", "opacity": 1.0, "wireframe": True, "linewidth": 10.0})
+    groups_ = list(cavities or [])
     if pocket_spheres:
-        grupos.append({"alpha": pocket_spheres, "color": COLOR_ELEGIDA, "elegida": True})
-    for g in grupos:
-        col = g.get("color", COLOR_ELEGIDA)
-        op = opacidad if g.get("elegida") else max(0.55, opacidad * 0.70)
+        groups_.append({"alpha": pocket_spheres, "color": CHOSEN_COLOR, "chosen": True})
+    for g in groups_:
+        col = g.get("color", CHOSEN_COLOR)
+        op = opacity if g.get("chosen") else max(0.55, opacity * 0.70)
         for s in (g.get("alpha") or []):
             try:
                 x, y, z, r = float(s[0]), float(s[1]), float(s[2]), float(s[3])
@@ -164,25 +150,20 @@ def view_html(receptor=None, ligando=None, alto: int = 480, ancho="100%",
                 continue
             v.addSphere({"center": {"x": x, "y": y, "z": z}, "radius": r,
                          "color": col, "opacity": op})
-    # El encuadre se hace SOBRE EL RECEPTOR (modelo 0), no sobre la escena completa: si se
-    # incluyeran los ejes o las cavidades, el centro de rotacion se desplazaria fuera de la
-    # proteína. Los ejes y la caja son objetos de dibujo; no intervienen en ningun cálculo.
     if receptor is not None:
         v.zoomTo({"model": 0})
     else:
         v.zoomTo()
-    if ejes and receptor is not None:
-        _ejes_xyz(v, receptor)
-    # La superficie se anade al final y solo sobre el modelo del receptor: incluir el ligando la
-    # englobaria y dejaría de verse si esta dentro o fuera, que es justo lo que se quiere mirar.
-    if superficie and receptor is not None:
+    if axes_ and receptor is not None:
+        _xyz_axes(v, receptor)
+    if surface and receptor is not None:
         import py3Dmol as _p3d
         v.addSurface(_p3d.VDW, {"opacity": 0.62, "color": "#b9c6d6"}, {"model": 0})
-    return _incrustar_js(v._make_html())
+    return _embed_js(v._make_html())
 
 
 def grid_png(smiles_list, legends=None, cols: int = 4, sub: int = 220) -> Optional[bytes]:
-    """Rejilla 2D de varias moléculas (para verificar de un vistazo que los productos son correctos)."""
+    """2D grid of several molecules (to check at a glance that the products are correct)."""
     try:
         from rdkit import Chem, RDLogger
         from rdkit.Chem import Draw
@@ -210,38 +191,38 @@ ASSETS = Path(__file__).resolve().parent.parent / "assets"
 
 
 def logo_path() -> Optional[Path]:
-    """Logo de la aplicación, si existe en el paquete. Se busca por nombre para que baste con
-    depositar el archivo en src/poliscreen/assets/ sin tocar código."""
-    for nombre in ("logo.png", "logo.svg", "logo.webp", "logo.jpg", "logo.jpeg"):
-        p = ASSETS / nombre
+    """Application logo, if present in the package. It is looked up by name so that dropping the file
+    into src/poliscreen/assets/ is enough, without touching code."""
+    for name_ in ("logo.png", "logo.svg", "logo.webp", "logo.jpg", "logo.jpeg"):
+        p = ASSETS / name_
         if p.exists() and p.stat().st_size > 0:
             return p
     return None
 
 
 def wordmark_path() -> Optional[Path]:
-    """Logotipo tipográfico (el nombre escrito), si está en assets/.
+    """Typographic wordmark (the written name), if in assets/.
 
-    Se busca por nombre, como el icono, para dejarlo sin tocar código: incrustar una tipografía
-    ataría el proyecto a un archivo de fuente y su licencia; una imagen la aporta quien la tiene.
+    It is looked up by name, like the icon, to leave it code-free: embedding a typeface would tie the
+    project to a font file and its license; an image is provided by whoever has it.
     """
-    for nombre in ("titulo.svg", "titulo.png", "titulo.webp", "titulo.jpg"):
-        p = ASSETS / nombre
+    for name_ in ("titulo.svg", "titulo.png", "titulo.webp", "titulo.jpg"):
+        p = ASSETS / name_
         if p.exists() and p.stat().st_size > 0:
             return p
     return None
 
 
 def logo_svg(color: str = "#6b7280", size: int = 150) -> str:
-    """Marca de agua para los visores vacios: un glifo molecular monocromo. Un solo color para que
-    no compita con el contenido y funcione igual sobre fondo claro u oscuro."""
-    anillo = " ".join(f"{60 + 26 * __import__('math').cos(__import__('math').radians(a)):.1f},"
+    """Watermark for empty viewers: a monochrome molecular glyph. A single color so it does not
+    compete with the content and works the same on a light or dark background."""
+    ring = " ".join(f"{60 + 26 * __import__('math').cos(__import__('math').radians(a)):.1f},"
                       f"{60 + 26 * __import__('math').sin(__import__('math').radians(a)):.1f}"
                       for a in range(0, 360, 60))
     return f"""
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="{size}" height="{size}"
      fill="none" stroke="{color}" stroke-width="2.4" opacity="0.55">
-  <polygon points="{anillo}" stroke-linejoin="round"/>
+  <polygon points="{ring}" stroke-linejoin="round"/>
   <line x1="86" y1="60" x2="106" y2="48"/>
   <line x1="34" y1="60" x2="14" y2="72"/>
   <line x1="60" y1="86" x2="60" y2="108"/>
@@ -253,7 +234,7 @@ def logo_svg(color: str = "#6b7280", size: int = 150) -> str:
 
 
 def molecule_png(smiles: str, size: int = 300) -> Optional[bytes]:
-    """Dibujo 2D de una molécula a partir de su SMILES."""
+    """2D drawing of a molecule from its SMILES."""
     try:
         from rdkit import Chem, RDLogger
         RDLogger.DisableLog("rdApp.*")
@@ -272,7 +253,7 @@ def _png(mol, size: int) -> bytes:
 
 
 def molecule_png_indexed(smiles: str, highlight=None, size: int = 360) -> Optional[bytes]:
-    """Dibujo 2D con los indices de átomo y, resaltado, el sitio reactivo. Base del selector de sitio."""
+    """2D drawing with atom indices and, highlighted, the reactive site. Basis of the site selector."""
     try:
         from rdkit import Chem, RDLogger
         from rdkit.Chem.Draw import rdMolDraw2D
@@ -290,21 +271,21 @@ def molecule_png_indexed(smiles: str, highlight=None, size: int = 360) -> Option
         return None
 
 
-def resumen_estructura(path) -> dict:
-    """Cuenta átomos, aguas, heterogrupos y cadenas. Sirve para el antes y después de preparar."""
+def structure_summary(path) -> dict:
+    """Counts atoms, waters, hetero groups and chains. Used for the before and after of preparation."""
     p = Path(path)
-    cadenas, het, n_atomos, n_aguas, n_h = set(), {}, 0, 0, 0
+    chains_, het, n_atoms_, n_waters_, n_h = set(), {}, 0, 0, 0
     for l in p.read_text(errors="ignore").splitlines():
         if l.startswith(("ATOM", "HETATM")):
-            n_atomos += 1
+            n_atoms_ += 1
             if (l[76:78].strip() or "") == "H":
                 n_h += 1
             rn = l[17:20].strip()
             if l.startswith("ATOM"):
-                cadenas.add(l[21].strip() or "_")
+                chains_.add(l[21].strip() or "_")
             elif rn in WATERS:
-                n_aguas += 1
+                n_waters_ += 1
             else:
                 het[rn] = het.get(rn, 0) + 1
-    return {"atomos": n_atomos, "hidrogenos": n_h, "aguas": n_aguas,
-            "cadenas": sorted(cadenas), "heterogrupos": het}
+    return {"atomos": n_atoms_, "hidrogenos": n_h, "aguas": n_waters_,
+            "chains": sorted(chains_), "heterogrupos": het}

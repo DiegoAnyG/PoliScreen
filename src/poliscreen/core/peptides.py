@@ -1,11 +1,11 @@
-"""Generación combinatoria de péptidos y sus propiedades.
+"""Combinatorial peptide generation and their properties.
 
-Segunda vía de diseño, independiente de la síntesis por reacción: aquí los ligandos no se
-construyen uniendo un nucleo a un reactivo, sino enumerando secuencias de aminoacidos bajo
-reglas. Pensada para péptidos antimicrobianos, donde la actividad depende sobre todo de la
-carga neta positiva y de la anfipaticidad, no de un farmacoforo puntual.
+Second design route, independent of reaction-based synthesis: here the ligands are not built by
+joining a core to a reagent, but by enumerating amino-acid sequences under rules. Aimed at
+antimicrobial peptides, where activity depends mostly on positive net charge and amphipathicity,
+not on a point pharmacophore.
 
-La generación es determinista: misma semilla y mismas reglas producen la misma biblioteca.
+Generation is deterministic: the same seed and rules produce the same library.
 """
 from __future__ import annotations
 
@@ -15,16 +15,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Sequence
 
-# Un control cocristalizado más largo que esto no es un péptido de diseño sino una cadena proteica,
-# y tratarlo como ligando no tendría sentido.
-MAX_LARGO = 60
+# Longer than this it is a protein chain, not a design peptide.
+MAX_CHAIN_LENGTH = 60
 
-MIN_LONGITUD = 1
-MAX_LONGITUD = 20
+MIN_LENGTH = 1
+MAX_LENGTH = 20
 
-# Aminoacido: nombre, clases a las que pertenece, carga a pH 7.4 e hidropatía (Kyte-Doolittle).
-# Las clases son las que el usuario combina para restringir el alfabeto.
-AMINOACIDOS = {
+# Amino acid: name, classes, charge at pH 7.4 and Kyte-Doolittle hydropathy.
+AMINO_ACIDS = {
     "A": ("Alanine",       ("hidrofobico", "alifatico", "no_esencial"),            0.0,  1.8),
     "R": ("Arginine",      ("hidrofilico", "cargado_pos", "no_esencial"),          1.0, -4.5),
     "N": ("Asparagine",    ("hidrofilico", "polar", "no_esencial"),                0.0, -3.5),
@@ -47,7 +45,7 @@ AMINOACIDOS = {
     "V": ("Valine",        ("hidrofobico", "alifatico", "esencial"),               0.0,  4.2),
 }
 
-CLASES = {
+CLASSES = {
     "esencial":     "Essential (not synthesized by the body)",
     "no_esencial":  "Non-essential",
     "hidrofobico":  "Hydrophobic",
@@ -61,124 +59,118 @@ CLASES = {
     "especial":     "Special (G, P)",
 }
 
-# Hidrofobicidad consenso de Eisenberg: se usa para el momento hidrofóbico, que mide la
-# anfipaticidad de una hélice y es el descriptor que mejor separa péptidos antimicrobianos
-# activos de inactivos.
 _EISENBERG = {
     "A": 0.62, "R": -2.53, "N": -0.78, "D": -0.90, "C": 0.29, "E": -0.74, "Q": -0.85,
     "G": 0.48, "H": -0.40, "I": 1.38, "L": 1.06, "K": -1.50, "M": 0.64, "F": 1.19,
     "P": 0.12, "S": -0.18, "T": -0.05, "W": 0.81, "Y": 0.26, "V": 1.08,
 }
-# Índice de Boman: energía de unión a proteínas. Alto = tiende a unirse a muchas proteínas
-# (potencial promiscuidad); bajo = más selectivo.
+# Boman index: protein-binding energy; high means promiscuous.
 _BOMAN = {
     "A": -0.5, "R": 2.5, "N": 0.2, "D": 3.0, "C": -1.0, "E": 3.0, "Q": 0.2, "G": 0.0,
     "H": -0.5, "I": -1.8, "L": -1.8, "K": 3.0, "M": -1.3, "F": -2.5, "P": 0.0,
     "S": 0.3, "T": -0.4, "W": -3.4, "Y": -2.3, "V": -1.5,
 }
 
-ANGULO_HELICE = 100.0    # grados por residuo en una hélice alfa
+HELIX_ANGLE = 100.0
 
 
-def alfabeto(incluir: Sequence[str] = (), excluir_clases: Sequence[str] = (),
-             excluir_residuos: Sequence[str] = ()) -> list:
-    """Alfabeto de aminoacidos permitido. `incluir` son clases (unión); vacio = los 20."""
-    if incluir:
-        sel = {a for a, (_n, cls, _c, _h) in AMINOACIDOS.items() if set(cls) & set(incluir)}
+def alphabet(include: Sequence[str] = (), exclude_classes: Sequence[str] = (),
+             exclude_residues: Sequence[str] = ()) -> list:
+    """Allowed amino-acid alphabet. `include` are classes (union); empty = all 20."""
+    if include:
+        sel = {a for a, (_n, cls, _c, _h) in AMINO_ACIDS.items() if set(cls) & set(include)}
     else:
-        sel = set(AMINOACIDOS)
-    if excluir_clases:
-        sel -= {a for a, (_n, cls, _c, _h) in AMINOACIDOS.items() if set(cls) & set(excluir_clases)}
-    sel -= set(x.upper() for x in excluir_residuos)
+        sel = set(AMINO_ACIDS)
+    if exclude_classes:
+        sel -= {a for a, (_n, cls, _c, _h) in AMINO_ACIDS.items() if set(cls) & set(exclude_classes)}
+    sel -= set(x.upper() for x in exclude_residues)
     return sorted(sel)
 
 
 @dataclass
-class Reglas:
-    """Restricciones de la biblioteca. Todas son opcionales y se combinan."""
-    longitud: int = 7
-    alfabeto: Sequence[str] = field(default_factory=lambda: sorted(AMINOACIDOS))
-    sin_repetir: bool = False              # cada aminoacido aparece como mucho una vez
-    max_consecutivos: int = 0              # 0 = sin límite; 2 prohíbe AAA pero permite AA
-    max_por_residuo: int = 0               # 0 = sin límite; veces que puede aparecer un mismo residuo
-    prefijo: str = ""                      # la secuencia empieza así
-    sufijo: str = ""                       # y termina así
-    carga_min: Optional[float] = None      # carga neta a pH 7.4
-    carga_max: Optional[float] = None
-    gravy_min: Optional[float] = None      # hidropatía media (Kyte-Doolittle)
+class Rules:
+    """Library constraints. All are optional and combine."""
+    length_: int = 7
+    alphabet: Sequence[str] = field(default_factory=lambda: sorted(AMINO_ACIDS))
+    no_repeats: bool = False
+    max_consecutive: int = 0
+    max_per_residue: int = 0
+    prefix_: str = ""
+    suffix_: str = ""
+    charge_min: Optional[float] = None
+    charge_max: Optional[float] = None
+    gravy_min: Optional[float] = None
     gravy_max: Optional[float] = None
 
-    def validar(self) -> list:
-        """Avisos legibles; lista vacia = reglas coherentes."""
-        avisos = []
-        if not (MIN_LONGITUD <= self.longitud <= MAX_LONGITUD):
-            avisos.append(f"Length must be between {MIN_LONGITUD} and {MAX_LONGITUD}.")
-        if not self.alfabeto:
-            avisos.append("The alphabet is empty: no selected class leaves any amino acids.")
-        fijos = len(self.prefijo) + len(self.sufijo)
-        if fijos > self.longitud:
-            avisos.append(f"Prefix and suffix add up to {fijos} residues and the length is {self.longitud}.")
-        if self.sin_repetir and self.longitud > len(self.alfabeto):
-            avisos.append(f"Without repeats, {self.longitud} residues do not fit in an alphabet of "
-                          f"{len(self.alfabeto)}.")
-        for patron, nombre in ((self.prefijo, "prefix"), (self.sufijo, "suffix")):
-            fuera = set(patron.upper()) - set(AMINOACIDOS)
-            if fuera:
-                avisos.append(f"The {nombre} contains symbols that are not amino acids: {', '.join(sorted(fuera))}.")
-        # Conflictos entre reglas: se detectan aquí para explicar por que no saldría ninguna
-        # secuencia, en vez de dejar que la generación devuelva una lista vacia sin motivo.
-        extremos = (self.prefijo + self.sufijo).upper()
-        if self.sin_repetir and len(set(extremos)) != len(extremos):
-            avisos.append("«No repeats» conflicts with the prefix or suffix, which already repeat a residue.")
-        if self.max_consecutivos and self.max_consecutivos > 0:
-            racha, previo = 1, ""
-            for a in extremos:
-                racha = racha + 1 if a == previo else 1
-                previo = a
-                if racha > self.max_consecutivos:
-                    avisos.append(f"The prefix or suffix repeats {racha} residues in a row and the maximum "
-                                  f"consecutive is {self.max_consecutivos}.")
+    def validate(self) -> list:
+        """Readable warnings; empty list = consistent rules."""
+        notices = []
+        if not (MIN_LENGTH <= self.length_ <= MAX_LENGTH):
+            notices.append(f"Length must be between {MIN_LENGTH} and {MAX_LENGTH}.")
+        if not self.alphabet:
+            notices.append("The alphabet is empty: no selected class leaves any amino acids.")
+        fijos = len(self.prefix_) + len(self.suffix_)
+        if fijos > self.length_:
+            notices.append(f"Prefix and suffix add up to {fijos} residues and the length is {self.length_}.")
+        if self.no_repeats and self.length_ > len(self.alphabet):
+            notices.append(f"Without repeats, {self.length_} residues do not fit in an alphabet of "
+                          f"{len(self.alphabet)}.")
+        for patron, name_ in ((self.prefix_, "prefix"), (self.suffix_, "suffix")):
+            outside = set(patron.upper()) - set(AMINO_ACIDS)
+            if outside:
+                notices.append(f"The {name_} contains symbols that are not amino acids: {', '.join(sorted(outside))}.")
+        termini = (self.prefix_ + self.suffix_).upper()
+        if self.no_repeats and len(set(termini)) != len(termini):
+            notices.append("«No repeats» conflicts with the prefix or suffix, which already repeat a residue.")
+        if self.max_consecutive and self.max_consecutive > 0:
+            streak, previous = 1, ""
+            for a in termini:
+                streak = streak + 1 if a == previous else 1
+                previous = a
+                if streak > self.max_consecutive:
+                    notices.append(f"The prefix or suffix repeats {streak} residues in a row and the maximum "
+                                  f"consecutive is {self.max_consecutive}.")
                     break
-        fuera_alfabeto = set(extremos) - set(self.alfabeto)
-        if fuera_alfabeto:
-            avisos.append(f"The prefix or suffix uses residues outside the chosen alphabet: "
-                          f"{', '.join(sorted(fuera_alfabeto))}.")
-        return avisos
+        outside_alphabet = set(termini) - set(self.alphabet)
+        if outside_alphabet:
+            notices.append(f"The prefix or suffix uses residues outside the chosen alphabet: "
+                          f"{', '.join(sorted(outside_alphabet))}.")
+        return notices
 
-    def espacio(self) -> float:
-        """Cota superior del número de secuencias posibles. Sirve para avisar cuando se pide
-        más biblioteca de la que el espacio combinatorio permite."""
-        libres = max(0, self.longitud - len(self.prefijo) - len(self.sufijo))
-        n = len(self.alfabeto)
-        if libres == 0:
+    def space(self) -> float:
+        """Upper bound on the number of possible sequences. Used to warn when more library is
+        requested than the combinatorial space allows."""
+        free_slots = max(0, self.length_ - len(self.prefix_) - len(self.suffix_))
+        n = len(self.alphabet)
+        if free_slots == 0:
             return 1.0
-        if self.sin_repetir:
+        if self.no_repeats:
             total, disp = 1.0, n
-            for _ in range(libres):
+            for _ in range(free_slots):
                 total *= max(disp, 0); disp -= 1
             return total
-        return float(n) ** libres
+        return float(n) ** free_slots
 
 
-def _cumple(seq: str, r: Reglas) -> bool:
-    if r.sin_repetir and len(set(seq)) != len(seq):
+def _cumple(seq: str, r: Rules) -> bool:
+    if r.no_repeats and len(set(seq)) != len(seq):
         return False
-    if r.max_por_residuo:
+    if r.max_per_residue:
         for a in set(seq):
-            if seq.count(a) > r.max_por_residuo:
+            if seq.count(a) > r.max_per_residue:
                 return False
-    if r.max_consecutivos:
-        racha, previo = 1, ""
+    if r.max_consecutive:
+        streak, previous = 1, ""
         for a in seq:
-            racha = racha + 1 if a == previo else 1
-            if racha > r.max_consecutivos:
+            streak = streak + 1 if a == previous else 1
+            if streak > r.max_consecutive:
                 return False
-            previo = a
-    if r.carga_min is not None or r.carga_max is not None:
+            previous = a
+    if r.charge_min is not None or r.charge_max is not None:
         q = carga_neta(seq)
-        if r.carga_min is not None and q < r.carga_min:
+        if r.charge_min is not None and q < r.charge_min:
             return False
-        if r.carga_max is not None and q > r.carga_max:
+        if r.charge_max is not None and q > r.charge_max:
             return False
     if r.gravy_min is not None or r.gravy_max is not None:
         g = gravy(seq)
@@ -189,81 +181,79 @@ def _cumple(seq: str, r: Reglas) -> bool:
     return True
 
 
-def generate(reglas: Reglas, n: int, seed: int = 42, max_intentos: int = 200) -> tuple:
-    """Genera hasta `n` secuencias únicas que cumplen las reglas. Devuelve (secuencias, aviso).
+def generate(rules: Rules, n: int, seed: int = 42, max_attempts: int = 200) -> tuple:
+    """Generates up to `n` unique sequences that satisfy the rules. Returns (sequences, notice).
 
-    Muestreo aleatorio con semilla fija en vez de enumeracion exhaustiva: el espacio crece como
-    20^longitud y enumerarlo es inviable salvo en péptidos muy cortos. Se para cuando junta n
-    secuencias o cuando deja de encontrar nuevas, de modo que pedir más de las que existen no
-    cuelga la aplicación.
+    Random sampling with a fixed seed instead of exhaustive enumeration: the space grows as
+    20^length and enumerating it is infeasible except for very short peptides. It stops when it has
+    n sequences or when it stops finding new ones, so asking for more than exist does not hang the app.
     """
     rng = random.Random(seed)
-    pre, suf = reglas.prefijo.upper(), reglas.sufijo.upper()
-    libres = reglas.longitud - len(pre) - len(suf)
-    if libres < 0 or not reglas.alfabeto:
-        return [], "Las reglas no permiten construir ninguna secuencia."
+    pre, suf = rules.prefix_.upper(), rules.suffix_.upper()
+    free_slots = rules.length_ - len(pre) - len(suf)
+    if free_slots < 0 or not rules.alphabet:
+        return [], "The rules do not allow building any sequence."
 
-    vistas, salida, fallos = set(), [], 0
-    limite = max_intentos * max(n, 1)
-    intentos = 0
-    while len(salida) < n and intentos < limite and fallos < max_intentos * 20:
-        intentos += 1
-        if reglas.sin_repetir:
-            usados = set(pre) | set(suf)
-            libres_pool = [a for a in reglas.alfabeto if a not in usados]
-            if len(libres_pool) < libres:
+    seen_, output, failures = set(), [], 0
+    limite = max_attempts * max(n, 1)
+    attempts = 0
+    while len(output) < n and attempts < limite and failures < max_attempts * 20:
+        attempts += 1
+        if rules.no_repeats:
+            used_set = set(pre) | set(suf)
+            free_pool = [a for a in rules.alphabet if a not in used_set]
+            if len(free_pool) < free_slots:
                 break
-            medio = "".join(rng.sample(libres_pool, libres))
+            mid = "".join(rng.sample(free_pool, free_slots))
         else:
-            medio = "".join(rng.choice(reglas.alfabeto) for _ in range(libres))
-        seq = pre + medio + suf
-        if seq in vistas:
-            fallos += 1
+            mid = "".join(rng.choice(rules.alphabet) for _ in range(free_slots))
+        seq = pre + mid + suf
+        if seq in seen_:
+            failures += 1
             continue
-        if not _cumple(seq, reglas):
-            fallos += 1
+        if not _cumple(seq, rules):
+            failures += 1
             continue
-        vistas.add(seq); salida.append(seq); fallos = 0
+        seen_.add(seq); output.append(seq); failures = 0
 
-    aviso = ""
-    if len(salida) < n:
-        esp = reglas.espacio()
-        aviso = (f"{len(salida)} of {n} sequences generated: with these rules the available "
+    notice = ""
+    if len(output) < n:
+        esp = rules.space()
+        notice = (f"{len(output)} of {n} sequences generated: with these rules the available "
                  f"space is about {esp:.0f} and the filters discard the rest.")
-    return salida, aviso
+    return output, notice
 
 
-# ---------------------------------------------------------------- propiedades
 def carga_neta(seq: str, ph: float = 7.4, c_amida: bool = False,
-               n_acetil: bool = False, ciclico: bool = False) -> float:
-    """Carga neta aproximada a pH fisiologico. En péptidos antimicrobianos es el descriptor
-    más asociado a la actividad: la membrana bacteriana es anionica.
+               n_acetil: bool = False, cyclic: bool = False) -> float:
+    """Approximate net charge at physiological pH. In antimicrobial peptides it is the descriptor
+    most associated with activity: the bacterial membrane is anionic.
 
-    La química de los extremos entra aquí porque cambia la carga, que es justamente el descriptor
-    que se usa para decidir: amidar el carboxilo suprime una carga negativa (+1 neto), acetilar el
-    amino suprime una positiva (-1 neto) y el cierre cabeza-cola consume ambos extremos, de modo
-    que solo quedan las cargas de las cadenas laterales.
+    Terminus chemistry enters here because it changes the charge, which is precisely the descriptor
+    used to decide: amidating the carboxyl removes a negative charge (+1 net), acetylating the amino
+    removes a positive one (-1 net) and head-to-tail closure consumes both termini, so only the
+    side-chain charges remain.
     """
-    q = sum(AMINOACIDOS[a][2] for a in seq.upper() if a in AMINOACIDOS)
-    if ciclico:
+    q = sum(AMINO_ACIDS[a][2] for a in seq.upper() if a in AMINO_ACIDS)
+    if cyclic:
         return round(q, 2)
     if not n_acetil:
-        q += 1.0                          # amino terminal protonado
+        q += 1.0
     if not c_amida:
-        q -= 1.0                          # carboxilo terminal desprotonado
+        q -= 1.0
     return round(q, 2)
 
 
 def gravy(seq: str) -> float:
-    """Hidropatía media (Kyte-Doolittle). Positivo = hidrofóbico global."""
-    vals = [AMINOACIDOS[a][3] for a in seq.upper() if a in AMINOACIDOS]
+    """Mean hydropathy (Kyte-Doolittle). Positive = overall hydrophobic."""
+    vals = [AMINO_ACIDS[a][3] for a in seq.upper() if a in AMINO_ACIDS]
     return round(sum(vals) / len(vals), 3) if vals else 0.0
 
 
-def momento_hidrofobico(seq: str, angulo: float = ANGULO_HELICE) -> float:
-    """Momento hidrofóbico normalizado de Eisenberg. Mide la ANFIPATICIDAD: si al plegarse en
-    hélice los residuos hidrofóbicos quedan en una cara y los polares en la otra. Es lo que
-    permite a un péptido insertarse en la membrana."""
+def momento_hidrofobico(seq: str, angulo: float = HELIX_ANGLE) -> float:
+    """Eisenberg normalized hydrophobic moment. Measures AMPHIPATHICITY: whether, folded into a
+    helix, the hydrophobic residues sit on one face and the polar ones on the other. This is what
+    lets a peptide insert into the membrane."""
     s = [a for a in seq.upper() if a in _EISENBERG]
     if not s:
         return 0.0
@@ -274,35 +264,35 @@ def momento_hidrofobico(seq: str, angulo: float = ANGULO_HELICE) -> float:
 
 
 def indice_boman(seq: str) -> float:
-    """Potencial de unión a otras proteínas (kcal/mol). Por encima de ~2.5 se considera que el
-    péptido es promiscuo y puede tener más efectos inespecificos."""
+    """Potential to bind other proteins (kcal/mol). Above ~2.5 the peptide is considered promiscuous
+    and may have more nonspecific effects."""
     vals = [_BOMAN[a] for a in seq.upper() if a in _BOMAN]
     return round(sum(vals) / len(vals), 2) if vals else 0.0
 
 
 def fraccion_hidrofobica(seq: str) -> float:
-    s = [a for a in seq.upper() if a in AMINOACIDOS]
+    s = [a for a in seq.upper() if a in AMINO_ACIDS]
     if not s:
         return 0.0
-    h = sum(1 for a in s if "hidrofobico" in AMINOACIDOS[a][1])
+    h = sum(1 for a in s if "hidrofobico" in AMINO_ACIDS[a][1])
     return round(h / len(s), 3)
 
 
-_TRES_A_UNA = {"ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C", "GLN": "Q",
+_THREE_TO_ONE = {"ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C", "GLN": "Q",
                "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I", "LEU": "L", "LYS": "K",
                "MET": "M", "PHE": "F", "PRO": "P", "SER": "S", "THR": "T", "TRP": "W",
                "TYR": "Y", "VAL": "V"}
 
 
-def secuencia_de_estructura(ruta) -> Optional[tuple]:
-    """(secuencia, ciclico) si el archivo contiene un polipeptido; None si no lo es.
+def sequence_from_structure(path_) -> Optional[tuple]:
+    """(sequence, cyclic) if the file contains a polypeptide; None if it is not one.
 
-    Permite reconocer un péptido sin depender de ningun metadato: hace falta para los controles
-    cocristalizados, que se extraen del cristal y no pasan por la tabla de ligandos. Se exige
-    esqueleto completo (N, CA y C) en cada residuo para no confundir con un polipeptido cualquier
-    molécula que contenga fragmentos de aminoacido.
+    Lets a peptide be recognized without depending on any metadata: needed for the co-crystallized
+    controls, which are extracted from the crystal and do not pass through the ligand table. A
+    complete backbone (N, CA and C) is required at each residue so as not to mistake for a
+    polypeptide any molecule containing amino-acid fragments.
     """
-    p = Path(ruta)
+    p = Path(path_)
     if p.suffix.lower() not in (".pdb", ".pdbqt", ".ent"):
         return None
     res, esq = {}, {}
@@ -310,29 +300,28 @@ def secuencia_de_estructura(ruta) -> Optional[tuple]:
         for l in p.read_text(errors="ignore").splitlines():
             if not l.startswith(("ATOM", "HETATM")):
                 continue
-            nom3, clave = l[17:20].strip().upper(), (l[21], l[22:27].strip())
-            if nom3 not in _TRES_A_UNA:
+            nom3, key_ = l[17:20].strip().upper(), (l[21], l[22:27].strip())
+            if nom3 not in _THREE_TO_ONE:
                 continue
-            res[clave] = nom3
-            esq.setdefault(clave, set()).add(l[12:16].strip())
+            res[key_] = nom3
+            esq.setdefault(key_, set()).add(l[12:16].strip())
     except Exception:
         return None
     completos = [k for k, v in res.items() if {"N", "CA", "C"} <= esq.get(k, set())]
-    if not 1 <= len(completos) <= MAX_LARGO:
+    if not 1 <= len(completos) <= MAX_CHAIN_LENGTH:
         return None
-    orden = sorted(completos, key=lambda k: (k[0], _num(k[1])))
-    seq = "".join(_TRES_A_UNA[res[k]] for k in orden)
+    order_ = sorted(completos, key=lambda k: (k[0], _num(k[1])))
+    seq = "".join(_THREE_TO_ONE[res[k]] for k in order_)
 
-    # Ciclado cabeza-cola: el nitrogeno del primer residuo esta a distancia de enlace del carbono
-    # del último. Se mide sobre las coordenadas porque un PDB no declara los enlaces.
+    # Head-to-tail cyclization: amide between the first nitrogen and the last carbon.
     ciclo = False
     xyz = {}
     for l in p.read_text(errors="ignore").splitlines():
         if l.startswith(("ATOM", "HETATM")):
             k = (l[21], l[22:27].strip())
-            if k in (orden[0], orden[-1]):
+            if k in (order_[0], order_[-1]):
                 xyz[(k, l[12:16].strip())] = (float(l[30:38]), float(l[38:46]), float(l[46:54]))
-    a, b = xyz.get((orden[0], "N")), xyz.get((orden[-1], "C"))
+    a, b = xyz.get((order_[0], "N")), xyz.get((order_[-1], "C"))
     if a and b:
         ciclo = sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5 < 1.8
     return seq, ciclo
@@ -343,49 +332,48 @@ def _num(s: str) -> int:
     return int(d) if d and d != "-" else 0
 
 
-def etiqueta(seq: str, n_acetil: bool = False, c_amida: bool = False,
-             ciclico: bool = False) -> str:
-    """Nombre que hace visible la química de los extremos: 'Ac-KWKLF-NH2', 'ciclo-KWKLF'.
+def label_for(seq: str, n_acetil: bool = False, c_amida: bool = False,
+             cyclic: bool = False) -> str:
+    """Name that makes the terminus chemistry visible: 'Ac-KWKLF-NH2', 'cyclo-KWKLF'.
 
-    Sin él, dos moléculas distintas comparten nombre en tablas y archivos de poses, y un cribado con
-    extremos protegidos sería indistinguible de uno sin proteger. Sin caracteres que compliquen el
-    nombre de archivo.
+    Without it, two different molecules share a name in tables and pose files, and a screening with
+    protected termini would be indistinguishable from one without protection. No characters that
+    complicate the file name.
     """
     seq = seq.upper()
-    if ciclico:
+    if cyclic:
         return f"cyclo-{seq}"
     return ("Ac-" if n_acetil else "") + seq + ("-NH2" if c_amida else "")
 
 
-def propiedades(seq: str, c_amida: bool = False, n_acetil: bool = False,
-                ciclico: bool = False) -> dict:
-    """Descriptores de la secuencia, sin construir la molécula 3D."""
+def properties(seq: str, c_amida: bool = False, n_acetil: bool = False,
+                cyclic: bool = False) -> dict:
+    """Sequence descriptors, without building the 3D molecule."""
     seq = seq.upper()
     return {
-        "secuencia": seq,
-        "nombre": etiqueta(seq, n_acetil=n_acetil, c_amida=c_amida, ciclico=ciclico),
-        "longitud": len(seq),
-        "carga_neta": carga_neta(seq, c_amida=c_amida, n_acetil=n_acetil, ciclico=ciclico),
+        "sequence": seq,
+        "name": label_for(seq, n_acetil=n_acetil, c_amida=c_amida, cyclic=cyclic),
+        "length": len(seq),
+        "net_charge": carga_neta(seq, c_amida=c_amida, n_acetil=n_acetil, cyclic=cyclic),
         "gravy": gravy(seq),
-        "momento_hidrofobico": momento_hidrofobico(seq),
-        "fraccion_hidrofobica": fraccion_hidrofobica(seq),
-        "indice_boman": indice_boman(seq),
+        "hydrophobic_moment": momento_hidrofobico(seq),
+        "hydrophobic_fraction": fraccion_hidrofobica(seq),
+        "boman_index": indice_boman(seq),
     }
 
 
-# ---------------------------------------------------------------- estructura
 def to_smiles(seq: str, n_acetil: bool = False, c_amida: bool = False,
-              ciclico: bool = False) -> Optional[str]:
-    """Secuencia -> SMILES, con los aminoácidos en configuración L (la natural).
+              cyclic: bool = False) -> Optional[str]:
+    """Sequence -> SMILES, with the amino acids in L configuration (the natural one).
 
-    n_acetil / c_amida protegen los extremos, habitual en péptidos antimicrobianos: amidar el
-    carboxilo quita una carga negativa y sube la carga neta positiva, lo que favorece la interacción
-    con la membrana bacteriana. ciclico cierra cabeza-cola, rigidizando y resistiendo proteasas.
+    n_acetil / c_amida protect the termini, common in antimicrobial peptides: amidating the carboxyl
+    removes a negative charge and raises the positive net charge, which favors interaction with the
+    bacterial membrane. ciclico closes head-to-tail, rigidifying and resisting proteases.
     """
     from rdkit import Chem, RDLogger
     RDLogger.DisableLog("rdApp.*")
 
-    seq = "".join(a for a in seq.upper() if a in AMINOACIDOS)
+    seq = "".join(a for a in seq.upper() if a in AMINO_ACIDS)
     if not seq:
         return None
     m = Chem.MolFromSequence(seq)
@@ -393,30 +381,26 @@ def to_smiles(seq: str, n_acetil: bool = False, c_amida: bool = False,
         return None
     n_idx, c_idx, o_idx = _extremos(m)
 
-    if ciclico:
-        # Cierre cabeza-cola: se enlaza el N terminal con el C del carboxilo y se elimina su OH
-        # (condensación, se pierde una agua). El enlace va ANTES de borrar el oxígeno porque
-        # RemoveAtom reindexa; la valencia intermedia no es válida, de ahí sanitizar solo al final.
+    if cyclic:
+        # Condensation loses one water; the bond is made before deleting the oxygen so the indices stay valid.
         if None in (n_idx, c_idx, o_idx):
             return None
         rw = Chem.RWMol(m)
         rw.AddBond(n_idx, c_idx, Chem.BondType.SINGLE)
         rw.RemoveAtom(o_idx)
         try:
-            cerrado = rw.GetMol()
-            Chem.SanitizeMol(cerrado)
-            return Chem.MolToSmiles(cerrado)
+            closed = rw.GetMol()
+            Chem.SanitizeMol(closed)
+            return Chem.MolToSmiles(closed)
         except Exception:
             return None
 
-    # Los extremos se modifican sobre la misma molécula, sin pasar por SMILES: cada ida y vuelta
-    # pierde la información de residuo y reordena los átomos, invalidando los índices localizados. Se
-    # amida antes de acetilar porque ReplaceAtom no reindexa y AddAtom solo añade al final.
+    # The termini are modified on the molecule: a SMILES round trip loses the residue information.
     rw = Chem.RWMol(m)
     if c_amida:
         if o_idx is None:
             return None
-        rw.ReplaceAtom(o_idx, Chem.Atom(7))      # el OH del carboxilo pasa a NH2
+        rw.ReplaceAtom(o_idx, Chem.Atom(7))
     if n_acetil:
         if n_idx is None:
             return None
@@ -433,27 +417,27 @@ def to_smiles(seq: str, n_acetil: bool = False, c_amida: bool = False,
 
 
 def _extremos(mol) -> tuple:
-    """(N del extremo N, C del carboxilo terminal, O de su OH), por información de residuo.
+    """(N of the N-terminus, C of the terminal carboxyl, O of its OH), by residue information.
 
-    Identificarlos por su forma química falla en silencio: la lisina aporta una amina primaria libre
-    y el aspartato/glutamato un ácido carboxílico, así que quedarse con el primero que encaja cierra
-    cualquier péptido con D o E por la cadena lateral —un lactama con otro anillo, carga y forma, pero
-    con el nombre de ciclo cabeza-cola. MolFromSequence sí conserva residuo y nombre de átomo, que
-    son inequívocos: el esqueleto se llama N y C en todos los aminoácidos.
+    Identifying them by their chemical form fails silently: lysine contributes a free primary amine
+    and aspartate/glutamate a carboxylic acid, so keeping the first match closes any peptide with D or
+    E through the side chain —a lactam with another ring, charge and shape, but named a head-to-tail
+    cycle. MolFromSequence does keep residue and atom name, which are unambiguous: the backbone is
+    called N and C in every amino acid.
     """
     info = [(a.GetIdx(), a.GetPDBResidueInfo()) for a in mol.GetAtoms()]
     nums = [i.GetResidueNumber() for _, i in info if i is not None]
     if not nums:
         return None, None, None
-    primero, ultimo = min(nums), max(nums)
+    first_, last_ = min(nums), max(nums)
     n_idx = c_idx = o_idx = None
     for idx, i in info:
         if i is None:
             continue
-        nombre = i.GetName().strip()
-        if i.GetResidueNumber() == primero and nombre == "N":
+        name_ = i.GetName().strip()
+        if i.GetResidueNumber() == first_ and name_ == "N":
             n_idx = idx
-        elif i.GetResidueNumber() == ultimo and nombre == "C":
+        elif i.GetResidueNumber() == last_ and name_ == "C":
             c_idx = idx
     if c_idx is not None:
         o_idx = next((v.GetIdx() for v in mol.GetAtomWithIdx(c_idx).GetNeighbors()
@@ -461,43 +445,43 @@ def _extremos(mol) -> tuple:
     return n_idx, c_idx, o_idx
 
 
-def viabilidad_docking(longitud: int, n_peptidos: int = 1, hay_adcp: bool = False) -> tuple:
-    """(nivel, mensaje) sobre el coste y la fiabilidad de acoplar péptidos de esa longitud.
+def docking_feasibility(length_: int, n_peptides: int = 1, has_adcp: bool = False) -> tuple:
+    """(level, message) about the cost and reliability of docking peptides of that length.
 
-    Los umbrales NO son teoricos. Con AutoDock Vina, medido sobre saFtsZ (caja de 23 A,
-    exhaustividad 8, un hilo), enlaces rotables y tiempo por péptido:
-        3 residuos -> 15 rotables ->  ~98 s
-        5 residuos -> 23 rotables -> más de 2 min
-        8 residuos -> 39 rotables -> más de 2 min
-    El coste crece con los grados de libertad, y la fiabilidad cae por el mismo motivo: Vina trata
-    el ligando como un arbol de torsiones independientes, sin termino de energía conformacional, así
-    que con muchas torsiones el muestreo deja de cubrir el espacio y la pose pierde sentido.
+    The thresholds are NOT theoretical. With AutoDock Vina, measured on saFtsZ (23 A box,
+    exhaustiveness 8, one thread), rotatable bonds and time per peptide:
+        3 residues -> 15 rotatable ->  ~98 s
+        5 residues -> 23 rotatable -> more than 2 min
+        8 residues -> 39 rotatable -> more than 2 min
+    Cost grows with the degrees of freedom, and reliability falls for the same reason: Vina treats
+    the ligand as an independent torsion tree, with no conformational-energy term, so with many
+    torsions the sampling stops covering the space and the pose loses meaning.
 
-    ADCP no comparte esa limitacion, porque muestrea la conformación con rotámeros en vez de
-    enumerar torsiones: sobre 8HTB, un octapeptido con 250.000 pasos x 10 replicas tarda 35 s con
-    seis hilos. A cambio necesita al menos cinco residuos. Los dos programas se reparten por tanto
-    el intervalo, y cual este disponible cambia el consejo.
+    ADCP does not share that limitation, because it samples the conformation with rotamers instead of
+    enumerating torsions: on 8HTB, an octapeptide with 250,000 steps x 10 replicas takes 35 s on six
+    threads. In exchange it needs at least five residues. The two programs thus split the range, and
+    which one is available changes the advice.
     """
-    if hay_adcp and longitud >= 5:
-        minutos = max(1, round(n_peptidos * 0.6))
-        coste = (f" Estimate for {n_peptidos} peptides: on the order of {minutos} minutes."
-                 if n_peptidos > 1 else "")
-        return "bueno", ("Length within ADCP's range, which generates the conformation during "
+    if has_adcp and length_ >= 5:
+        minutes = max(1, round(n_peptides * 0.6))
+        coste = (f" Estimate for {n_peptides} peptides: on the order of {minutes} minutes."
+                 if n_peptides > 1 else "")
+        return "good", ("Length within ADCP's range, which generates the conformation during "
                          "docking instead of starting from a rigid structure. Raise steps and "
                          "replicas if the energy still improves." + coste)
 
-    minutos = n_peptidos * (1.6 if longitud <= 3 else 3.0 if longitud <= 6 else 6.0)
-    coste = (f" Estimate for {n_peptidos} peptides: on the order of {minutos:.0f} minutes on one "
-             f"thread; reduce the time by raising «dockings in parallel»." if n_peptidos > 1 else "")
-    if longitud <= 3:
-        return "bueno", ("Flexibility comparable to a small molecule. Even so, each docking "
+    minutes = n_peptides * (1.6 if length_ <= 3 else 3.0 if length_ <= 6 else 6.0)
+    coste = (f" Estimate for {n_peptides} peptides: on the order of {minutes:.0f} minutes on one "
+             f"thread; reduce the time by raising «dockings in parallel»." if n_peptides > 1 else "")
+    if length_ <= 3:
+        return "good", ("Flexibility comparable to a small molecule. Even so, each docking "
                          "costs about a minute and a half." + coste)
-    if longitud <= 6:
-        return "medio", ("High flexibility for Vina: docking is slow and the exact pose is "
+    if length_ <= 6:
+        return "mid", ("High flexibility for Vina: docking is slow and the exact pose is "
                          "unreliable, though the relative order stays informative. Tighten the box "
                          "to the site, consider cyclizing the peptide to rigidify it, or install ADCP, "
                          "which covers this length without that problem." + coste)
-    return "malo", ("Above 6 residues, rigid docking with Vina stops being practical: "
+    return "bad", ("Above 6 residues, rigid docking with Vina stops being practical: "
                     "the number of torsions exceeds what the algorithm samples reasonably. "
                     "This is exactly the length ADCP exists for; install it with "
                     "scripts/get_adcp.sh instead of forcing Vina here." + coste)

@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
-# Instala gnina (segunda función de puntuación, red neuronal, GPU NVIDIA).
+# Installs gnina: a second scoring function (neural network, NVIDIA GPU).
 #   bash scripts/get_gnina.sh
-# El binario "static" no es autocontenido: se genera un envoltorio que fija LD_LIBRARY_PATH.
+# The "static" binary is not self-contained, so a wrapper setting LD_LIBRARY_PATH is generated.
 set -euo pipefail
 
 DEST="${1:-$HOME/poliscreen_tools}"
 URL="https://github.com/gnina/gnina/releases/latest/download/gnina.cuda12.8.static"
 
 if ! command -v nvidia-smi >/dev/null 2>&1; then
-  echo "AVISO: no detecto una GPU NVIDIA. gnina la necesita; la instalacion seguira, pero no funcionara."
+  echo "WARNING: no NVIDIA GPU detected. gnina needs one; installation continues but it will not run."
 fi
 
 mkdir -p "${DEST}"
-echo "Descargando gnina (unos 2 GB) -> ${DEST}/gnina"
+echo "Downloading gnina (about 2 GB) -> ${DEST}/gnina"
 curl -fL --progress-bar "${URL}" -o "${DEST}/gnina.parcial"
 mv "${DEST}/gnina.parcial" "${DEST}/gnina"
 chmod +x "${DEST}/gnina"
 
-echo "Instalando las librerias de CUDA 12 y cuDNN 9 que el binario necesita..."
+echo "Installing the CUDA 12 and cuDNN 9 libraries the binary needs..."
 python -m pip install --quiet --upgrade --target "${DEST}/cuda12" \
   nvidia-cuda-runtime-cu12 nvidia-cudnn-cu12 nvidia-cublas-cu12 nvidia-cusparse-cu12 \
   nvidia-cufft-cu12 nvidia-curand-cu12 nvidia-cusolver-cu12 nvidia-nvjitlink-cu12
 
-# Lanzador: fija LD_LIBRARY_PATH con las rutas reales de las librerias recien instaladas.
+# Wrapper: sets LD_LIBRARY_PATH to the real paths of the libraries just installed.
 python - "$DEST" <<'PY'
 import stat, sys
 from pathlib import Path
@@ -40,15 +40,15 @@ w.chmod(w.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 print("lanzador:", w)
 PY
 
-echo -n "Version instalada: "
+echo -n "Installed version: "
 "${DEST}/gnina-run" --version | head -1
 
 cat <<EOF
 
-Para que PoliScreen lo encuentre, exporta la ruta del lanzador:
+So that PoliScreen finds it, export the path of the wrapper:
 
     export POLISCREEN_GNINA=${DEST}/gnina-run
 
-Anadelo a tu ~/.bashrc si quieres que persista. Despues activa la casilla
-"Re-puntuar las poses con gnina" en los ajustes de docking.
+Add it to your ~/.bashrc to make it persist, then tick "Re-score the poses with
+gnina" in the docking settings.
 EOF

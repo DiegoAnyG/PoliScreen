@@ -1,20 +1,21 @@
-# Imagen reproducible de PoliScreen (nucleo: preparacion, docking, interacciones, cribado e interfaz).
+# Reproducible PoliScreen image.
 #
 #   docker build -f docker/Dockerfile -t poliscreen .
 #   docker run --rm -p 8501:8501 -v "$PWD/proyectos:/data" poliscreen
-#   -> http://localhost:8501  (la carpeta de proyecto dentro de la app es /data)
+#   -> http://localhost:8501  (projects are created under /data, the mounted volume)
 #
-# Imagen base FIJADA por tag (no 'latest': 'latest' se mueve y en unos meses construiria otra cosa).
-# Para reproducibilidad maxima en una publicacion, sustituye el tag por el digest:
+# Base image pinned by tag: 'latest' moves and would build something else in a few months.
+# For a publication, replace the tag with the digest:
 #   docker inspect --format='{{index .RepoDigests 0}}' condaforge/miniforge3:26.3.2-3
 FROM condaforge/miniforge3:26.3.2-3
 
-# Version de Vina fijada: la serie 1.2.x no esta en conda y su puntuacion difiere de la 1.1.2.
-# El SHA256 fija la identidad exacta del binario; si el asset cambiara, la construccion falla.
+# Vina pinned: 1.2.x is not on conda and its scoring function differs from 1.1.2.
+# The SHA256 pins the exact binary: if the asset changed, the build fails.
 ARG VINA_VERSION=1.2.5
 ARG VINA_SHA256=fa0126a28a9ea9162d1b161dfa92bc76e632416db28ca246278ea4b2dc6860cb
 
 ENV POLISCREEN_HOME=/opt/poliscreen \
+    POLISCREEN_PROJECTS=/data \
     MPLBACKEND=Agg \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
@@ -25,7 +26,6 @@ RUN apt-get update \
 
 WORKDIR ${POLISCREEN_HOME}
 
-# El entorno se crea antes de copiar el codigo: asi la capa se reutiliza si solo cambia el fuente.
 COPY environment.yml ./
 RUN mamba env create -f environment.yml -n poliscreen --yes \
  && mamba clean -afy
@@ -38,12 +38,10 @@ RUN curl -fsSL "https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/
 ENV PATH=/opt/conda/envs/poliscreen/bin:${PATH}
 
 COPY . ${POLISCREEN_HOME}
-# --no-deps: las dependencias ya las resolvio conda; evita que pip las duplique con otras versiones.
 RUN pip install --no-deps -e .
 
-# Comprobacion en tiempo de construccion: si falta una herramienta, la imagen falla aqui y no en produccion.
 RUN vina --version && obabel -V && plip --version >/dev/null 2>&1 || true \
- && python -c "import rdkit, py3Dmol, streamlit, poliscreen; print('PoliScreen listo')"
+ && python -c "import rdkit, py3Dmol, streamlit, poliscreen; print('PoliScreen ready')"
 
 VOLUME ["/data"]
 EXPOSE 8501

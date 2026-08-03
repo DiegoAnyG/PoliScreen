@@ -1,4 +1,4 @@
-# Fuera del contexto de construccion: acelera el build y evita hornear datos en la imagen.
+# Out of the build context: keeps data out of the image.
 .git
 .gitignore
 __pycache__/
@@ -8,7 +8,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
-# Resultados y proyectos: se montan como volumen, no forman parte de la imagen.
+# Results and projects are mounted as a volume, not baked in.
 proyectos/
 poliscreen_proyectos/
 **/poses/

@@ -1,11 +1,11 @@
-"""Runner que se ejecuta DENTRO del entorno de admelab (venv Python 3.12 con torch).
+"""Runner executed INSIDE the admelab environment (Python 3.12 venv with torch).
 
-Deliberadamente NO importa poliscreen: solo admelab + stdlib + pandas. Lee sus parámetros
-de un JSON y escribe el resultado en otro JSON. Así el diseño de análogos + ADMET vive
-aislado del entorno de docking (openbabel/plip/vina), que es incompatible, y ese mismo
-límite se convierte manana en un contenedor separado SIN cambiar la interfaz.
+Deliberately does NOT import poliscreen: only admelab + stdlib + pandas. It reads its
+parameters from a JSON and writes the result to another JSON. This way the analogue design +
+ADMET lives isolated from the docking environment (openbabel/plip/vina), which is incompatible,
+and that same boundary becomes tomorrow a separate container WITHOUT changing the interface.
 
-Uso:  python _admelab_runner.py parámetros.json salida.json
+Usage:  python _admelab_runner.py parameters.json output.json
 """
 import json
 import math
@@ -13,7 +13,7 @@ import sys
 
 
 def _clean(v):
-    """NaN/Inf -> None para que el JSON sea valido y portable."""
+    """NaN/Inf -> None so the JSON is valid and portable."""
     if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
         return None
     return v
@@ -51,12 +51,12 @@ def _do_design(p):
 
 
 def _do_reaction_sites(p):
-    """Sitios reactivos de una molécula: OH clasificados y si tiene acido carboxilico."""
+    """Reactive sites of a molecule: classified OH groups and whether it has a carboxylic acid."""
     from rdkit import Chem
     from admelab import esterification as est
     m = Chem.MolFromSmiles(p["smiles"])
     if m is None:
-        return {"ok": False, "error": "SMILES no valido: %s" % p["smiles"]}
+        return {"ok": False, "error": "invalid SMILES: %s" % p["smiles"]}
     return {"ok": True, "action": "reaction_sites",
             "sites": est.classify_hydroxyls(m),
             "has_cooh": bool(m.HasSubstructMatch(est._COOH_PATTERN)),
@@ -64,27 +64,25 @@ def _do_reaction_sites(p):
 
 
 def _do_esterify(p):
-    """Esterifica el acido con cada alcohol. policy: 'preferred' (OH más favorable) o 'all'."""
+    """Esterifies the acid with each alcohol. policy: 'preferred' (most favorable OH) or 'all'."""
     from admelab import esterification as est
     out = []
     for a in p["alcohols"]:
         smi = a["smiles"] if isinstance(a, dict) else a
-        nombre = a.get("name") if isinstance(a, dict) else None
+        name_ = a.get("name") if isinstance(a, dict) else None
         for pr in est.esterify(p["acid"], smi, policy=p.get("policy", "preferred")):
             r = dict(pr)
-            r["alcohol"] = nombre or smi
+            r["alcohol"] = name_ or smi
             r["alcohol_smiles"] = smi
-            # Se normaliza aquí para que el resto del código no dependa de como nombre admelab
-            # sus claves. 'sintetizable' es lo que usa el filtro antes de dockear.
-            v = pr.get("viabilidad_fischer") or pr.get("viabilidad") or "desconocida"
-            r["viabilidad"] = v
-            r["sintetizable"] = not any(w in str(v).lower() for w in ("desfavorable", "dificil"))
+            v = pr.get("viabilidad_fischer") or pr.get("viabilidad") or "unknown"
+            r["feasibility"] = v
+            r["synthesizable"] = not any(w in str(v).lower() for w in ("desfavorable", "dificil"))
             out.append({k: _clean(v2) for k, v2 in r.items()})
     return {"ok": True, "action": "esterify", "products": out}
 
 
 def _do_predict(p):
-    """ADMET completo (descriptores RDKit + reglas + ADMET-AI + toxicidad) para una lista de SMILES."""
+    """Full ADMET (RDKit descriptors + rules + ADMET-AI + toxicity) for a list of SMILES."""
     from admelab import predict, toxicity
     df = predict.predict_batch(list(p["smiles"]), use_ml=bool(p.get("use_ml", True)))
     try:
@@ -97,14 +95,14 @@ def _do_predict(p):
 
 
 def _do_name_esters(p):
-    """Nombre IUPAC verificado (OPSIN) de cada ester. Offline con los nombres de alcohol dados;
-    cae a web solo si use_web y OPSIN no cuadro. Limpia los nombres para que OPSIN los parsee."""
+    """Verified IUPAC name (OPSIN) of each ester. Offline with the given alcohol names;
+    falls back to web only if use_web and OPSIN did not match. Cleans the names so OPSIN parses them."""
     import re
     from admelab import naming_smart as ns
 
     def clean(n):
-        n = re.sub(r"\s*\(.*?\)", "", str(n or "")).strip()   # quita parentesis
-        n = re.sub(r"^\(.*?\)-?", "", n).strip()               # quita estereo al inicio
+        n = re.sub(r"\s*\(.*?\)", "", str(n or "")).strip()
+        n = re.sub(r"^\(.*?\)-?", "", n).strip()
         return n or None
 
     esters = list(p["ester_smiles"])
@@ -121,7 +119,7 @@ def _do_name_esters(p):
 
 
 def _do_info(p):
-    import admelab  # noqa: F401
+    import admelab
     mods = []
     for m in ["generation", "esterification", "predict", "toxicity", "ranking",
               "naming", "naming_smart", "viz", "pipeline"]:
@@ -143,7 +141,7 @@ def _do_info(p):
 
 def main():
     if len(sys.argv) < 3:
-        print("uso: _admelab_runner.py parametros.json salida.json", file=sys.stderr)
+        print("usage: _admelab_runner.py parameters.json output.json", file=sys.stderr)
         return 2
     params_path, out_path = sys.argv[1], sys.argv[2]
     try:
@@ -162,7 +160,7 @@ def main():
         elif action == "info":
             out = _do_info(p)
         else:
-            out = {"ok": False, "error": "accion desconocida: %s" % action}
+            out = {"ok": False, "error": "unknown action: %s" % action}
     except Exception as e:
         import traceback
         out = {"ok": False, "error": str(e), "traceback": traceback.format_exc()[-2000:]}

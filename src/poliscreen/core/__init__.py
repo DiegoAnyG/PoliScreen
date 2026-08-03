@@ -1,7 +1,7 @@
-"""Nucleo de PoliScreen: química y motores, sin interfaz de usuario.
+"""PoliScreen core: chemistry and engines, with no user interface.
 
-Cada motor se expone detras de una interfaz estable para poder cambiar la
-implementación (o aislarla en su propio contenedor) sin tocar a quien la usa.
+Each engine is exposed behind a stable interface so the implementation can be
+changed (or isolated in its own container) without touching its callers.
 """
 
 from .design import AdmelabBridge, AdmelabError, DesignResult

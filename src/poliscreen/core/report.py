@@ -1,15 +1,14 @@
-"""Reporte ADMET legible a partir de la salida de admelab.predict (estilo ADMETlab/ProTox).
+"""Readable ADMET report from admelab.predict output (ADMETlab/ProTox style).
 
-Sin dependencias de UI: devuelve secciones estructuradas y una figura de radar. La interfaz decide
-como pintarlas. Cada propiedad trae un veredicto (bueno/medio/malo/info) para colorear.
+No UI dependencies: it returns structured sections and a radar figure. The interface decides how to
+draw them. Each property carries a verdict (bueno/medio/malo/info) for coloring.
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
 
-# veredicto -> se traduce a color en la UI
-GOOD, MID, BAD, INFO = "bueno", "medio", "malo", "info"
+GOOD, MID, BAD, INFO = "good", "mid", "bad", "info"
 
 
 def _num(v):
@@ -19,12 +18,12 @@ def _num(v):
         return None
 
 
-def _rng(v, lo, hi, margen=0.15):
-    """Verde dentro de [lo,hi]; ambar en un margen; rojo fuera."""
+def _rng(v, lo, hi, margin=0.15):
+    """Green inside [lo,hi]; amber within a margin; red outside."""
     x = _num(v)
     if x is None:
         return INFO
-    span = (hi - lo) * margen
+    span = (hi - lo) * margin
     if lo <= x <= hi:
         return GOOD
     if lo - span <= x <= hi + span:
@@ -32,11 +31,11 @@ def _rng(v, lo, hi, margen=0.15):
     return BAD
 
 
-def _max(v, t, margen=0.2):
+def _max(v, t, margin=0.2):
     x = _num(v)
     if x is None:
         return INFO
-    return GOOD if x <= t else (MID if x <= t * (1 + margen) else BAD)
+    return GOOD if x <= t else (MID if x <= t * (1 + margin) else BAD)
 
 
 def _min(v, t):
@@ -46,21 +45,21 @@ def _min(v, t):
     return GOOD if x >= t else (MID if x >= t - 1 else BAD)
 
 
-def _plow(v):   # probabilidad de un evento MALO (toxicidad, inhibicion): bajo = bueno
+def _plow(v):
     x = _num(v)
     if x is None:
         return INFO
     return GOOD if x < 0.3 else (MID if x < 0.7 else BAD)
 
 
-def _phigh(v):  # probabilidad de un evento BUENO (absorcion): alto = bueno
+def _phigh(v):
     x = _num(v)
     if x is None:
         return INFO
     return GOOD if x > 0.7 else (MID if x > 0.3 else BAD)
 
 
-def _flag(v):   # 0 = sin alerta (bueno)
+def _flag(v):
     x = _num(v)
     if x is None:
         return INFO
@@ -71,21 +70,22 @@ def _pass(v):
     return GOOD if v in (True, "True", 1, 1.0) else (BAD if v in (False, "False", 0, 0.0) else INFO)
 
 
-def _sa(v):     # SAscore: 1 fácil ... 10 difícil de sintetizar
+def _sa(v):
     x = _num(v)
     if x is None:
         return INFO
     return GOOD if x <= 4 else (MID if x <= 6 else BAD)
 
 
-AVISO_LD50 = (
-    "**LD50 is a single-model estimate and tends to be optimistic.** Calibration against experimental rat values: acetaminophen 2274 vs 1944 mg/kg and ibuprofen 756 vs 636 (~20 % error), but **caffeine 738 vs 192 mg/kg: almost 4x less toxic than real**. The unit conversion is verified; the bias comes from the model. For chemotypes underrepresented in training (such as benzofuroxans) the discrepancy can reach two orders of magnitude vs ProTox. **Always contrast with a second predictor and do not publish «low toxicity» based on a single model.**"
+LD50_NOTICE = (
+    "Single-model estimate, usually optimistic. Contrast it with a second predictor before "
+    "claiming low toxicity."
 )
 
 
 def tox_index(row) -> Optional[float]:
-    """Índice de toxicidad 0..1 (mayor = peor): promedio de las probabilidades de los eventos
-    toxicos clave que prediga ADMET-AI. Sirve de eje 'tox' único en el ranking."""
+    """Toxicity index 0..1 (higher = worse): average of the probabilities of the key toxic events
+    ADMET-AI predicts. Serves as the single 'tox' axis in the ranking."""
     g = row.get if hasattr(row, "get") else (lambda k, d=None: None)
     vals = [_num(g(k)) for k in ("DILI", "AMES", "Carcinogens_Lagunin", "hERG")]
     vals = [v for v in vals if v is not None]
@@ -103,8 +103,8 @@ def _f(v, n=2):
 
 
 def _fclamp(v, hi=100.0, n=1):
-    """Formatea acotando a [0,hi]. Para magnitudes fisicamente acotadas (p.ej. % de unión a proteína)
-    que el regresor ADMET-AI puede predecir por encima del límite. Marca el recorte con '~'."""
+    """Formats clamping to [0,hi]. For physically bounded quantities (e.g. % protein binding) that the
+    ADMET-AI regressor can predict above the limit. Marks the clamp with '~'."""
     x = _num(v)
     if x is None:
         return "-"
@@ -112,7 +112,7 @@ def _fclamp(v, hi=100.0, n=1):
 
 
 def sections(row: dict) -> list:
-    """Devuelve [(titulo, [(propiedad, valor, veredicto), ...]), ...]."""
+    """Returns [(title, [(property, value, verdict), ...]), ...]."""
     g = row.get
     fis = [
         ("Molecular weight", _f(g("MW"), 1), _rng(g("MW"), 150, 500)),
@@ -127,10 +127,10 @@ def sections(row: dict) -> list:
         ("Synthesizability (SAscore 1-10)", _f(g("sa_score") if g("sa_score") is not None else g("SAscore")),
          _sa(g("sa_score") if g("sa_score") is not None else g("SAscore"))),
     ]
-    reglas = [(nm, "pass" if _pass(g(k)) == GOOD else "no", _pass(g(k)))
+    rules = [(nm, "pass" if _pass(g(k)) == GOOD else "no", _pass(g(k)))
               for nm, k in [("Lipinski", "Lipinski_pass"), ("Veber", "Veber_pass"),
                             ("Egan", "Egan_pass"), ("Ghose", "Ghose_pass"), ("Lead-like", "LeadLike_pass")]]
-    alertas = [("PAINS", _f(g("PAINS_alert"), 0), _flag(g("PAINS_alert"))),
+    alerts = [("PAINS", _f(g("PAINS_alert"), 0), _flag(g("PAINS_alert"))),
                ("BRENK", _f(g("BRENK_alert"), 0), _flag(g("BRENK_alert"))),
                ("Structural alerts", str(g("alerts") or "none"), _flag(g("n_alerts")))]
     absor = [
@@ -160,13 +160,13 @@ def sections(row: dict) -> list:
         ("Acute oral LD50 (mg/kg)*", _f(g("LD50_mg_per_kg"), 0), _min(g("LD50_mg_per_kg"), 500)),
         ("GHS category*", str(g("GHS_category") or "-"), INFO),
     ]
-    return [("Physicochemical", fis), ("Druggability rules", reglas), ("Structural alerts", alertas),
+    return [("Physicochemical", fis), ("Druggability rules", rules), ("Structural alerts", alerts),
             ("Absorption", absor), ("Distribution", distr), ("Metabolism (CYP450)", metab),
             ("Excretion", excr), ("Toxicity", tox)]
 
 
 def _versions() -> dict:
-    """Versiones del software para el bloque de Metodos (reproducibilidad exigible en publicación)."""
+    """Software versions for the Methods block (reproducibility required in publication)."""
     import sys
     import subprocess
     v = {"python": sys.version.split()[0]}
@@ -183,41 +183,40 @@ def _versions() -> dict:
                 v[tool] = line.strip()[:90]
         except Exception:
             pass
-    # PLIP y fpocket no exponen --versión limpio: PLIP se lee de los metadatos del paquete y fpocket
-    # se reporta como presente. Volcar su texto de uso en la sección de Metodos sería ruido.
-    # La versión se consulta con importlib.metadata, que lee los metadatos SIN importar el modulo.
-    # Es deliberado: PLIP se distribuye bajo GPL y PoliScreen lo ejecuta como proceso aparte, de
-    # modo que no incorpora código suyo; importarlo aquí, aunque fuera solo para leer un número,
-    # enturbiaria esa separacion.
     import shutil as _sh
     try:
         import importlib.metadata as _md
         v["plip"] = _md.version("plip")
     except Exception:
         if _sh.which("plip"):
-            v["plip"] = "instalado"
+            v["plip"] = "installed"
     if _sh.which("fpocket"):
-        v["fpocket"] = "instalado"
+        v["fpocket"] = "installed"
     return v
 
 
 def methods_text(meta: dict, weights: Optional[dict] = None, catalytic: Optional[dict] = None,
                  secondary: Optional[dict] = None) -> str:
-    """Bloque de Metodos en Markdown a partir del run.json: parámetros, caja, pesos, referencia y
-    versiones. Pensado para pegar en el paper y garantizar reproducibilidad."""
+    """Methods block in Markdown from run.json: parameters, box, weights, reference and versions.
+    Meant to paste into the paper and guarantee reproducibility."""
     meta = meta or {}
     weights = weights or meta.get("weights", {})
     catalytic = catalytic or meta.get("catalytic", {})
     secondary = secondary or meta.get("secondary", {})
+    from .screening import display_name
+
     def _l(x):
-        return ", ".join(Path(str(p)).name for p in x) if isinstance(x, (list, tuple)) else str(x)
+        return ", ".join(display_name(p) for p in x) if isinstance(x, (list, tuple)) else str(x)
     L = []
     L.append("## Methods (in silico) — generated by PoliScreen\n")
     L.append(f"- Receptors: {_l(meta.get('receptors', []))}")
     L.append(f"- Controls (co-crystallized): {_l(meta.get('controls', []))}")
     ref = meta.get("reference", {})
-    L.append(f"- Interaction reference: {', '.join(f'{k}={v}' for k, v in ref.items()) or 'n/a'} "
-             "(crystallographic = PLIP fingerprint of the co-crystallized ligand in its real pose)")
+    _src = {"cristalografica": "crystallographic", "residuos/relativa": "residues/relative",
+            "ninguna": "none"}
+    L.append("- Interaction reference: "
+             + (", ".join(f"{display_name(k)}={_src.get(str(v), v)}" for k, v in ref.items()) or "n/a")
+             + " (crystallographic = PLIP fingerprint of the co-crystallized ligand in its real pose)")
     L.append(f"- Seed: {meta.get('seed')} · CPU per docking: 1 (deterministic)")
     L.append(f"- Vina: exhaustiveness={meta.get('exhaustiveness')}, num_modes={meta.get('n_poses')}, "
              f"energy_range={meta.get('energy_range')} kcal/mol")
@@ -225,17 +224,17 @@ def methods_text(meta: dict, weights: Optional[dict] = None, catalytic: Optional
     pr = meta.get("pocket_residues", {})
     if pr:
         L.append("- Pocket residues (inside the box): "
-                 + "; ".join(f"{k}: {len(v)}" for k, v in pr.items()))
-    if catalytic:
+                 + "; ".join(f"{display_name(k)}: {len(v)}" for k, v in pr.items()))
+    if catalytic and any(catalytic.values()):
         L.append("- Catalytic residues (gate, mandatory): "
-                 + "; ".join(f"{k}: {', '.join(v)}" for k, v in catalytic.items() if v))
-    if secondary:
+                 + "; ".join(f"{display_name(k)}: {', '.join(v)}" for k, v in catalytic.items() if v))
+    if secondary and any(secondary.values()):
         L.append("- Secondary residues (bonus, not mandatory): "
-                 + "; ".join(f"{k}: {', '.join(v)}" for k, v in secondary.items() if v))
+                 + "; ".join(f"{display_name(k)}: {', '.join(v)}" for k, v in secondary.items() if v))
     if weights:
-        ejes = {k: weights.get(k) for k in ("dock", "inter", "adme", "ki", "tox")}
+        axes_ = {k: weights.get(k) for k in ("dock", "inter", "adme", "ki", "tox")}
         L.append("- Axis weights (auto-normalized): "
-                 + ", ".join(f"{k}={v}" for k, v in ejes.items()))
+                 + ", ".join(f"{k}={v}" for k, v in axes_.items()))
         L.append("- Affinity-axis metric: "
                  + ("ligand efficiency LE = -dG/heavy atoms (corrects size bias)"
                     if str(weights.get("dock_metric", "dock")).lower() == "le" else "raw docking score"))
@@ -257,7 +256,7 @@ def methods_text(meta: dict, weights: Optional[dict] = None, catalytic: Optional
 
 
 def radar_fig(row: dict, title: str = "", fig=None):
-    """Radar de drogabilidad: cada eje 0..1 donde 1 = dentro del rango optimo."""
+    """Druggability radar: each axis 0..1 where 1 = inside the optimal range."""
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -271,7 +270,7 @@ def radar_fig(row: dict, title: str = "", fig=None):
         d = (lo - x) if x < lo else (x - hi)
         return max(0.0, 1.0 - d / span)
 
-    ejes = [
+    axes_ = [
         ("MW", score_rng(row.get("MW"), 150, 500)),
         ("LogP", score_rng(row.get("LogP"), 0, 5)),
         ("TPSA", score_rng(row.get("TPSA"), 20, 140)),
@@ -281,8 +280,8 @@ def radar_fig(row: dict, title: str = "", fig=None):
         ("Sol.", score_rng(row.get("ESOL_logS"), -5, 0)),
         ("QED", min(1.0, (_num(row.get("QED")) or 0))),
     ]
-    labels = [e[0] for e in ejes]
-    vals = [e[1] for e in ejes]
+    labels = [e[0] for e in axes_]
+    vals = [e[1] for e in axes_]
     ang = np.linspace(0, 2 * np.pi, len(labels), endpoint=False).tolist()
     vals += vals[:1]; ang += ang[:1]
     if fig is None:

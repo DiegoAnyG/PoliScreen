@@ -1,8 +1,8 @@
-"""Registro de reacciones.
+"""Reaction registry.
 
-Declarativo a proposito: anadir una reacción nueva es anadir una entrada aquí, no tocar el motor.
-Cada reacción describe que grupo debe tener la molécula lider y que grupo aporta el reactivo que
-se le une. La química la ejecuta admelab; este modulo solo decide que es aplicable y donde.
+Deliberately declarative: adding a new reaction means adding an entry here, not touching the engine.
+Each reaction describes which group the lead molecule must have and which group the coupling reagent
+contributes. The chemistry is run by admelab; this module only decides what is applicable and where.
 """
 from __future__ import annotations
 
@@ -17,55 +17,54 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 @dataclass(frozen=True)
 class Reaction:
     key: str
-    nombre: str
-    lead_smarts: str        # grupo que debe tener la molécula lider
+    name_: str
+    lead_smarts: str
     lead_grupo: str
-    partner_smarts: str     # grupo que aporta el reactivo que se une
+    partner_smarts: str
     partner_grupo: str
-    descripcion: str
-    kind: str = "coupling"               # 'coupling' une dos moléculas; 'decoration' sustituye in situ
-    biblioteca: Optional[str] = None     # csv de reactivos incluido en el paquete
+    description_: str
+    kind: str = "coupling"
+    library_: Optional[str] = None
 
 
 REACTIONS = {
     "esterificacion": Reaction(
         key="esterificacion",
-        nombre="Fischer esterification",
+        name_="Fischer esterification",
         lead_smarts="[CX3](=[OX1])[OX2H1]",
         lead_grupo="carboxylic acid",
-        # OH sobre carbono sp3 o aromatico: alcohol o fenol. Excluye el OH del acido carboxilico
-        # (unido a un carbonilo), que no es un alcohol y no debe entrar como reactivo.
+        # Alcohol or phenol OH; excludes the carboxylic-acid OH, which is not a reagent.
         partner_smarts="[OX2H1][CX4,c]",
         partner_grupo="alcohol",
-        descripcion=("Carboxylic acid + alcohol gives ester. Feasibility depends on the OH type: "
+        description_=("Carboxylic acid + alcohol gives ester. Feasibility depends on the OH type: "
                      "primary and methanol work well, secondary moderate, phenolic and tertiary "
                      "need another route (acyl chloride or Steglich)."),
         kind="coupling",
-        biblioteca="alcoholes.csv",
+        library_="alcoholes.csv",
     ),
     "decoracion": Reaction(
         key="decoracion",
-        nombre="Aromatic decoration (R-group)",
-        lead_smarts="[cH]",                 # carbono aromatico con H, posición decorable
+        name_="Aromatic decoration (R-group)",
+        lead_smarts="[cH]",
         lead_grupo="aromatic carbon with H",
-        partner_smarts="",                  # no hay reactivo externo: usa sustituyentes pequeños internos
+        partner_smarts="",
         partner_grupo="substituent",
-        descripcion=("Replaces H with small groups (F, Cl, CN, OMe...) on aromatic carbons. "
+        description_=("Replaces H with small groups (F, Cl, CN, OMe...) on aromatic carbons. "
                      "Exploratory: not a single concrete reaction, it sweeps the chemical space."),
         kind="decoration",
-        biblioteca=None,
+        library_=None,
     ),
 }
 
 
 def get(key: str) -> Reaction:
     if key not in REACTIONS:
-        raise KeyError(f"Reaccion desconocida: {key}. Disponibles: {', '.join(REACTIONS)}")
+        raise KeyError(f"Unknown reaction: {key}. Available: {', '.join(REACTIONS)}")
     return REACTIONS[key]
 
 
 def applicable(smiles: str) -> list:
-    """Reacciones que la molécula puede sufrir, por tener el grupo reactivo necesario."""
+    """Reactions the molecule can undergo, by having the required reactive group."""
     from rdkit import Chem, RDLogger
     RDLogger.DisableLog("rdApp.*")
     m = Chem.MolFromSmiles(smiles)
@@ -80,7 +79,7 @@ def applicable(smiles: str) -> list:
 
 
 def lead_sites(smiles: str, reaction: Reaction) -> list:
-    """Posiciones de la molécula lider donde la reacción puede ocurrir."""
+    """Positions on the lead molecule where the reaction can occur."""
     from rdkit import Chem, RDLogger
     RDLogger.DisableLog("rdApp.*")
     m = Chem.MolFromSmiles(smiles)
@@ -91,10 +90,10 @@ def lead_sites(smiles: str, reaction: Reaction) -> list:
 
 
 def load_library(reaction: Reaction) -> list:
-    """Reactivos incluidos en el paquete para esa reacción."""
-    if not reaction.biblioteca:
+    """Reagents bundled in the package for that reaction."""
+    if not reaction.library_:
         return []
-    path = DATA_DIR / reaction.biblioteca
+    path = DATA_DIR / reaction.library_
     if not path.exists():
         return []
     with path.open(encoding="utf-8") as fh:
@@ -102,15 +101,15 @@ def load_library(reaction: Reaction) -> list:
 
 
 def library_from_csv(path, name_col: str = "name", smiles_col: str = "smiles") -> list:
-    """Reactivos desde un csv del usuario. Acepta cabeceras en espanol o ingles."""
+    """Reagents from a user csv. Accepts Spanish or English headers."""
     alias_n = {name_col, "name", "nombre", "compound", "compuesto"}
     alias_s = {smiles_col, "smiles", "smile"}
     out = []
     with Path(path).open(encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
-            claves = {k.lower().strip(): v for k, v in row.items() if k}
-            n = next((claves[k] for k in claves if k in alias_n), None)
-            s = next((claves[k] for k in claves if k in alias_s), None)
+            keys_ = {k.lower().strip(): v for k, v in row.items() if k}
+            n = next((keys_[k] for k in keys_ if k in alias_n), None)
+            s = next((keys_[k] for k in keys_ if k in alias_s), None)
             if s:
                 out.append({"name": n or s, "smiles": s})
     if not out:

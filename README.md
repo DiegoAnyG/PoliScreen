@@ -40,6 +40,14 @@ A single interaction engine (**PLIP**) feeds both the table and the diagrams:
 same author numbering, same bond types, no mismatch between what is measured and
 what is drawn.
 
+The interface is available in **English and Spanish** (Settings → Language). Only
+the interface changes: results, column names and file names are the same in both,
+so a table exported from either reads the same way.
+
+Nothing leaves your machine unless you ask for it. Sessions and export packages
+carry no local paths, so they can be shared as they are and opened on another
+machine.
+
 ---
 
 ## Install
