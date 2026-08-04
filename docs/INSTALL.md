@@ -61,8 +61,13 @@ bioconda only ships `autodock-vina 1.1.2` (2011), whose scoring function differs
 
 ## Option C — native Windows (no WSL, no Docker)
 
-Requires [Miniforge for Windows](https://github.com/conda-forge/miniforge). From
-**PowerShell**:
+**First install [Miniforge for Windows](https://github.com/conda-forge/miniforge/releases/latest)**
+and open the **Miniforge Prompt** it adds to the Start menu. Windows PowerShell does
+not know `conda` until you run `conda init powershell` once from that prompt and
+open a new window; without this every command below fails with
+`The term 'conda' is not recognized`.
+
+Then:
 
 ```powershell
 git clone https://github.com/DiegoAnyG/PoliScreen.git
@@ -183,5 +188,8 @@ to the validated one.
 | `fpocket not installed` | `conda install -c conda-forge fpocket`. Without it there is no cavity detection; center the box on the control. |
 | `AttributeError` on a method that exists | Streamlit does not re-import loaded modules. Restart the process (Ctrl+C and `poliscreen ui`); reloading the page is not enough. |
 | The control produces no poses | Extract the ligand with its SMILES in step 1 to fix bond orders; a fragmented ligand yields a PDBQT that Vina rejects. |
+| `The term 'conda' is not recognized` (and then the same for `pip`) | conda is not installed, or not on this shell's PATH. Install Miniforge and use the **Miniforge Prompt**, or run `conda init powershell` once from it and open a new window. `pip` fails for the same reason: it comes with the environment. |
+| Docker Desktop shows `Virtualization support not detected` and *Engine stopped* | Docker needs hardware virtualization. Enable **Intel VT-x** or **AMD SVM** in the BIOS/UEFI, then, in an administrator PowerShell, `wsl --install` and reboot. Confirm it under Task Manager → Performance → CPU → *Virtualization: Enabled*. On a machine whose BIOS you cannot change, install with conda instead (Option B or C): it needs no virtualization. |
+| `docker compose` fails with `500 Internal Server Error` or `check if the server supports the requested API version` | The engine is not running, so compose cannot reach it. Open Docker Desktop and fix what it reports; the compose error is only the symptom. |
 | `docker-credential-desktop.exe: exec format error` on build | Docker Desktop leaves a Windows credential helper in WSL that Linux cannot run. Images are public and do not need it: `cp ~/.docker/config.json ~/.docker/config.json.bak && echo '{}' > ~/.docker/config.json`. |
 | `docker` not found inside WSL | Docker Desktop → Settings → Resources → **WSL Integration** → enable your distro → *Apply & Restart*. |

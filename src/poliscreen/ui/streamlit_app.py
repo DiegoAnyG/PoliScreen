@@ -437,16 +437,20 @@ try:
 except Exception:
     _tema = None
 _est_marca = _INV if _tema == "dark" else ""
-_cls_img = "marca-sistema" if _tema is None else ""
 _col_ver = "#e6e6e6" if _tema == "dark" else "#666"
-st.markdown(f"""<style>
-  @media (prefers-color-scheme: dark) {{ .marca-sistema {{ {_INV} }} }}
-</style>""", unsafe_allow_html=True)
+# The theme is not always known on the first pass, and the brand was inverted against a light
+# background, which left it invisible until something redrew the page. When it is unknown the
+# browser decides, through the container's own class: an attribute we add would be stripped by
+# Streamlit's HTML sanitizing, but this one is Streamlit's.
+if _tema is None:
+    st.markdown(f"""<style>
+      @media (prefers-color-scheme: dark) {{ .st-key-menu_bar img {{ {_INV} }} }}
+    </style>""", unsafe_allow_html=True)
 
 _marca = []
 if _logo_f and _logo_f.suffix.lower() != ".svg":
-    _marca.append(_img_inline(_logo_f, 72, _cls_img, _est_marca))
-_marca.append(_img_inline(_wm, 56, _cls_img, _est_marca) if _wm
+    _marca.append(_img_inline(_logo_f, 72, "", _est_marca))
+_marca.append(_img_inline(_wm, 56, "", _est_marca) if _wm
               else "<span style='font-size:2.1rem;font-weight:700'>PoliScreen</span>")
 _marca.append(f"<span style='color:{_col_ver};font-size:.85rem;align-self:flex-end;"
               f"padding-bottom:.5rem'>v{__version__}</span>")
@@ -983,16 +987,16 @@ def _stage_ligands():
                 nuc = _to_smiles(fp) or nuc
             S["core_smiles"] = nuc
             rxkey = st.selectbox(t("Reaction"), list(rx.REACTIONS), key="rx_reaction",
-                                 format_func=lambda k: rx.get(k).name_)
+                                 format_func=lambda k: t(rx.get(k).name_))
             reaction = rx.get(rxkey)
             st.caption(reaction.description_)
             if nuc:
                 aplica = any(r.key == rxkey for r in rx.applicable(nuc))
                 if not aplica:
-                    st.warning(t('The core has no {v1}; this reaction does not apply.').format(v1=reaction.lead_grupo))
+                    st.warning(t('The core has no {v1}; this reaction does not apply.').format(v1=t(reaction.lead_grupo)))
                 else:
                     sites = rx.lead_sites(nuc, reaction)
-                    st.success(t('The core can undergo {v1}: {v3} reactive site(s).').format(v1=reaction.name_, v3=len(sites)))
+                    st.success(t('The core can undergo {v1}: {v3} reactive site(s).').format(v1=t(reaction.name_), v3=len(sites)))
                     idx = 0
                     if len(sites) > 1:
                         idx = st.selectbox(t("Growth point"), range(len(sites)),

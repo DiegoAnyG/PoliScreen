@@ -24,6 +24,13 @@ def t(text: str) -> str:
 
 
 _ES = {
+    # Reaction metadata: English data that the interface drops into translated sentences.
+    'Fischer esterification': 'Esterificación de Fischer',
+    'Aromatic decoration (R-group)': 'Decoración aromática (grupo R)',
+    'carboxylic acid': 'ácido carboxílico',
+    'aromatic carbon with H': 'carbono aromático con H',
+    'alcohol': 'alcohol',
+    'substituent': 'sustituyente',
     'Docking {done} of {total}': 'Acoplando {done} de {total}',
     'Structures of the ligands to be docked.': 'Estructuras de los ligandos que se van a acoplar.',
     'Single-model estimate, usually optimistic. Contrast it with a second predictor before '
