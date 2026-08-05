@@ -1,0 +1,64 @@
+From 2f8036e5ddf4bbf84cf53b822f117407a1ab67f3 Mon Sep 17 00:00:00 2001
+From: PoliScreen <poliscreen@example.invalid>
+Date: Mon, 3 Aug 2026 23:30:25 -0600
+Subject: [PATCH 2/2] Allow building without the molfile plugins
+
+The vendored VMD libmolfile_plugin is only used for mmCIF input (read_mmcif.c)
+and Amber topologies (topology.c), both reached from two call sites in fpmain.c.
+Where that library is unusable, -DM_NO_MOLFILE leaves those two formats out and
+builds the rest, which is what makes a Windows binary possible today: the
+shipped WIN64 library is compiled with MSVC, so its objects pull in
+__security_cookie and __GSHandlerCheck that MinGW cannot resolve, and it has no
+pdbx plugin at all, so mmCIF could not link even with a matching compiler.
+
+PDB input, the Voronoi tessellation and every descriptor are unaffected.
+open_file_format() also initialises its return value, which was left
+uninitialised when the input matched neither extension.
+---
+ src/fpmain.c | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/src/fpmain.c b/src/fpmain.c
+index 8abc67d..645b39a 100644
+--- a/src/fpmain.c
++++ b/src/fpmain.c
+@@ -153,7 +153,11 @@ void process_pdb(char *pdbname, s_fparams *params)
+ 
+         if (params->topology_path[0] != 0)
+         {
++#ifdef M_NO_MOLFILE
++                fprintf(stderr, "! This build ignores --topology_file; it needs the molfile plugins.\n");
++#else
+                 read_topology(params->topology_path, pdb);
++#endif
+         }
+ 
+         if (pdb)
+@@ -230,9 +234,13 @@ void process_pdb(char *pdbname, s_fparams *params)
+ 
+ s_pdb *open_file_format(char *fpath, const char *ligan, const int keep_lig, int model_number, s_fparams *par)
+ {
+-        s_pdb *pdb;
++        s_pdb *pdb = NULL;
+         if (strstr(par->pdb_path, ".cif")) /*strstr finds the substring and here we search for the file extension we want */
++#ifdef M_NO_MOLFILE
++                fprintf(stderr, "! This build reads PDB only; mmCIF needs the molfile plugins.\n");
++#else
+                 pdb = open_mmcif(fpath, NULL, keep_lig, par->model_number, par);
++#endif
+         else if (strstr(par->pdb_path, ".pdb"))
+                 pdb = rpdb_open(fpath, NULL, keep_lig, par->model_number, par);
+ 
+@@ -244,7 +252,9 @@ void read_file_format(s_pdb *pdb, const char *ligan, const int keep_lig, int mod
+ 
+         if (strstr(par->pdb_path, ".cif"))
+         { /*strstr finds the substring and here we search for the file extension we want */
++#ifndef M_NO_MOLFILE
+                 read_mmcif(pdb, NULL, keep_lig, par->model_number, par);
++#endif
+         }
+         else if (strstr(par->pdb_path, ".pdb"))
+                 rpdb_read(pdb, NULL, keep_lig, par->model_number, par);
+-- 
+2.43.0
+

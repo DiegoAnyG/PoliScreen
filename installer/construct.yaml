@@ -1,0 +1,70 @@
+# Recipe for the one-click installer, built with conda constructor.
+#
+#   conda install -c conda-forge constructor
+#   constructor installer/            # run on the target platform
+#
+# It ships the whole environment, so the user installs nothing else: no conda, no Python.
+# Vina is placed next to the environment by post_install; it is not a conda package.
+#
+# The optional engines are deliberately absent:
+#   ADCP   the Scripps suite is downloaded accepting an academic licence, so it cannot be
+#          redistributed, and it is only built for Linux.
+#   gnina  2 GB plus the CUDA runtime, and useless without an NVIDIA GPU.
+# Both are installed afterwards with scripts/get_adcp.sh and scripts/get_gnina.sh.
+#
+# fpocket comes from conda-forge on Linux and macOS. There is no win-64 build there, so the
+# release workflow cross-compiles one from contrib/fpocket-windows and leaves it in vendor/,
+# and the Windows recipe picks it up below. Remove that when the feedstock gains win-64.
+#
+# The `# [win]` comments are constructor's platform selectors, resolved before the YAML is
+# parsed, which is why the same key can appear more than once.
+
+name: PoliScreen
+version: 1.0.0
+company: Anaya Guerrero DC
+
+channels:
+  - conda-forge
+
+specs:
+  - python 3.11.*
+  - rdkit 2025.03.*
+  - openbabel 3.1.*
+  - plip 3.0.*
+  - openmm 8.5.*
+  - pdbfixer
+  - biopython 1.87.*
+  - py3dmol 2.5.*
+  - pandas
+  - numpy
+  - scipy
+  - matplotlib-base
+  - openpyxl
+  - streamlit 1.59.*
+  - pip
+  - fpocket 4.2.*                     # [not win]
+
+license_file: ../LICENSE
+initialize_by_default: false
+register_python_default: false
+keep_pkgs: false
+
+# The wheel is built by the release workflow before constructor runs. The scripts travel with the
+# installer because post_install calls get_vina, and because the optional engines are installed
+# from them afterwards.
+extra_files:
+  - ../dist/poliscreen-1.0.0-py3-none-any.whl
+  - launcher.bat: PoliScreen.bat       # [win]
+  - launcher.sh: PoliScreen            # [not win]
+  # Library/bin is where conda keeps non-Python executables on Windows, and the launcher
+  # already puts it on PATH, so shutil.which("fpocket") finds it like any other tool.
+  - vendor/fpocket.exe: Library/bin/fpocket.exe   # [win]
+  - vendor/tpocket.exe: Library/bin/tpocket.exe   # [win]
+  - vendor/dpocket.exe: Library/bin/dpocket.exe   # [win]
+  - ../scripts/get_vina.ps1: scripts/get_vina.ps1
+  - ../scripts/get_vina.sh: scripts/get_vina.sh
+  - ../scripts/get_adcp.sh: scripts/get_adcp.sh
+  - ../scripts/get_gnina.sh: scripts/get_gnina.sh
+
+post_install: post_install.bat        # [win]
+post_install: post_install.sh         # [not win]

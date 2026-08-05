@@ -44,3 +44,4 @@ Thumbs.db
 # ADCP working files
 tmp_*/
 ramaprob.data
+installer/vendor/

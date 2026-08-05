@@ -5,8 +5,8 @@ Docker: install Docker Desktop and launch everything with one command.
 
 | System | Recommended route | Cavity detection (fpocket) |
 |---|---|---|
-| Windows | Docker Desktop | Yes |
-| Windows (native, conda) | `environment-windows.yml` | **No** — fpocket is not distributed for Windows |
+| Windows | one-click installer, or Docker Desktop | Yes |
+| Windows (native, conda) | `environment-windows.yml` | **No** — conda-forge has no Windows build |
 | macOS | conda or Docker | Yes |
 | Linux | conda or Docker | Yes |
 
@@ -56,6 +56,30 @@ poliscreen ui
 bioconda only ships `autodock-vina 1.1.2` (2011), whose scoring function differs.
 `scripts/get_vina.sh` downloads the official release binary and pins the version
 (1.2.5 by default), the one PoliScreen was validated with.
+
+---
+
+## Option D — one-click installer
+
+The releases carry an installer per platform, built from `installer/construct.yaml`. It ships the
+whole environment: no conda, no Python, nothing to install first. Run it, then launch
+`PoliScreen` from the folder it creates.
+
+It contains PoliScreen, its dependencies and AutoDock Vina. The optional engines are not in it and
+are added afterwards with `scripts/get_adcp.sh` and `scripts/get_gnina.sh`, which the installer
+copies alongside: ADCP is downloaded from Scripps under an academic licence that cannot be
+redistributed and is only built for Linux, and gnina is 2 GB plus the CUDA runtime and does
+nothing without an NVIDIA GPU.
+
+It also runs the command line, so the install can be checked without a shell that knows the
+environment: `PoliScreen info` on Windows, `./PoliScreen info` elsewhere. Without arguments
+it opens the interface.
+
+**Cavity detection is included on all three systems.** conda-forge has no Windows fpocket, so
+the release workflow cross-compiles one from `contrib/fpocket-windows/`, where the patches,
+the build script and the verification against the Linux build are kept. That binary reads PDB,
+which is what PoliScreen uses throughout; it does not read mmCIF, and `mdpocket` is not part
+of it.
 
 ---
 
