@@ -44,7 +44,7 @@ RUN pip install --no-deps -e .
 # reaction-based analogue builder and the ADMET report are disabled, which is the gap users
 # notice first. Pinned to a tag so two people building months apart predict with the same code.
 ARG WITH_ADMET=1
-ARG ADMELAB_VERSION=v0.2.0
+ARG ADMELAB_VERSION=v0.3.0
 
 # Its own environment because admet-ai pulls torch and chemprop, whose versions conflict with
 # the docking dependencies. That conflict is the reason core/design.py talks to it over a
