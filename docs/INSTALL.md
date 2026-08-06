@@ -5,21 +5,69 @@ Docker: install Docker Desktop and launch everything with one command.
 
 | System | Recommended route | Cavity detection (fpocket) |
 |---|---|---|
-| Windows | one-click installer, or Docker Desktop | Yes |
-| Windows (native, conda) | `environment-windows.yml` | **No** — conda-forge has no Windows build |
+| Windows | `scripts\install-windows.ps1`, or the one-click installer | Yes |
+| Windows (native, conda) | `environment-windows.yml` | **No**, conda-forge has no Windows build |
 | macOS | conda or Docker | Yes |
 | Linux | conda or Docker | Yes |
 
-Everything else — receptor preparation, docking, PLIP, scoring, confidence and
-ADMET — works the same on all three platforms. Without fpocket you only lose
-automatic cavity detection; the search box can be centered on the co-crystallized
-ligand, which is the recommended option anyway.
+Receptor preparation, docking, PLIP, scoring, confidence and redocking validation
+work the same on all of them.
+
+## What every route includes, and what it does not
+
+The four optional engines are **not** part of any default install. This is the same
+for Docker, conda and the one-click installer, so the choice of route does not
+change what you get:
+
+| | Docker | one-click installer | conda |
+|---|---|---|---|
+| fpocket | **yes** | **yes** | **yes** |
+| ADMET engine (analogue design) | **yes** | no | no, separate environment |
+| ADCP (peptide docking) | `-WithAdcp` | never | `scripts/get_adcp.sh` |
+| gnina (second scoring function) | `-WithGnina` | never | `scripts/get_gnina.sh` |
+
+ADCP and gnina are Linux-only builds, so on Windows they are reachable **only**
+through Docker, never through the native installer.
+
+The ADMET engine is [admelab](https://github.com/DiegoAnyG/admelab), pinned to a
+tag so that two people building the image months apart predict with the same
+code. It goes in its own environment inside the image, because admet-ai pulls
+torch and chemprop whose versions conflict with the docking dependencies; that
+conflict is why PoliScreen talks to it over a subprocess. The CPU build of torch
+is deliberate: these are small models and the CUDA build would add about 4 GB for
+no gain. Leave it out with `-NoAdmet`.
+
+Without it the screening cycle is complete, but the analogue builder and the
+ADMET report are disabled. **This is why Docker is the recommended route on every
+platform**, and the one-click installer is the fallback for machines where
+virtualization cannot be enabled.
 
 ---
 
 ## Option A — Docker (one command, nothing to configure)
 
-Requires Docker. On Windows: Docker Desktop with WSL2 integration.
+**On Windows, run this instead and skip the rest of this section:**
+
+```powershell
+.\scripts\install-windows.ps1
+```
+
+From an Administrator PowerShell. It checks the machine, enables the Windows
+features WSL 2 needs, updates the WSL kernel, installs Docker Desktop if it is
+missing, waits for the engine, builds the image and opens the interface. Add
+`-WithAdcp` or `-WithGnina` to build the optional engines into the image.
+
+Run it again after any reboot: it looks at the state of the machine on each run
+and continues from wherever it stopped. It saves no state and schedules nothing.
+
+Two things it cannot do, and says so instead of failing quietly:
+
+* **Enable virtualization.** VT-x and AMD-SVM live in the BIOS/UEFI and no program
+  running under Windows can change them. The script detects it and tells you which
+  setting to look for.
+* **Avoid the reboot** Windows requires after enabling WSL.
+
+On macOS and Linux, or to do it by hand:
 
 ```bash
 git clone https://github.com/DiegoAnyG/PoliScreen.git

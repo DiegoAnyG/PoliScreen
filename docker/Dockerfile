@@ -21,7 +21,7 @@ ENV POLISCREEN_HOME=/opt/poliscreen \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates \
+ && apt-get install -y --no-install-recommends curl ca-certificates git \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR ${POLISCREEN_HOME}
@@ -39,6 +39,51 @@ ENV PATH=/opt/conda/envs/poliscreen/bin:${PATH}
 
 COPY . ${POLISCREEN_HOME}
 RUN pip install --no-deps -e .
+
+# The ADMET engine, on by default: without it the screening cycle still runs, but the
+# reaction-based analogue builder and the ADMET report are disabled, which is the gap users
+# notice first. Pinned to a tag so two people building months apart predict with the same code.
+ARG WITH_ADMET=1
+ARG ADMELAB_VERSION=v0.2.0
+
+# Its own environment because admet-ai pulls torch and chemprop, whose versions conflict with
+# the docking dependencies. That conflict is the reason core/design.py talks to it over a
+# subprocess instead of importing it. The CPU wheel is deliberate: these are small models and
+# the CUDA build would add roughly 4 GB for no gain.
+RUN if [ "$WITH_ADMET" = "1" ]; then \
+        git clone --depth 1 --branch "$ADMELAB_VERSION" \
+            https://github.com/DiegoAnyG/admelab.git /opt/adme \
+     && mamba create -y -n admet python=3.12 \
+     && /opt/conda/envs/admet/bin/pip install --no-cache-dir \
+            torch --index-url https://download.pytorch.org/whl/cpu \
+     && /opt/conda/envs/admet/bin/pip install --no-cache-dir -e /opt/adme \
+     && mamba clean -afy; \
+    fi
+
+# core/design.py wants a directory that contains admelab/, which the clone above satisfies the
+# same way ~/adme does outside the container.
+ENV POLISCREEN_ADME_PYTHON=/opt/conda/envs/admet/bin/python \
+    POLISCREEN_ADME_ROOT=/opt/adme
+
+# Optional engines, off unless asked for. Both are Linux-only, which is why the container can
+# carry them and the native Windows installer never will. They land in $HOME/poliscreen_tools,
+# where PoliScreen looks by default, so nothing else has to be configured.
+ARG WITH_ADCP=0
+ARG WITH_GNINA=0
+
+# The ADFR installer accepts the Scripps academic licence on the spot, so an image built with
+# this flag is for whoever built it and must not be redistributed. parche_adfr.py fixes the
+# math domain error that otherwise aborts preparation on phosphoproteins and on structures
+# with nearly collinear atoms.
+RUN if [ "$WITH_ADCP" = "1" ]; then \
+        bash scripts/get_adcp.sh && python scripts/parche_adfr.py; \
+    fi
+
+# About 4.5 GB with the CUDA 12 and cuDNN 9 libraries the "static" binary still needs. It does
+# nothing without an NVIDIA GPU handed to the container; see docker-compose.gpu.yml.
+RUN if [ "$WITH_GNINA" = "1" ]; then \
+        bash scripts/get_gnina.sh; \
+    fi
 
 RUN vina --version && obabel -V && plip --version >/dev/null 2>&1 || true \
  && python -c "import rdkit, py3Dmol, streamlit, poliscreen; print('PoliScreen ready')"

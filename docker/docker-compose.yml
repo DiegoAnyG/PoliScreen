@@ -9,6 +9,12 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
+      # ADMET on by default; the other two off. scripts/install-windows.ps1 sets all three
+      # from -NoAdmet, -WithAdcp and -WithGnina.
+      args:
+        WITH_ADMET: ${POLISCREEN_WITH_ADMET:-1}
+        WITH_ADCP: ${POLISCREEN_WITH_ADCP:-0}
+        WITH_GNINA: ${POLISCREEN_WITH_GNINA:-0}
     image: poliscreen:latest
     ports:
       # This machine only. To expose it on the local network use "8501:8501", bearing in mind
@@ -17,8 +23,11 @@ services:
     volumes:
       - ../proyectos:/data
     environment:
-      # Optional ADMET engine. Without it screening works the same; only analogue design and
-      # ADMET prediction are disabled.
-      POLISCREEN_ADME_PYTHON: ${POLISCREEN_ADME_PYTHON:-}
-      POLISCREEN_ADME_ROOT: ${POLISCREEN_ADME_ROOT:-}
+      # These default to the copy the image builds, so leaving them alone is the normal case.
+      # An empty default would override the Dockerfile ENV with an empty string and break the
+      # engine, which is why the paths are repeated here rather than left blank. Set them on
+      # the host only to point at a checkout of your own; with WITH_ADMET=0 they point at
+      # nothing and the bridge reports the engine as unavailable, which is handled.
+      POLISCREEN_ADME_PYTHON: ${POLISCREEN_ADME_PYTHON:-/opt/conda/envs/admet/bin/python}
+      POLISCREEN_ADME_ROOT: ${POLISCREEN_ADME_ROOT:-/opt/adme}
     restart: unless-stopped

@@ -1,5 +1,5 @@
 From 2f8036e5ddf4bbf84cf53b822f117407a1ab67f3 Mon Sep 17 00:00:00 2001
-From: PoliScreen <poliscreen@example.invalid>
+From: Diego Cesar Anaya Guerrero <306688326+DiegoAnyG@users.noreply.github.com>
 Date: Mon, 3 Aug 2026 23:30:25 -0600
 Subject: [PATCH 2/2] Allow building without the molfile plugins
 
