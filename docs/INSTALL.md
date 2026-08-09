@@ -113,10 +113,12 @@ The releases carry an installer per platform, built from `installer/construct.ya
 whole environment: no conda, no Python, nothing to install first. Run it, then launch
 `PoliScreen` from the folder it creates.
 
-> **On Windows, choose a destination folder with no accented characters.** Accept the one offered,
-> or use something like `C:\PoliScreen`. A path such as `…\Investigación\BIOINFORMÁTICA\…` gets
-> through the installer's own check and then breaks conda halfway, leaving nothing installed. Why,
-> and how to recover, is in *Common problems* below.
+> **On Windows, choose a destination folder with no accented characters, on an SSD.** Accept the
+> one offered, or use something like `C:\PoliScreen`. A path such as
+> `…\Investigación\BIOINFORMÁTICA\…` gets through the installer's own check and then breaks conda
+> halfway, leaving nothing installed; why, and how to recover, is in *Common problems* below. The
+> install unpacks about 48,000 files, so a mechanical drive — with the antivirus reading every one
+> of them — turns minutes into a long wait.
 
 It contains PoliScreen, its dependencies and AutoDock Vina. The optional engines are not in it and
 are added afterwards with `scripts/get_adcp.sh` and `scripts/get_gnina.sh`, which the installer
@@ -270,4 +272,6 @@ to the validated one.
 | `docker compose` fails with `500 Internal Server Error` or `check if the server supports the requested API version` | The engine is not running, so compose cannot reach it. Open Docker Desktop and fix what it reports; the compose error is only the symptom. |
 | `docker-credential-desktop.exe: exec format error` on build | Docker Desktop leaves a Windows credential helper in WSL that Linux cannot run. Images are public and do not need it: `cp ~/.docker/config.json ~/.docker/config.json.bak && echo '{}' > ~/.docker/config.json`. |
 | `docker` not found inside WSL | Docker Desktop → Settings → Resources → **WSL Integration** → enable your distro → *Apply & Restart*. |
+| The Windows installer worked once and now fails in the same folder | The first install *wrote* its path into `%USERPROFILE%\.conda\environments.txt`; the second one *reads* that file, and only reading fails (see the row below). Uninstalling does not remove the line: that file belongs to the user's conda, not to PoliScreen — the same file lists any other conda-based tool, so an uninstaller that deleted it would deregister those too. It should drop its own line and does not. Delete the file; conda writes it again. |
+| The Windows install is extremely slow at *Setting up the package cache* | About 48,000 small files are being unpacked. On a mechanical drive, with real-time antivirus reading each one, this is the worst possible shape of work. Install on an SSD, or add the destination folder to the antivirus exclusions. Let it finish rather than cancelling halfway. |
 | The Windows installer stops with `UnicodeDecodeError('charmap', …)` and `Failed to link extracted packages to …` | The destination folder contains an accented character. conda records installed environments in `%USERPROFILE%\.conda\environments.txt`, writes that file as UTF-8 and reads it back with the system's ANSI codepage; `Á` is two bytes in UTF-8 (`C3 81`) and `0x81` does not exist in cp1252, so the read raises and the transaction rolls back. **Two steps, both needed:** delete `%USERPROFILE%\.conda\environments.txt` (conda writes it again by itself; the failing line is already in there from the previous attempt, so a clean path alone will not help), then install to a folder with no accents. The installer does test the path, but it accepts anything the ANSI codepage can represent — which `Investigación` can, one byte at a time — so it lets this one through. |
