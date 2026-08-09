@@ -88,11 +88,15 @@ def _parse_info(info_txt) -> dict:
     return props
 
 
-def detect(pdb, timeout: int = 300) -> list:
+def detect(pdb, timeout: int = 300, on_notice=None) -> list:
     """Returns the pockets ordered by druggability (desc).
 
     Each one: {n, druggability, score, volume, spheres, cx, cy, cz, size, label}.
     Empty list if fpocket is absent or finds nothing.
+
+    on_notice receives the reason when fpocket ran and produced nothing. Without it, a build that
+    cannot write its output folder is indistinguishable from a structure with no cavities: both
+    are an empty list, and the one message that would say which was being discarded here.
     """
     if not fpocket_available():
         return []
@@ -101,10 +105,18 @@ def detect(pdb, timeout: int = 300) -> list:
     try:
         local = tmp / f"{pdb.stem}.pdb"
         shutil.copy(pdb, local)
-        subprocess.run(["fpocket", "-f", str(local)], capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(["fpocket", "-f", str(local)], capture_output=True, text=True,
+                           timeout=timeout)
         outd = tmp / f"{pdb.stem}_out"
         info = outd / f"{pdb.stem}_info.txt"
         if not info.exists():
+            if on_notice:
+                # fpocket reports its trouble on stderr and still exits 0, so the return code
+                # alone says nothing.
+                said = ((r.stderr or "") + "\n" + (r.stdout or "")).strip().splitlines()
+                tail = " | ".join(s.strip() for s in said[-4:] if s.strip())
+                on_notice(f"fpocket produced no results for {pdb.name} (exit {r.returncode}). "
+                          + (f"It reported: {tail}" if tail else "It reported nothing."))
             return []
         props = _parse_info(info)
         pockets = []
@@ -133,6 +145,8 @@ def detect(pdb, timeout: int = 300) -> list:
         pockets.sort(key=lambda x: (x["druggability"] if x["druggability"] is not None else -1), reverse=True)
         return pockets
     except subprocess.TimeoutExpired:
+        if on_notice:
+            on_notice(f"fpocket exceeded {timeout}s on {pdb.name} and was stopped.")
         return []
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

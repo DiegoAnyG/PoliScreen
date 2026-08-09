@@ -29,6 +29,14 @@ EXT = ".poliscreen"
 _UNC_WSL = re.compile(r"^/{2,}(?:wsl\.localhost|wsl\$)/[^/]+", re.I)
 _UNIDAD = re.compile(r"^([A-Za-z]):(?=/|$)")
 
+# Its own name because the tests flip it: patching os.name is not an option, pathlib reads it to
+# decide which flavour of path to build and the whole process starts raising on every Path().
+_ON_WINDOWS = os.name == "nt"
+
+
+JOBS_DIR = "poliscreen_jobs"
+_LEGACY_JOBS_DIR = "poliscreen_proyectos"
+
 
 def default_root() -> Path:
     """Where projects are created when the user types nothing.
@@ -37,7 +45,20 @@ def default_root() -> Path:
     home directory is not persistent, so results written there disappear with the container.
     """
     env = os.environ.get("POLISCREEN_PROJECTS")
-    return Path(env) if env else Path.home() / "poliscreen_proyectos"
+    if env:
+        return Path(env)
+    home = Path.home()
+    legacy = home / _LEGACY_JOBS_DIR
+    return legacy if legacy.is_dir() else home / JOBS_DIR
+
+
+def default_project(root: Optional[Path] = None) -> Path:
+    """Project offered when the user types nothing: one folder per day.
+
+    A fixed name meant every run landed on top of the previous one, so yesterday's receptors and
+    ligands were still there and were silently reused.
+    """
+    return (Path(root) if root else default_root()) / datetime.now().strftime("%m%d%y")
 
 
 def normalize_path(text_: str, base: Optional[Path] = None) -> tuple:
@@ -49,7 +70,16 @@ def normalize_path(text_: str, base: Optional[Path] = None) -> tuple:
     """
     raw_text = (text_ or "").strip().strip('"').strip("'")
     if not raw_text:
-        return default_root() / "demo", ""
+        return default_project(), ""
+
+    # The translation below turns C:\... into /mnt/c/..., which is right when PoliScreen runs
+    # inside WSL and wrong when it is the Windows installer: there the drive letter is already the
+    # real path, and rewriting it buried the projects in C:\mnt\c\Users\...
+    if _ON_WINDOWS:
+        p = Path(raw_text).expanduser()
+        if not p.is_absolute():
+            p = (base or default_root()) / p
+        return p, ""
 
     s = raw_text.replace("\\", "/")
     s = _UNC_WSL.sub("", s) or "/"

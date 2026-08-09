@@ -94,6 +94,33 @@ def _do_predict(p):
             "rows": [{str(k): _clean(v) for k, v in r.items()} for r in df.to_dict(orient="records")]}
 
 
+def _do_applicability(p):
+    """How far each molecule sits from what ADMET-AI was actually trained on.
+
+    A molecule outside the domain is not a wrong prediction: it is a prediction the training data
+    does not support, which is why it has to travel next to the ADMET numbers instead of being
+    left for whoever thinks to ask. Only the per-molecule summary is returned by default; the
+    per-endpoint detail is one row per molecule *and* endpoint, and is sent only when requested.
+    """
+    from admelab import domain
+    ad = domain.applicability(list(p["smiles"]),
+                              endpoints=p.get("endpoints") or None,
+                              percentile=float(p.get("percentile", 5.0)))
+    if ad is None or ad.empty:
+        return {"ok": True, "action": "applicability", "columns": [], "rows": [], "detail": []}
+    s = domain.summary(ad)
+    s = s.astype(object).where(s.notna(), None)
+    out = {"ok": True, "action": "applicability",
+           "columns": [str(c) for c in s.columns],
+           "rows": [{str(k): _clean(v) for k, v in r.items()} for r in s.to_dict(orient="records")],
+           "detail": []}
+    if p.get("detail"):
+        ad = ad.astype(object).where(ad.notna(), None)
+        out["detail"] = [{str(k): _clean(v) for k, v in r.items()}
+                         for r in ad.to_dict(orient="records")]
+    return out
+
+
 def _do_name_esters(p):
     """Verified IUPAC name (OPSIN) of each ester. Offline with the given alcohol names;
     falls back to web only if use_web and OPSIN did not match. Cleans the names so OPSIN parses them."""
@@ -122,7 +149,7 @@ def _do_info(p):
     import admelab
     mods = []
     for m in ["generation", "esterification", "predict", "toxicity", "ranking",
-              "naming", "naming_smart", "viz", "pipeline"]:
+              "naming", "naming_smart", "viz", "pipeline", "domain"]:
         try:
             __import__("admelab." + m)
             mods.append(m)
@@ -157,6 +184,8 @@ def main():
             out = _do_name_esters(p)
         elif action == "predict":
             out = _do_predict(p)
+        elif action == "applicability":
+            out = _do_applicability(p)
         elif action == "info":
             out = _do_info(p)
         else:

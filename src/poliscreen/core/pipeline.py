@@ -22,7 +22,7 @@ from . import ligands as lg
 from . import peptides as pep
 from . import screening as sc
 from . import validation as vl
-from .design import AdmelabBridge
+from .design import AdmelabBridge, AdmelabError
 
 DEFAULT_WEIGHTS = dict(sc.DEFAULT_WEIGHTS)
 
@@ -106,6 +106,40 @@ def _assign_controls(controls: Sequence[Path], receptors: Sequence[Path], given:
         if hit:
             out[ck] = hit
     return out
+
+
+AD_COLUMNS = ("fraction_in_domain", "median_similarity")
+
+
+def _add_applicability(analogs, cfg, step) -> None:
+    """Adds the applicability domain of the ADMET-AI predictions to the analogue table, in place.
+
+    Only when those predictions exist: without --no-ml there is nothing to qualify. It is skipped
+    rather than raised if admelab is older than 0.3 or absent altogether, because a screening does
+    not depend on it — the ADMET numbers are simply reported unqualified, as they were before.
+    """
+    if not cfg.use_ml or "SMILES" not in analogs.columns:
+        return
+    smis = [s for s in analogs["SMILES"].dropna().astype(str).tolist() if s]
+    if not smis:
+        return
+    b = AdmelabBridge()
+    if not b.has_applicability():
+        step("applicability", "admelab has no domain module (>= 0.3); ADMET reported unqualified")
+        return
+    try:
+        ad = b.applicability(smis).to_dataframe()
+    except AdmelabError as e:
+        step("applicability", f"not computed: {str(e)[:120]}")
+        return
+    if ad.empty or "SMILES" not in ad.columns:
+        return
+    cols = [c for c in AD_COLUMNS if c in ad.columns]
+    for c in cols:
+        analogs[c] = analogs["SMILES"].map(dict(zip(ad["SMILES"], ad[c])))
+    outside = int((analogs.get("fraction_in_domain", pd.Series(dtype=float)) < 1.0).sum())
+    step("applicability", f"{len(analogs) - outside}/{len(analogs)} inside the training domain "
+                          f"on every endpoint")
 
 
 def _receptor_by_geometry(control, receptors) -> Optional[str]:
@@ -200,6 +234,7 @@ def run(cfg: RunConfig, on_step: Optional[Callable[[str, str], None]] = None) ->
         if res.analogs is not None and not res.analogs.empty:
             names = {s: n for n, _, s in made}
             res.analogs.insert(0, "name", res.analogs["SMILES"].map(names) if "SMILES" in res.analogs else None)
+            _add_applicability(res.analogs, cfg, step)
             res.analogs.to_csv(lay.artifact(out, lay.ANALOGUES_CSV), index=False)
         lig_files += [p for _, p, _ in made]
         step("3d", f"{len(made)} 3D structures")
@@ -393,8 +428,11 @@ def run(cfg: RunConfig, on_step: Optional[Callable[[str, str], None]] = None) ->
     if res.analogs is not None and not res.analogs.empty and "name" in res.analogs.columns:
         adm = res.analogs.copy()
         adm["ckey"] = adm["name"].map(lambda n: sc.normalize_key(n) if n else None)
+        # The domain columns travel with the ADMET ones: they say how much the training data backs
+        # the numbers beside them, and split from those they mean nothing.
         cols_admet = [c for c in ("MW", "LogP", "TPSA", "QED", "Lipinski_violations",
-                                  "LD50_mg_per_kg", "GHS_category") if c in adm.columns]
+                                  "LD50_mg_per_kg", "GHS_category") + AD_COLUMNS
+                      if c in adm.columns]
         if cols_admet:
             res.ranking = res.ranking.merge(adm[["ckey"] + cols_admet].drop_duplicates("ckey"),
                                             on="ckey", how="left")

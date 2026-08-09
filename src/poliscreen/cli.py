@@ -82,9 +82,34 @@ def cmd_design(args) -> int:
     return 0
 
 
+def port_in_use(port: int) -> bool:
+    """Whether something is already listening there.
+
+    Worth checking before starting: Streamlit exits when the port is taken, and in the Windows
+    installer that closes the console before anyone can read why. What was serving the page then
+    was another PoliScreen — a container Docker Desktop had brought back on its own — so the
+    interface answered, from a different machine's filesystem, and the paths made no sense.
+    """
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
 def cmd_ui(args) -> int:
     import subprocess
     from pathlib import Path
+
+    if port_in_use(args.port):
+        print(f"ERROR: something is already listening on port {args.port}, so this interface "
+              f"cannot start.", file=sys.stderr)
+        print("  Whatever answers at that address is NOT the copy you just launched.", file=sys.stderr)
+        print("  A container left running is the usual cause; docker/docker-compose.yml sets "
+              "`restart: unless-stopped`, so Docker Desktop brings it back by itself.", file=sys.stderr)
+        print("  Check it with:   docker ps", file=sys.stderr)
+        print("  Stop it with:    docker compose -f docker/docker-compose.yml down", file=sys.stderr)
+        print(f"  Or use another:  poliscreen ui --port {args.port + 1}", file=sys.stderr)
+        return 1
 
     address = "0.0.0.0" if getattr(args, "expose", False) else "127.0.0.1"
     app = Path(__file__).parent / "ui" / "streamlit_app.py"

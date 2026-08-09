@@ -26,7 +26,9 @@ poliscreen = "poliscreen.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-poliscreen = ["data/*.csv"]
+# assets/ carries the logo and the wordmark. Left out, the interface silently falls back to plain
+# text, which is how the installer shipped without any branding at all.
+poliscreen = ["data/*.csv", "assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

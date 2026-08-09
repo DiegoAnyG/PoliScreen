@@ -34,9 +34,10 @@ def test_the_default_root_follows_the_container_volume(monkeypatch):
     with the container, so the image points this at its mounted volume."""
     monkeypatch.setenv("POLISCREEN_PROJECTS", "/data")
     assert ss.default_root() == Path("/data")
-    assert ss.normalize_path("")[0] == Path("/data/demo")
+    # Which folder inside it belongs to test_project_root.py; here only that it is inside.
+    assert ss.normalize_path("")[0].parent == Path("/data")
     monkeypatch.delenv("POLISCREEN_PROJECTS")
-    assert ss.default_root() == Path.home() / "poliscreen_proyectos"
+    assert ss.default_root().parent == Path.home()
 
 
 # --------------------------------------------------------------- peptide chemistry

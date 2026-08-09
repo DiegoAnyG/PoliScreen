@@ -9,4 +9,13 @@ if "%~1"=="" (
 ) else (
     "%~dp0Scripts\poliscreen.exe" %*
 )
+
+rem Without this the window closes on its own the moment anything fails, taking the reason with
+rem it: it looked like the launcher had merely gone to the background, while the page still being
+rem served came from somewhere else entirely.
+if errorlevel 1 (
+    echo.
+    echo PoliScreen stopped. The message above says why; this window stays open so it can be read.
+    pause
+)
 endlocal

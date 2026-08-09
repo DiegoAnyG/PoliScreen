@@ -90,10 +90,15 @@ jobs:
           constructor installer/ --output-dir out
           ls -l out
 
+      # Each run leaves about 1.5 GB across the three installers, and the free account has 500 MB
+      # of Actions storage in total, so the default 90 days fills the quota after two runs and
+      # blocks every later push. Release assets do not count against it: once a tag exists, that
+      # is where the installers should be fetched from, not here.
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: out/*
+          retention-days: 5
 
       - name: Attach it to the release
         if: startsWith(github.ref, 'refs/tags/')

@@ -5,6 +5,7 @@ Launch:  poliscreen ui      (or: streamlit run .../ui/streamlit_app.py)
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -219,6 +220,45 @@ def _mark_done(key_: str, firma):
     S["_signature_" + key_] = firma
 
 
+def _controls_of(rec: Path, receptors: list, controls: list) -> list:
+    """Controls belonging to a receptor, by the criterion the pipeline itself uses: geometry.
+    The file name cannot say it — a control is named after its ligand (control_ZI9), never after
+    the structure it came from."""
+    assign = pl._assign_controls([Path(c) for c in controls],
+                                 [Path(r) for r in receptors], {})
+    return [c for c in controls
+            if assign.get(sc.normalize_key(Path(c).stem)) == rec.stem]
+
+
+def _forget_receptor(path_str: str) -> None:
+    """Deletes a prepared receptor together with its controls and the choices made for it.
+
+    The controls go with it: extracted from that structure, they share its coordinate system, and
+    left behind they would be assigned by geometry to whichever receptor remains.
+    """
+    rec = Path(path_str)
+    doomed = [path_str] + _controls_of(rec, S["receptors"], S["controls"])
+    for f in doomed:
+        Path(f).unlink(missing_ok=True)
+    S["receptors"] = [p for p in S["receptors"] if p != path_str]
+    S["controls"] = [p for p in S["controls"] if p not in doomed]
+    S.setdefault("_forget_prep", []).append(sc.normalize_key(_rname(rec)))
+    if S.get("last_prepared") == path_str:
+        S.pop("last_prepared", None)
+        S.pop("last_original", None)
+
+
+def _forget_all_receptors() -> None:
+    """Empties the project's receptor folder: prepared structures and controls alike. The way out
+    when a control was left orphaned because its receptor was already gone."""
+    for f in list(S["receptors"]) + list(S["controls"]):
+        Path(f).unlink(missing_ok=True)
+    S["_forget_prep"] = [sc.normalize_key(_rname(p)) for p in S["receptors"]]
+    S["receptors"], S["controls"] = [], []
+    S.pop("last_prepared", None)
+    S.pop("last_original", None)
+
+
 def _notify(headline: str, detail: str = "") -> None:
     """Report the end of a long operation. Shown as a modal, the same mechanism as the deletion
     prompt: a toast clips anything longer than a line, and custom HTML does not survive
@@ -412,6 +452,13 @@ if S.get("_proj_pending"):
 for _k, _v in (S.pop("_pending_widgets", None) or {}).items():
     S[_k] = _v
 
+# Removing a receptor also drops the choices made for it, but a widget key cannot be deleted in
+# the run that drew the widget, so the removal is queued and settled here, before anything is drawn.
+for _kb in S.pop("_forget_prep", []):
+    for _k in (f"rec_chains_{_kb}", f"rec_keep_{_kb}", f"rec_extract_{_kb}",
+               f"rec_smiles_{_kb}", f"rec_mod_{_kb}", f"_signature_prep_{_kb}"):
+        S.pop(_k, None)
+
 _PERSISTENT_PREFIXES = ("pep_", "modo_", "cat_", "sec_", "rec_", "box_", "sites_", "rx_",
                           "cx_", "cy_", "cz_", "sx_", "sy_", "sz_", "src_", "vis_", "cfg_")
 for _k in [k for k in S.keys() if isinstance(k, str) and k.startswith(_PERSISTENT_PREFIXES)]:
@@ -436,16 +483,16 @@ try:
     _tema = st.context.theme.type
 except Exception:
     _tema = None
+# The theme is not always known on the first pass. Letting the browser decide through
+# `prefers-color-scheme` was wrong: that is the operating system's preference, not the app's
+# theme, so an OS in dark with Streamlit in light inverted the brand to white on a white page and
+# it stayed invisible until something redrew it. Ask for one more pass instead of guessing, and
+# invert nothing meanwhile — light is Streamlit's default, so that is the harmless miss.
+if _tema is None and not S.get("_theme_probed"):
+    S["_theme_probed"] = True
+    st.rerun()
 _est_marca = _INV if _tema == "dark" else ""
 _col_ver = "#e6e6e6" if _tema == "dark" else "#666"
-# The theme is not always known on the first pass, and the brand was inverted against a light
-# background, which left it invisible until something redrew the page. When it is unknown the
-# browser decides, through the container's own class: an attribute we add would be stripped by
-# Streamlit's HTML sanitizing, but this one is Streamlit's.
-if _tema is None:
-    st.markdown(f"""<style>
-      @media (prefers-color-scheme: dark) {{ .st-key-menu_bar img {{ {_INV} }} }}
-    </style>""", unsafe_allow_html=True)
 
 _marca = []
 if _logo_f and _logo_f.suffix.lower() != ".svg":
@@ -463,9 +510,14 @@ _menu_ayuda = _m4.popover(t("Help"), width="stretch")
 
 with _menu_archivo:
     st.markdown(t("**Project**"))
-    S.setdefault("proj_dir", str(Path.home() / "poliscreen_proyectos" / "demo"))
-    _escrito = st.text_input(t("Project folder"), key="proj_dir",
-                             help=t("Path inside Linux (WSL). If you paste a Windows path (`\\\\wsl.localhost\\...` or `C:\\...`) it is translated automatically."))
+    # Through default_root(), which honours POLISCREEN_PROJECTS. Building the path from home()
+    # here ignored it, and inside Docker that wrote the results to the container's own home
+    # instead of the mounted volume, where they were lost when the container went away.
+    S.setdefault("proj_dir", str(ss.default_project()))
+    _escrito = st.text_input(
+        t("Project folder"), key="proj_dir",
+        help=t("Any folder you can write to; `C:\\...` is used as it is.") if os.name == "nt"
+        else t("Path inside Linux (WSL). If you paste a Windows path (`\\\\wsl.localhost\\...` or `C:\\...`) it is translated automatically."))
     proj, _path_notice = ss.normalize_path(_escrito)
     if _path_notice:
         st.warning(_path_notice)
@@ -496,7 +548,7 @@ with _menu_archivo:
         sub = st.file_uploader(t("Open session (.poliscreen)"), type=["poliscreen", "zip"],
                                help=t("Restores a previous analysis: tables, receptors and ligands. You can change the weighting without repeating the docking."))
         if sub is not None and st.button(t("Restore this session")):
-            dest_ = Path.home() / "poliscreen_proyectos" / Path(sub.name).stem
+            dest_ = ss.default_root() / Path(sub.name).stem
             tmp_s = dest_.parent / f"_{Path(sub.name).stem}.poliscreen"
             tmp_s.parent.mkdir(parents=True, exist_ok=True)
             tmp_s.write_bytes(sub.getvalue())
@@ -726,7 +778,7 @@ def _stage_receptors():
                 c = o.split(":", 1)[1]
                 n = sum(1 for _l in src.read_text(errors="ignore").splitlines()
                         if _l.startswith("ATOM") and _l[21] == c and _l[12:16].strip() == "CA")
-                return f"Chain {c} · {n} residues (peptide)"
+                return f"Chain {c} · {n} residues"
             return f"{o} (hetero group)"
 
         _sel_ctrl = c3.multiselect(t("Extract as control"), _opc_ctrl, key=f"rec_extract_{kb}",
@@ -772,7 +824,9 @@ def _stage_receptors():
                     if str(p) not in S["controls"]:
                         S["controls"].append(str(p))
                 for c in control_chain:
-                    p = rc.extract_chain(src, c, lay.artifact(proj, lay.RECEPTORS) / f"control_cadena{c}.pdb",
+                    # Older projects wrote control_cadena{c}; nothing parses the name back, and the
+                    # controls are found by globbing control_*, so those files keep loading.
+                    p = rc.extract_chain(src, c, lay.artifact(proj, lay.RECEPTORS) / f"control_Chain{c}.pdb",
                                          on_notice=st.warning)
                     if str(p) not in S["controls"]:
                         S["controls"].append(str(p))
@@ -808,10 +862,30 @@ def _stage_receptors():
 
         st.caption(t("The structure is shown in the right panel; there you can change the view and style."))
 
-    if S["receptors"]:
-        st.write(t("**Prepared receptors:**"), ", ".join(_rname(p) for p in S["receptors"]))
-    if S["controls"]:
-        st.write(t("**Controls:**"), ", ".join(_rname(p) for p in S["controls"]))
+    if S["receptors"] or S["controls"]:
+        st.markdown("---")
+        _t1, _t2 = st.columns([3, 1], vertical_alignment="center")
+        _t1.markdown(t("**Prepared receptors**"))
+        # These keys deliberately avoid the persistent prefixes above: that loop reassigns each
+        # value to keep it across reruns, and Streamlit forbids assigning a value to a button.
+        if _t2.button(t("Remove all"), key="wipe_receptors", width="stretch",
+                      help=t("Deletes every prepared receptor and control from the project folder.")):
+            _forget_all_receptors()
+            st.rerun()
+        for _p in list(S["receptors"]):
+            _c1, _c2 = st.columns([5, 1], vertical_alignment="center")
+            _ctrl_p = _controls_of(Path(_p), S["receptors"], S["controls"])
+            _c1.write(_rname(_p) + (f" · {', '.join(_rname(c) for c in _ctrl_p)}" if _ctrl_p else ""))
+            if _c2.button("🗑", key=f"drop_receptor_{sc.normalize_key(_rname(_p))}", width="stretch",
+                          help=t("Removes this receptor and the controls extracted from it.")):
+                _forget_receptor(_p)
+                st.rerun()
+        _huerfanos = [c for c in S["controls"]
+                      if not any(c in _controls_of(Path(r), S["receptors"], S["controls"])
+                                 for r in S["receptors"])]
+        if _huerfanos:
+            st.caption(t("Controls with no receptor: {v1}").format(
+                v1=", ".join(_rname(c) for c in _huerfanos)))
 
 def _peptide_mode():
     """Peptide design: a path independent of reaction synthesis. Kept apart
@@ -1267,13 +1341,19 @@ def _stage_run():
                          disabled=not pk.fpocket_available() or ya_pk,
                          help="Cavities already detected for this receptor." if ya_pk else None):
                 S["vis_box_rec"] = str(r)
+                _why = []
                 with st.spinner(t("Searching cavities with fpocket...")):
-                    S["pockets"][str(r)] = pk.detect(r)
+                    S["pockets"][str(r)] = pk.detect(r, on_notice=_why.append)
+                # Kept in state because the rerun below wipes anything drawn now, and a run that
+                # found nothing is exactly when the reason matters.
+                S.setdefault("pockets_why", {})[str(r)] = _why[0] if _why else None
                 S["vis_show_cav"] = True
                 st.rerun()
             pkts = S["pockets"].get(str(r), [])
             if not pkts and not pk.fpocket_available():
                 b2.caption(t("fpocket not installed: `conda install -n cribado -c conda-forge fpocket`."))
+            elif not pkts and S.get("pockets_why", {}).get(str(r)):
+                st.warning(S["pockets_why"][str(r)])
             pk_opts = {p["label"]: p for p in pkts}
             opts = ([f"Center on the control ({ctrl.name})"] if ctrl else []) \
                 + list(pk_opts.keys()) + ["Automatic"] + list(groups_.keys())

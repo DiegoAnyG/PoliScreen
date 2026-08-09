@@ -158,6 +158,29 @@ class AdmelabBridge:
         rows = [english_values(r) for r in out["rows"]]
         return DesignResult(rows, out["columns"], len(rows), len(rows))
 
+    def applicability(self, smiles: Sequence, endpoints: Optional[Sequence] = None,
+                      percentile: float = 5.0, detail: bool = False) -> "DesignResult":
+        """Applicability domain of the ADMET-AI predictions: one row per molecule.
+
+        Says how close each structure sits to the closest compound the model was trained on, and on
+        how many endpoints that distance is inside the training set's own spread. It qualifies the
+        ADMET numbers rather than replacing them: outside the domain the prediction is unsupported,
+        not wrong. Needs admelab >= 0.3; older ones have no `domain` module.
+        """
+        out = self._call({"action": "applicability", "smiles": list(smiles),
+                          "endpoints": list(endpoints) if endpoints else None,
+                          "percentile": float(percentile), "detail": bool(detail)})
+        rows = out["rows"]
+        return DesignResult(rows, out["columns"], len(rows), len(rows))
+
+    def has_applicability(self) -> bool:
+        """Whether the installed admelab carries the domain module. The installer ships no admelab
+        at all, so every caller has to cope with its absence anyway."""
+        try:
+            return "domain" in (self.info().get("modules") or [])
+        except AdmelabError:
+            return False
+
     def reaction_sites(self, smiles: str) -> dict:
         """Reactive sites of a molecule: OHs classified with their feasibility and whether it has -COOH."""
         return self._call({"action": "reaction_sites", "smiles": smiles})
