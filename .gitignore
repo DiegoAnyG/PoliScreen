@@ -33,6 +33,9 @@ san/
 # Notas de herramientas
 .ipynb_checkpoints/
 .claude/
+# Personal MCP server config (memory, etc.): a developer's tool, not part of the product,
+# and it must never reach the public repo.
+.mcp.json
 
 # Sistema
 .DS_Store
