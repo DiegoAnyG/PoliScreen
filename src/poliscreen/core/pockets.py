@@ -105,7 +105,11 @@ def detect(pdb, timeout: int = 300, on_notice=None) -> list:
     try:
         local = tmp / f"{pdb.stem}.pdb"
         shutil.copy(pdb, local)
-        r = subprocess.run(["fpocket", "-f", str(local)], capture_output=True, text=True,
+        # as_posix, not str: fpocket splits the path on '/' to work out where its output goes, and
+        # handed backslashes it finds none and dies with an access violation before writing
+        # anything. Measured on the Windows build with 4D44: "C:\fp\test.pdb" crashes,
+        # "C:/fp/test.pdb" returns its pockets. Spaces in the path are fine either way.
+        r = subprocess.run(["fpocket", "-f", local.as_posix()], capture_output=True, text=True,
                            timeout=timeout)
         outd = tmp / f"{pdb.stem}_out"
         info = outd / f"{pdb.stem}_info.txt"
