@@ -113,6 +113,11 @@ The releases carry an installer per platform, built from `installer/construct.ya
 whole environment: no conda, no Python, nothing to install first. Run it, then launch
 `PoliScreen` from the folder it creates.
 
+> **On Windows, choose a destination folder with no accented characters.** Accept the one offered,
+> or use something like `C:\PoliScreen`. A path such as `…\Investigación\BIOINFORMÁTICA\…` gets
+> through the installer's own check and then breaks conda halfway, leaving nothing installed. Why,
+> and how to recover, is in *Common problems* below.
+
 It contains PoliScreen, its dependencies and AutoDock Vina. The optional engines are not in it and
 are added afterwards with `scripts/get_adcp.sh` and `scripts/get_gnina.sh`, which the installer
 copies alongside: ADCP is downloaded from Scripps under an academic licence that cannot be
@@ -265,3 +270,4 @@ to the validated one.
 | `docker compose` fails with `500 Internal Server Error` or `check if the server supports the requested API version` | The engine is not running, so compose cannot reach it. Open Docker Desktop and fix what it reports; the compose error is only the symptom. |
 | `docker-credential-desktop.exe: exec format error` on build | Docker Desktop leaves a Windows credential helper in WSL that Linux cannot run. Images are public and do not need it: `cp ~/.docker/config.json ~/.docker/config.json.bak && echo '{}' > ~/.docker/config.json`. |
 | `docker` not found inside WSL | Docker Desktop → Settings → Resources → **WSL Integration** → enable your distro → *Apply & Restart*. |
+| The Windows installer stops with `UnicodeDecodeError('charmap', …)` and `Failed to link extracted packages to …` | The destination folder contains an accented character. conda records installed environments in `%USERPROFILE%\.conda\environments.txt`, writes that file as UTF-8 and reads it back with the system's ANSI codepage; `Á` is two bytes in UTF-8 (`C3 81`) and `0x81` does not exist in cp1252, so the read raises and the transaction rolls back. **Two steps, both needed:** delete `%USERPROFILE%\.conda\environments.txt` (conda writes it again by itself; the failing line is already in there from the previous attempt, so a clean path alone will not help), then install to a folder with no accents. The installer does test the path, but it accepts anything the ANSI codepage can represent — which `Investigación` can, one byte at a time — so it lets this one through. |
