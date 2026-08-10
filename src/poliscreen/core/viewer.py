@@ -15,6 +15,13 @@ _JS_LOCAL = Path(__file__).resolve().parent.parent / "assets" / "3Dmol-min.js"
 _JS_CACHE: Optional[str] = None
 
 
+# This travels inside an iframe of its own, and a browser gives every document an 8 px body
+# margin. py3Dmol sizes its div in pixels, so those 16 px land outside the frame: a scrollbar
+# appears and the viewer sits inset on all four sides, which is what makes the structure look
+# squashed into a strip. Nothing in this document wants a margin.
+_RESET = "<style>html,body{margin:0;padding:0}</style>\n"
+
+
 def _embed_js(html: str) -> str:
     """Prepends the embedded library so py3Dmol's remote loader is never used.
 
@@ -24,11 +31,11 @@ def _embed_js(html: str) -> str:
     """
     global _JS_CACHE
     if not _JS_LOCAL.exists() or "$3Dmolpromise" not in html:
-        return html
+        return _RESET + html
     if _JS_CACHE is None:
         _JS_CACHE = _JS_LOCAL.read_text(errors="ignore")
-    return (f"<script>{_JS_CACHE}</script>\n"
-            "<script>var $3Dmolpromise = Promise.resolve();</script>\n") + html
+    return _RESET + (f"<script>{_JS_CACHE}</script>\n"
+                     "<script>var $3Dmolpromise = Promise.resolve();</script>\n") + html
 
 
 def local_js_available() -> bool:
