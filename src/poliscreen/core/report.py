@@ -183,13 +183,22 @@ def _versions() -> dict:
                 v[tool] = line.strip()[:90]
         except Exception:
             pass
+    import importlib.metadata as _md
     import shutil as _sh
     try:
-        import importlib.metadata as _md
         v["plip"] = _md.version("plip")
     except Exception:
         if _sh.which("plip"):
             v["plip"] = "installed"
+    # The receptor-preparation stack. It was missing here, and it is the half that decides what is
+    # actually docked: two installations whose pdbfixer differs prepare different structures from
+    # the same PDB, and every number downstream moves with them. Without these lines two Methods
+    # blocks can look identical while describing runs that are not comparable.
+    for pkg in ("openmm", "pdbfixer", "numpy"):
+        try:
+            v[pkg] = _md.version(pkg)
+        except Exception:
+            pass
     if _sh.which("fpocket"):
         v["fpocket"] = "installed"
     return v

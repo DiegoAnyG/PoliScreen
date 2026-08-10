@@ -37,12 +37,16 @@ specs:
   - openbabel 3.1.*
   - plip 3.0.*
   - openmm 8.5.*
-  - pdbfixer
+  # Pinned like every other one, and to the same version as environment.yml. Left open, the
+  # installer solved a different pdbfixer from the development environment, and pdbfixer and
+  # openmm are what build the prepared receptor: two machines then dock a structure that is not
+  # the same one, and every number downstream moves with it.
+  - pdbfixer 1.12.*
   - biopython 1.87.*
   - py3dmol 2.5.*
-  - pandas
-  - numpy
-  - scipy
+  - pandas 3.0.*
+  - numpy 2.4.*
+  - scipy 1.17.*
   - matplotlib-base
   - openpyxl
   - streamlit 1.59.*
