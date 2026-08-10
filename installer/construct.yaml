@@ -4,7 +4,8 @@
 #   constructor installer/            # run on the target platform
 #
 # It ships the whole environment, so the user installs nothing else: no conda, no Python.
-# Vina is placed next to the environment by post_install; it is not a conda package.
+# Vina is not a conda package: on Windows it rides along, fetched and verified by the release
+# workflow; on Linux and macOS post_install still downloads it at install time.
 #
 # The optional engines are deliberately absent:
 #   ADCP   the Scripps suite is downloaded accepting an academic licence, so it cannot be
@@ -71,6 +72,10 @@ extra_files:
   - launcher.sh: PoliScreen            # [not win]
   # Library/bin is where conda keeps non-Python executables on Windows, and the launcher
   # already puts it on PATH, so shutil.which("fpocket") finds it like any other tool.
+  # Vina rides along instead of being downloaded on the user's machine: one failed download there
+  # left the whole screening without a docking engine. The release workflow verifies its SHA256.
+  - vendor/vina.exe: Scripts/vina.exe                                      # [win]
+  - vendor/AutoDock-Vina-LICENSE.txt: Scripts/AutoDock-Vina-LICENSE.txt    # [win]
   - vendor/fpocket.exe: Library/bin/fpocket.exe   # [win]
   - vendor/tpocket.exe: Library/bin/tpocket.exe   # [win]
   - vendor/dpocket.exe: Library/bin/dpocket.exe   # [win]

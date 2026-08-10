@@ -12,6 +12,8 @@ on:
 env:
   FPOCKET_VERSION: "4.2.3"
   ADMELAB_VERSION: "0.3.0"
+  VINA_VERSION: "1.2.5"
+  VINA_SHA256: "b5a23b226ee5dc1b028df04082d13a7b0e5b9b12b988bbcf9498cb351e20b38f"
 
 jobs:
   # conda-forge has no win-64 fpocket, so the Windows installer carries one built here from
@@ -67,6 +69,23 @@ jobs:
         with:
           name: fpocket-windows
           path: installer/vendor
+
+      # Vina used to be downloaded by post_install, on the user's machine, at install time. One
+      # download that does not go through there leaves a one-click installation with no docking
+      # engine, and the only sign of it is a warning that scrolls past in the installer window --
+      # the failure surfaces much later, as every docking job failing at once. Fetched here
+      # instead, where the network is reliable and the SHA256 is checked before anything ships.
+      # Apache-2.0, so it travels with a copy of its licence.
+      - name: Collect Vina
+        if: runner.os == 'Windows'
+        shell: bash -el {0}
+        run: |
+          mkdir -p installer/vendor
+          curl -fsSL -o installer/vendor/vina.exe \
+            "https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v${VINA_VERSION}/vina_${VINA_VERSION}_win.exe"
+          echo "${VINA_SHA256} *installer/vendor/vina.exe" | sha256sum -c -
+          curl -fsSL -o installer/vendor/AutoDock-Vina-LICENSE.txt \
+            "https://raw.githubusercontent.com/ccsb-scripps/AutoDock-Vina/v${VINA_VERSION}/LICENSE"
 
       # The base environment is used as it comes: creating one only to run constructor from it
       # failed on Windows, where the new environment was not there to activate. `defaults` is
