@@ -79,6 +79,14 @@ def _render_adme(admet, items, keyp):
                       "LD50 (mg/kg)": r.get("LD50_mg_per_kg"), "GHS": r.get("GHS_category"),
                       "AMES": r.get("AMES"), "hERG": r.get("hERG"), "DILI": r.get("DILI")})
     st.markdown(t("**ADMET summary of all compounds**"))
+    # Everything ADMET-AI predicts comes back empty when it is not installed, and the one-click
+    # installer does not ship it: the descriptors are computed from the structure, the endpoints
+    # are not. An empty column says nothing about why it is empty.
+    if not any(r.get(k) is not None for r in admet.values()
+               for k in ("AMES", "hERG", "DILI", "LD50_mg_per_kg")):
+        st.info(t("ADMET-AI is not installed on this machine: what you see are the properties "
+                  "computed from the structure (MW, LogP, QED), not predicted endpoints. "
+                  "docs/INSTALL.md explains how to add it."))
     st.dataframe(pd.DataFrame(rows_), width="stretch", height=min(320, 60 + 34 * len(rows_)))
     st.caption(t("AMES/hERG/DILI = toxicity probability (lower is better). LD50 in mg/kg (higher is better). Predicted on the WHOLE molecule (core + reagent), not the reagent alone."))
     labels = dict(items)

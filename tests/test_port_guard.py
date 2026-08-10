@@ -51,3 +51,22 @@ def test_the_interface_refuses_rather_than_starting_a_second_one(occupied_port, 
     assert "docker ps" in said, "the usual cause is not even mentioned"
     assert str(occupied_port + 1) in said, "no way out is offered"
     assert "NOT the copy you just launched" in said, "the dangerous part is left unsaid"
+
+
+def test_the_browser_waits_for_the_page_instead_of_a_guessed_delay(free_port, monkeypatch):
+    """Double-clicking the launcher has to end in a browser.
+
+    The address printed on the console is clickable only with Ctrl, which nobody outside a terminal
+    knows about; and a first start that has to unpack Streamlit takes longer than any delay worth
+    hard-coding, so the page is opened when the port answers, not when a timer says so.
+    """
+    import webbrowser
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", opened.append)
+    answers = iter([False, False])
+    monkeypatch.setattr(cli, "port_in_use", lambda p: next(answers, True))
+
+    url = f"http://localhost:{free_port}"
+    cli._open_when_serving(url, free_port).join(timeout=10)
+
+    assert opened == [url], "the interface was left as a link nobody knows how to click"

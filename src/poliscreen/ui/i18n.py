@@ -343,6 +343,8 @@ _ES = {
     'C-amidated': 'C-amidado',
     'Cancel': 'Cancelar',
     'Cannot create that folder: ': 'No puedo crear esa carpeta: ',
+    'ADMET-AI is not installed on this machine: what you see are the properties computed from the structure (MW, LogP, QED), not predicted endpoints. docs/INSTALL.md explains how to add it.':
+        'ADMET-AI no está instalado en esta máquina: lo que ves son las propiedades calculadas a partir de la estructura (MW, LogP, QED), no predicciones. docs/INSTALL.md explica cómo añadirlo.',
     'Cannot find the design engine (admelab).': 'No encuentro el motor de diseño (admelab).',
     'Cannot find the reaction engine (admelab).': 'No encuentro el motor de reacción (admelab).',
     "Cannot find this pose's files in the project folder.": 'No encuentro los archivos de esta pose en la carpeta del proyecto.',

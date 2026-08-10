@@ -105,12 +105,16 @@ def detect(pdb, timeout: int = 300, on_notice=None) -> list:
     try:
         local = tmp / f"{pdb.stem}.pdb"
         shutil.copy(pdb, local)
-        # as_posix, not str: fpocket splits the path on '/' to work out where its output goes, and
-        # handed backslashes it finds none and dies with an access violation before writing
-        # anything. Measured on the Windows build with 4D44: "C:\fp\test.pdb" crashes,
-        # "C:/fp/test.pdb" returns its pockets. Spaces in the path are fine either way.
-        r = subprocess.run(["fpocket", "-f", local.as_posix()], capture_output=True, text=True,
-                           timeout=timeout)
+        # A bare file name, run from the folder that holds it: fpocket works out where its output
+        # goes by taking apart the path it is given, and on Windows every step of that goes wrong.
+        # It splits on '/', so backslashes kill it with an access violation; handed forward slashes
+        # it then creates each component of "C:/.../<name>_out", starting with the bare drive
+        # letter "C:", which fails whenever the process has no current directory on that drive —
+        # and it returns without writing anything while still exiting 0, which reads exactly like a
+        # protein with no cavities. With no path to take apart there is nothing left to get wrong:
+        # the output lands in cwd. Measured with the cross-compiled binary on 4D44.
+        r = subprocess.run(["fpocket", "-f", local.name], cwd=str(tmp), capture_output=True,
+                           text=True, timeout=timeout)
         outd = tmp / f"{pdb.stem}_out"
         info = outd / f"{pdb.stem}_info.txt"
         if not info.exists():

@@ -8,6 +8,13 @@ export PATH="$PREFIX/bin:$PATH"
 
 "$PREFIX/bin/python" -m pip install --no-deps --no-index --find-links "$PREFIX" poliscreen
 
+# The design engine, in this same environment. --no-deps because everything it needs is already in
+# the specs; what is missing is ADMET-AI, and admelab reports that itself. Not fatal: the screening
+# runs without it, only the analogue design would go.
+if ! "$PREFIX/bin/python" -m pip install --no-deps --no-index --find-links "$PREFIX" admelab; then
+    echo "WARNING: analogue design was not installed."
+fi
+
 # Vina is not a conda package and its 1.2.x series is not on any channel, so the official binary
 # is fetched with its SHA256 verified, exactly as scripts/get_vina.sh does.
 if ! bash "$PREFIX/scripts/get_vina.sh" 1.2.5 "$PREFIX/bin"; then

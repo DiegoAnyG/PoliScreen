@@ -9,6 +9,12 @@ set "PATH=%PREFIX%;%PREFIX%\Library\bin;%PREFIX%\Scripts;%PATH%"
 "%PREFIX%\python.exe" -m pip install --no-deps --no-index --find-links "%PREFIX%" poliscreen
 if errorlevel 1 exit /b 1
 
+rem The design engine, in this same environment. --no-deps because everything it needs is already
+rem in the specs; what is missing is ADMET-AI, and admelab reports that itself. Not fatal: the
+rem screening runs without it, only the analogue design would go.
+"%PREFIX%\python.exe" -m pip install --no-deps --no-index --find-links "%PREFIX%" admelab
+if errorlevel 1 echo WARNING: analogue design was not installed.
+
 rem Vina is not a conda package and its 1.2.x series is not on any channel, so the official
 rem binary is fetched with its SHA256 verified, exactly as scripts\get_vina.ps1 does.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PREFIX%\scripts\get_vina.ps1" -Dest "%PREFIX%\Scripts"

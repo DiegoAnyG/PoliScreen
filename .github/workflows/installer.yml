@@ -11,6 +11,7 @@ on:
 
 env:
   FPOCKET_VERSION: "4.2.3"
+  ADMELAB_VERSION: "0.3.0"
 
 jobs:
   # conda-forge has no win-64 fpocket, so the Windows installer carries one built here from
@@ -82,6 +83,23 @@ jobs:
           python -m pip install --upgrade build
           python -m build --wheel --outdir dist
           ls -l dist
+
+      # The design engine travels with the installer, minus its heavy half. admelab needs ADMET-AI
+      # only for the ML predictions, and ADMET-AI drags in torch, which does not coexist with
+      # openbabel/plip/vina; everything else in it is RDKit, which this environment already has.
+      # So the analogue design, the reaction filter and the applicability domain are installed
+      # here, and the ML predictions stay an opt-in second environment (docs/INSTALL.md).
+      - name: Build the admelab wheel
+        shell: bash -el {0}
+        run: |
+          git clone --depth 1 https://github.com/DiegoAnyG/admelab.git admelab-src
+          python -m build --wheel --outdir dist admelab-src
+          # construct.yaml names the file, so a version bump upstream has to fail here and not
+          # halfway through the installer build.
+          test -s "dist/admelab-${ADMELAB_VERSION}-py3-none-any.whl" || {
+              echo "admelab is no longer ${ADMELAB_VERSION}: update ADMELAB_VERSION and installer/construct.yaml"
+              ls -l dist; exit 1
+          }
 
       - name: Build the installer
         shell: bash -el {0}

@@ -223,18 +223,29 @@ missing, the geometric-stability component of the confidence metric will be empt
 
 ---
 
-## Optional — ADMET engine
+## Optional — ADMET-AI predictions
 
-ADMET prediction and analogue design use `admelab` + ADMET-AI + PyTorch. They live
-in a **separate** environment because their dependencies are incompatible with the
-docking ones; PoliScreen invokes them as a subprocess. **The full screening works
-without this engine**: only the reaction-based analogue builder and the ADMET
-report are disabled.
+Analogue design and ADMET use `admelab`. Most of it is RDKit — the reaction filter,
+the descriptors, the rules, the applicability domain — and **the one-click installer
+carries it**, so analogue design works there with nothing else to install. Only the
+ML predictions need ADMET-AI, which drags in PyTorch and does not coexist with the
+docking dependencies (openbabel/plip/vina); without it, admelab returns its own
+RDKit descriptors and says so.
+
+To add them, install `admelab` **with** ADMET-AI in an environment of its own and
+point PoliScreen at it — it invokes it as a subprocess, so nothing is shared:
 
 ```bash
-export POLISCREEN_ADME_PYTHON=/path/to/venv/bin/python
-export POLISCREEN_ADME_ROOT=/path/that/contains/admelab
+python -m venv ~/admet && ~/admet/bin/pip install admet-ai \
+    "admelab @ git+https://github.com/DiegoAnyG/admelab"
+
+export POLISCREEN_ADME_PYTHON=~/admet/bin/python
+export POLISCREEN_ADME_ROOT=~/admet/lib/python3.*/site-packages
 ```
+
+On Windows the same two paths are `...\Scripts\python.exe` and `...\Lib\site-packages`.
+**The full screening works without any of this**: only the ADMET report loses its
+predicted endpoints.
 
 ---
 

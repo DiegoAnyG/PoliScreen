@@ -5,7 +5,7 @@ unsupported by the training data, not wrong. The columns therefore have to reach
 the numbers they qualify — a hard-coded whitelist there used to drop anything it did not name.
 
 The bridge itself needs admelab >= 0.3 and is skipped when that is not installed; the wiring around
-it is checked either way, because the installer ships no admelab at all.
+it is checked either way, because a machine may have no admelab at all.
 """
 import pandas as pd
 import pytest

@@ -10,7 +10,11 @@
 #   ADCP   the Scripps suite is downloaded accepting an academic licence, so it cannot be
 #          redistributed, and it is only built for Linux.
 #   gnina  2 GB plus the CUDA runtime, and useless without an NVIDIA GPU.
-# Both are installed afterwards with scripts/get_adcp.sh and scripts/get_gnina.sh.
+#   ADMET-AI  torch and its model weights, and admelab only needs it for the ML predictions.
+#             admelab itself does travel here, so the analogue design works out of the box; the
+#             predictions degrade to RDKit descriptors until the extra environment exists.
+# The first two are installed afterwards with scripts/get_adcp.sh and scripts/get_gnina.sh; the
+# third is described in docs/INSTALL.md.
 #
 # fpocket comes from conda-forge on Linux and macOS. There is no win-64 build there, so the
 # release workflow cross-compiles one from contrib/fpocket-windows and leaves it in vendor/,
@@ -43,6 +47,11 @@ specs:
   - streamlit 1.59.*
   - pip
   - fpocket 4.2.*                     # [not win]
+  # admelab's own dependencies, minus ADMET-AI. Everything else it needs (rdkit, pandas, numpy,
+  # openpyxl) is already above; these three are only reached by its naming and domain code.
+  - requests
+  - pubchempy
+  - tqdm
 
 license_file: ../LICENSE
 initialize_by_default: false
@@ -54,6 +63,10 @@ keep_pkgs: false
 # from them afterwards.
 extra_files:
   - ../dist/poliscreen-1.0.0-py3-none-any.whl
+  # The design/ADMET engine, without ADMET-AI: the analogue design and the reaction filter work
+  # from RDKit alone, and admelab falls back to its own descriptors when the ML half is absent.
+  # The release workflow builds this wheel; keep the version in step with ADMELAB_VERSION there.
+  - ../dist/admelab-0.3.0-py3-none-any.whl
   - launcher.bat: PoliScreen.bat       # [win]
   - launcher.sh: PoliScreen            # [not win]
   # Library/bin is where conda keeps non-Python executables on Windows, and the launcher

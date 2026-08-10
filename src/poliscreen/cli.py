@@ -51,6 +51,11 @@ def cmd_info(args) -> int:
         i = b.info()
         print(f"  isolated environment: python {i.get('python')} | torch {i.get('torch')} | cuda: {i.get('cuda')}")
         print(f"  modules: {', '.join(i.get('modules', []))}")
+        if not i.get("torch"):
+            # What the installer ships. Design and the RDKit descriptors work; the predicted
+            # endpoints do not, and a table missing columns does not say why on its own.
+            print("  no ADMET-AI there: analogue design and the RDKit descriptors work, the "
+                  "predicted endpoints do not. See docs/INSTALL.md.")
     else:
         print("  without it, screening works; only analogue design and ADMET are disabled.")
         print("  set POLISCREEN_ADME_PYTHON and POLISCREEN_ADME_ROOT if the paths differ.")
@@ -96,6 +101,31 @@ def port_in_use(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
+def _open_when_serving(url: str, port: int, tries: int = 120):
+    """Opens the page in the browser once Streamlit answers, in the background.
+
+    Double-clicking the launcher has to end in a browser: the address printed in a console is
+    clickable only with Ctrl, which nobody outside a terminal knows. Streamlit's own auto-open is
+    not usable here — it comes with --server.headless false, and that brings back its first-run
+    e-mail prompt, which would sit there waiting on a console the user is not reading. Waiting for
+    the port instead of guessing a delay means a slow first start opens a page, not an error.
+    """
+    import threading
+    import time
+    import webbrowser
+
+    def wait():
+        for _ in range(tries):
+            if port_in_use(port):
+                webbrowser.open(url)
+                return
+            time.sleep(0.5)
+
+    t = threading.Thread(target=wait, daemon=True)
+    t.start()
+    return t
+
+
 def cmd_ui(args) -> int:
     import subprocess
     from pathlib import Path
@@ -120,6 +150,7 @@ def cmd_ui(args) -> int:
            "--browser.gatherUsageStats", "false"]
     if address == "127.0.0.1":
         print(f"Local interface at http://localhost:{args.port} (this machine only). Ctrl+C to close.")
+        _open_when_serving(f"http://localhost:{args.port}", args.port)
     else:
         print(f"WARNING: exposed on the local network, no authentication. http://<your-ip>:{args.port}")
     return subprocess.call(cmd)

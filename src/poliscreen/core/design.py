@@ -13,14 +13,39 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
 _RUNNER = Path(__file__).with_name("_admelab_runner.py")
-DEFAULT_PYTHON = Path.home() / "adme" / ".venv" / "bin" / "python"
+# A venv keeps its interpreter in bin/ on POSIX and in Scripts/ on Windows. Spelling only the
+# first left the default unreachable on Windows, where no path can ever match it.
+_VENV_PYTHON = ("Scripts", "python.exe") if os.name == "nt" else ("bin", "python")
+DEFAULT_PYTHON = Path.home() / "adme" / ".venv" / _VENV_PYTHON[0] / _VENV_PYTHON[1]
 DEFAULT_ROOT = Path.home() / "adme"
+
+
+def _installed() -> Optional[tuple]:
+    """(python, root) if admelab is installed in THIS interpreter's environment.
+
+    The separate environment exists because ADMET-AI drags in torch, which does not sit well with
+    openbabel/plip/vina. Everything else in admelab — the reactions, the descriptors, the domain —
+    is RDKit, which the docking environment already has, so admelab installed alongside works and
+    only the ADMET-AI layer is missing (admelab degrades to its RDKit descriptors on its own).
+    That is what makes the engine reachable from the one-click installer, which ships no venv.
+
+    find_spec locates the package without importing it: nothing of admelab is loaded in this
+    process, the runner still goes out to its own.
+    """
+    from importlib.util import find_spec
+    try:
+        spec = find_spec("admelab")
+    except (ImportError, ValueError):
+        return None
+    where = list(getattr(spec, "submodule_search_locations", None) or []) if spec else []
+    return (Path(sys.executable), Path(where[0]).parent) if where else None
 
 
 _EXTERNAL_VALUES = {
@@ -109,8 +134,13 @@ class AdmelabBridge:
 
     def __init__(self, python: Optional[os.PathLike] = None,
                  root: Optional[os.PathLike] = None, timeout: int = 3600):
-        self.python = Path(python or os.environ.get("POLISCREEN_ADME_PYTHON", DEFAULT_PYTHON))
-        self.root = Path(root or os.environ.get("POLISCREEN_ADME_ROOT", DEFAULT_ROOT))
+        # The venv comes first, so a machine that has one keeps using it, ADMET-AI and all; the
+        # copy installed alongside is the fallback for the machines that have no venv to find.
+        fallback = (DEFAULT_PYTHON, DEFAULT_ROOT)
+        if not DEFAULT_PYTHON.exists():
+            fallback = _installed() or fallback
+        self.python = Path(python or os.environ.get("POLISCREEN_ADME_PYTHON", fallback[0]))
+        self.root = Path(root or os.environ.get("POLISCREEN_ADME_ROOT", fallback[1]))
         self.timeout = timeout
 
     def available(self) -> bool:
@@ -174,8 +204,8 @@ class AdmelabBridge:
         return DesignResult(rows, out["columns"], len(rows), len(rows))
 
     def has_applicability(self) -> bool:
-        """Whether the installed admelab carries the domain module. The installer ships no admelab
-        at all, so every caller has to cope with its absence anyway."""
+        """Whether the installed admelab carries the domain module. An older one does not, and a
+        machine may have no admelab at all, so every caller has to cope with its absence anyway."""
         try:
             return "domain" in (self.info().get("modules") or [])
         except AdmelabError:
