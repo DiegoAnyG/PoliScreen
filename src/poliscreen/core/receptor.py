@@ -6,6 +6,7 @@ extracted, protonated and reattached separately.
 """
 from __future__ import annotations
 
+import random
 import subprocess
 import tempfile
 import urllib.request
@@ -226,13 +227,14 @@ def extract_chain(pdb, chain: str, out_path, polypeptide_only: bool = True,
 def prepare(pdb, out_path, keep_chains: Optional[Sequence[str]] = None,
             keep_het: Sequence[str] = (), ph: float = 7.4, add_hydrogens: bool = True,
             keep_modified: Sequence[str] = (), on_notice=None,
-            add_missing_residues: bool = False) -> Path:
+            add_missing_residues: bool = False, seed: int = 42) -> Path:
     """Leaves the receptor ready to dock: no waters, with hydrogens and with whatever is kept.
 
     keep_chains           chains to keep (None = all)
     keep_het              hetero-group keys to keep, e.g. a cofactor
     add_missing_residues  rebuild missing loops; off by default, so as not to invent
                           geometry near the binding site
+    seed                  fixes the hydrogen placement, which is random otherwise (see below)
     """
     pdb, out_path = Path(pdb), Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -272,7 +274,30 @@ def prepare(pdb, out_path, keep_chains: Optional[Sequence[str]] = None,
     fixer.findMissingAtoms()
     fixer.addMissingAtoms()
     if add_hydrogens:
-        fixer.addMissingHydrogens(ph)
+        # Seeded, because OpenMM places the new hydrogens at RANDOM positions and then relaxes
+        # them with a 50-step minimisation -- its own comment reads "The hydrogens were added at
+        # random positions" -- drawing from Python's global RNG. Unseeded, the same PDB gives a
+        # different receptor on every single run: heavy atoms identical to the last decimal,
+        # hydrogens up to 2.3 A apart, about two thirds of them moving more than 0.1 A. That
+        # travels the whole way down — a different pdbqt, different poses, a different PLIP
+        # fingerprint (its H-bonds are read off these hydrogens) and a ranking normalised against
+        # a control that is itself no longer the same. Two machines never agreed; neither did one
+        # machine with itself. The RNG state is restored so that seeding stays inside this call.
+        # Seeding alone leaves ~0.1 A of jitter: that minimisation runs on whatever OpenMM platform
+        # is fastest here, and the multi-threaded ones sum in a different order every time. The
+        # Reference platform is single-threaded and double precision, so it lands on the same
+        # coordinates on every machine. It costs about a second, once, per receptor.
+        try:
+            from openmm import Platform
+            fixer.platform = Platform.getPlatformByName("Reference")
+        except Exception:
+            pass
+        state = random.getstate()
+        random.seed(seed)
+        try:
+            fixer.addMissingHydrogens(ph)
+        finally:
+            random.setstate(state)
     with open(out_path, "w") as fh:
         PDBFile.writeFile(fixer.topology, fixer.positions, fh, keepIds=True)
 
