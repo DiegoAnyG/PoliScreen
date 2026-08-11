@@ -191,6 +191,16 @@ def auto_box(pdb) -> Box:
     return Box.around(pts, pad=0.0, lo=24.0, hi=24.0)
 
 
+def has_hydrogens(path) -> bool:
+    """True if the structure already carries explicit hydrogens."""
+    for line in Path(path).read_text(errors="ignore").splitlines():
+        if line[:6] in ("ATOM  ", "HETATM"):
+            element = line[76:78].strip() or line[12:16].strip()
+            if element[:1] == "H":
+                return True
+    return False
+
+
 def to_pdbqt(src, dst, receptor: bool = False, ph: float = 7.4) -> bool:
     """Converts to pdbqt with OpenBabel. Receptor: rigid; ligand: Gasteiger charges."""
     src, dst = Path(src), Path(dst)
@@ -200,7 +210,21 @@ def to_pdbqt(src, dst, receptor: bool = False, ph: float = 7.4) -> bool:
     dst.parent.mkdir(parents=True, exist_ok=True)
     cmd = ["obabel", str(src), "-O", str(dst)]
     # Keeps the largest fragment: a ligand extracted from a PDB can come out fragmented and Vina rejects it.
-    cmd += ["-xr", "-p", str(ph)] if receptor else ["-r", "-p", str(ph), "--partialcharge", "gasteiger"]
+    if receptor:
+        cmd += ["-xr"]
+        # obabel -p STRIPS every hydrogen and re-adds them at RANDOM positions, so the same prepared
+        # receptor produced a different pdbqt on every run: about 25 polar hydrogens moved, some by
+        # 1.8 A. Those are exactly the atoms Vina types HD and PLIP reads its hydrogen bonds off, so
+        # the poses and the interaction fingerprint moved with them. It is the second half of the
+        # fault seeded out of receptor.prepare(), and the reason two machines holding a
+        # byte-identical prepared receptor still disagreed on the ranking. What comes out of
+        # prepare() is already protonated at this pH by PDBFixer, with a better pKa model than
+        # obabel's and a fixed seed, so redoing it here could only lose that. Only a receptor that
+        # arrives with no hydrogens at all still needs obabel to put them in.
+        if not has_hydrogens(src):
+            cmd += ["-p", str(ph)]
+    else:
+        cmd += ["-r", "-p", str(ph), "--partialcharge", "gasteiger"]
     if src.suffix.lower() == ".smi":
         cmd += ["--gen3d"]
     subprocess.run(cmd, capture_output=True, text=True)
