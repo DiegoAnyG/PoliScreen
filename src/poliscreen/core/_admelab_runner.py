@@ -74,9 +74,16 @@ def _do_esterify(p):
             r = dict(pr)
             r["alcohol"] = name_ or smi
             r["alcohol_smiles"] = smi
-            v = pr.get("viabilidad_fischer") or pr.get("viabilidad") or "unknown"
+            # admelab renamed this key and its vocabulary to English ('fischer_viability': 'good',
+            # 'moderate', 'unfavorable (...)', 'difficult (...)'). Reading only the old Spanish key
+            # made every product read 'unknown', and -- worse, because it silently changed what got
+            # docked -- made every product count as synthesizable, since no English verdict contains
+            # a Spanish word. Both vocabularies are accepted so an older admelab keeps working.
+            v = (pr.get("fischer_viability") or pr.get("viabilidad_fischer")
+                 or pr.get("viabilidad") or "unknown")
             r["feasibility"] = v
-            r["synthesizable"] = not any(w in str(v).lower() for w in ("desfavorable", "dificil"))
+            r["synthesizable"] = not any(w in str(v).lower() for w in
+                                         ("unfavorable", "difficult", "desfavorable", "dificil"))
             out.append({k: _clean(v2) for k, v2 in r.items()})
     return {"ok": True, "action": "esterify", "products": out}
 
