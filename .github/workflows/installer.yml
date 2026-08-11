@@ -152,10 +152,14 @@ jobs:
           ls -l out
 
       # Each run leaves about 1.5 GB across the three installers, and the free account has 500 MB
-      # of Actions storage in total, so the default 90 days fills the quota after two runs and
-      # blocks every later push. Release assets do not count against it: once a tag exists, that
-      # is where the installers should be fetched from, not here.
+      # of Actions storage in total, so the quota fills after one run and blocks every later push
+      # -- including the 1.4 MB fpocket hand-off, which is what actually stops the next build.
+      # Release assets do not count against it, so on a tag the installers go there and this step
+      # is skipped entirely: a tag build now stores nothing. Only a trial build off a branch, which
+      # has no release to attach to, still needs somewhere to leave them, and five days is enough
+      # to fetch them and short enough that the next one is not blocked by this one.
       - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         with:
           name: ${{ matrix.artifact }}
           path: out/*
