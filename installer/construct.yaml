@@ -52,6 +52,15 @@ specs:
   - streamlit 1.59.*
   - pip
   - fpocket 4.2.*                     # [not win]
+  # OPSIN is a Java program and there is no Python implementation of it, so verifying that a IUPAC
+  # name really describes the molecule being docked needs a JVM. Without one the check does not
+  # degrade, it inverts: every name comes back unparseable and is dropped, which read as "0 of 0
+  # named" on a Windows install while the same compounds named 28 of 44 on Linux. It is the
+  # heaviest thing here by far -- about 120 MB in the installer and 500 MB once unpacked, more
+  # than the rest of the environment together -- and it buys only the labels in the tables, never
+  # a number. 25 rather than the 17 or 21 LTS because conda-forge ships it stripped: 122 MB
+  # against 174 and 186.
+  - openjdk 25.*
   # admelab's own dependencies, minus ADMET-AI. Everything else it needs (rdkit, pandas, numpy,
   # openpyxl) is already above; these three are only reached by its naming and domain code.
   - requests
@@ -83,6 +92,10 @@ extra_files:
   - vendor/fpocket.exe: Library/bin/fpocket.exe   # [win]
   - vendor/tpocket.exe: Library/bin/tpocket.exe   # [win]
   - vendor/dpocket.exe: Library/bin/dpocket.exe   # [win]
+  # OPSIN is a jar, so one destination serves all three platforms and core/naming.py looks here.
+  # Fetched and SHA256-verified by the release workflow, like Vina. MIT, licence beside it.
+  - vendor/opsin.jar: share/opsin/opsin.jar
+  - vendor/OPSIN-LICENSE.txt: share/opsin/OPSIN-LICENSE.txt
   - ../scripts/get_vina.ps1: scripts/get_vina.ps1
   - ../scripts/get_vina.sh: scripts/get_vina.sh
   - ../scripts/get_adcp.sh: scripts/get_adcp.sh

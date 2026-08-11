@@ -14,6 +14,8 @@ env:
   ADMELAB_VERSION: "0.3.0"
   VINA_VERSION: "1.2.5"
   VINA_SHA256: "b5a23b226ee5dc1b028df04082d13a7b0e5b9b12b988bbcf9498cb351e20b38f"
+  OPSIN_VERSION: "2.9.0"
+  OPSIN_SHA256: "c2e29326c281f87b59a05d934d8589adac6e9d17b95b984931b3e739111b360f"
 
 jobs:
   # conda-forge has no win-64 fpocket, so the Windows installer carries one built here from
@@ -86,6 +88,23 @@ jobs:
           echo "${VINA_SHA256} *installer/vendor/vina.exe" | sha256sum -c -
           curl -fsSL -o installer/vendor/AutoDock-Vina-LICENSE.txt \
             "https://raw.githubusercontent.com/ccsb-scripps/AutoDock-Vina/v${VINA_VERSION}/LICENSE"
+
+      # Every platform, unlike Vina: OPSIN is a jar and the same file serves all three. It is not
+      # packaged for conda anywhere, so it is fetched and pinned by hash here.
+      - name: Collect OPSIN
+        shell: bash -el {0}
+        run: |
+          mkdir -p installer/vendor
+          curl -fsSL -o installer/vendor/opsin.jar \
+            "https://github.com/dan2097/opsin/releases/download/${OPSIN_VERSION}/opsin-cli-${OPSIN_VERSION}-jar-with-dependencies.jar"
+          # macOS has shasum and no sha256sum; the other two are the other way round.
+          if command -v sha256sum >/dev/null; then
+            echo "${OPSIN_SHA256} *installer/vendor/opsin.jar" | sha256sum -c -
+          else
+            echo "${OPSIN_SHA256} *installer/vendor/opsin.jar" | shasum -a 256 -c -
+          fi
+          curl -fsSL -o installer/vendor/OPSIN-LICENSE.txt \
+            "https://raw.githubusercontent.com/dan2097/opsin/${OPSIN_VERSION}/LICENSE.txt"
 
       # The base environment is used as it comes: creating one only to run constructor from it
       # failed on Windows, where the new environment was not there to activate. `defaults` is
