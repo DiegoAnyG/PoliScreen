@@ -50,6 +50,11 @@ jobs:
 
   build:
     needs: fpocket-windows
+    # The repository hands workflows a read-only token, so attaching the installers to the release
+    # needed this and would have failed at the last step of a tag build, after twenty minutes of
+    # work on three runners. Only this job asks for it, and only for the release.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
