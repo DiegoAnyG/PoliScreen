@@ -49,7 +49,23 @@ def default_root() -> Path:
         return Path(env)
     home = Path.home()
     legacy = home / _LEGACY_JOBS_DIR
-    return legacy if legacy.is_dir() else home / JOBS_DIR
+    # The legacy folder wins only while it still holds something. It exists to keep older installs
+    # opening on the projects they already have; an empty one has nothing to keep, and it comes back
+    # by itself -- an interface left running across the rename recreates it as a bare date folder,
+    # which then captured the default again on the next start.
+    return legacy if _has_content(legacy) else home / JOBS_DIR
+
+
+def _has_content(path: Path) -> bool:
+    """A projects root is in use when at least one project inside it holds something.
+
+    Bare date folders do not count: those are what an interface leaves behind just by starting.
+    """
+    try:
+        return path.is_dir() and any(any(d.iterdir()) if d.is_dir() else True
+                                     for d in path.iterdir())
+    except OSError:
+        return False
 
 
 def default_project(root: Optional[Path] = None) -> Path:

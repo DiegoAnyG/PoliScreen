@@ -26,12 +26,22 @@ def test_default_project_is_one_folder_per_day(monkeypatch):
     assert len(name) == 6 and name.isdigit(), name
 
 
-def test_default_root_keeps_an_existing_legacy_folder(monkeypatch, tmp_path):
+def test_default_root_keeps_a_legacy_folder_that_holds_projects(monkeypatch, tmp_path):
     monkeypatch.delenv("POLISCREEN_PROJECTS", raising=False)
     monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
     assert ss.default_root().name == ss.JOBS_DIR
-    (tmp_path / ss._LEGACY_JOBS_DIR).mkdir()
+    (tmp_path / ss._LEGACY_JOBS_DIR / "8HTB" / "receptors").mkdir(parents=True)
+    (tmp_path / ss._LEGACY_JOBS_DIR / "8HTB" / "receptors" / "ready.pdb").write_text("END\n")
     assert ss.default_root().name == ss._LEGACY_JOBS_DIR
+
+
+def test_an_empty_legacy_folder_does_not_capture_the_default(monkeypatch, tmp_path):
+    """It comes back on its own: an interface left running across the rename recreates it as a
+    bare date folder, and the old rule then handed it the default again on the next start."""
+    monkeypatch.delenv("POLISCREEN_PROJECTS", raising=False)
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: tmp_path))
+    (tmp_path / ss._LEGACY_JOBS_DIR / "081126").mkdir(parents=True)
+    assert ss.default_root().name == ss.JOBS_DIR
 
 
 def test_the_interface_never_builds_a_project_path_from_home():

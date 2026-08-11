@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Optional, Sequence
@@ -23,18 +24,38 @@ from typing import Optional, Sequence
 TOOLS = Path.home() / "adme" / "tools"
 
 
+def _tool_dirs() -> list:
+    """Where OPSIN and its Java may live, most specific first.
+
+    `~/adme/tools` is where a machine that installed admelab by hand keeps them, and was the only
+    place looked at -- which is why a packaged install, having no `~/adme` at all, reported every
+    name unparseable instead of missing. An installer puts them beside the environment instead.
+    """
+    env_root = Path(sys.prefix)
+    return [TOOLS, env_root / "tools", env_root / "share" / "opsin", env_root / "Library" / "tools"]
+
+
 def _opsin_jar() -> Optional[Path]:
     env = os.environ.get("POLISCREEN_OPSIN")
     if env and Path(env).exists():
         return Path(env)
-    jar = TOOLS / "opsin.jar"
-    return jar if jar.exists() else None
+    for d in _tool_dirs():
+        jar = d / "opsin.jar"
+        if jar.exists():
+            return jar
+    return None
 
 
 def _java() -> Optional[str]:
-    for cand in sorted(TOOLS.glob("*jre*/bin/java")) + sorted(TOOLS.glob("*jdk*/bin/java")):
-        if cand.exists():
-            return str(cand)
+    # java.exe on Windows, so the name is globbed rather than spelled out.
+    for d in _tool_dirs():
+        for pattern in ("*jre*/bin/java", "*jre*/bin/java.exe", "*jdk*/bin/java", "*jdk*/bin/java.exe"):
+            for cand in sorted(d.glob(pattern)):
+                if cand.exists():
+                    return str(cand)
+    for exe in (Path(sys.prefix) / "bin" / "java", Path(sys.prefix) / "Library" / "bin" / "java.exe"):
+        if exe.exists():
+            return str(exe)
     return shutil.which("java")
 
 
