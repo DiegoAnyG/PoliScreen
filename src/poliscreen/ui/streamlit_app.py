@@ -536,6 +536,19 @@ with _menu_archivo:
         st.error(t('Cannot create that folder: {v1}').format(v1=e))
         st.stop()
     st.caption(t('Results in `{v1}`').format(v1=proj))
+    # A project is named after the day it starts. Reopen the interface after midnight and this
+    # resolves to a new, empty folder: the analysis finished last night is one directory over, and
+    # without this line nothing on screen says where it went.
+    try:
+        _empty = not any(proj.iterdir())
+    except OSError:
+        _empty = False
+    if _empty:
+        _prev = ss.previous_project(proj)
+        if _prev:
+            st.info(t('This project is empty — it is a new day. The previous one, with your '
+                      'analysis in it, is `{v1}`: paste that path above to go back to it.'
+                      ).format(v1=_prev))
     if S.get("_proj_loaded") != str(proj):
         S["_proj_loaded"] = str(proj)
         rec_dir, lig_dir = lay.artifact(proj, lay.RECEPTORS), lay.artifact(proj, lay.INPUT_LIGANDS)
@@ -639,10 +652,10 @@ with _menu_cfg:
     # Seeded through the key, not through a default value: these keys are reassigned every pass to
     # survive changing stage, and a widget cannot take both without Streamlit dropping the default.
     S.setdefault("cfg_split", 0.50)
-    S.setdefault("cfg_height", 520)
+    S.setdefault("cfg_height", 700)
     st.slider(t("Split between tools and viewer"), 0.3, 0.7, step=0.02, key="cfg_split",
               help=t("Left gives more space to the viewer; right, to the tools."))
-    st.slider(t("Panel height (px)"), 380, 900, step=20, key="cfg_height")
+    st.slider(t("Panel height (px)"), 380, 1200, step=20, key="cfg_height")
 
 if S.pop("_open_downloads", False):
     _downloads_dialog(proj)
@@ -1880,7 +1893,7 @@ def _viewer_height(reserve: int) -> int:
     """Height of the 3D viewer so the panel shows selectors, viewer and footer without scroll. The
     height of each stage's chrome is subtracted from the panel height (cfg_alto); the minimum keeps
     it from ending up tiny if the panel is very short."""
-    return max(190, int(S.get("cfg_height", 520)) - reserve)
+    return max(190, int(S.get("cfg_height", 700)) - reserve)
 
 
 def _viewer_panel(etapa: str):
@@ -2206,7 +2219,7 @@ def _visual_summary():
 _STAGE_FN = {"Receptors": _stage_receptors, "Ligands": _stage_ligands,
              "Run": _stage_run, "Results": _stage_results}
 
-_HEIGHT = int(S.get("cfg_height", 520))
+_HEIGHT = int(S.get("cfg_height", 700))
 _rep = float(S.get("cfg_split", 0.50))
 _izq, _der = st.columns([_rep, 1.0 - _rep], gap="medium")
 with _izq:

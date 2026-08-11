@@ -61,6 +61,23 @@ def default_project(root: Optional[Path] = None) -> Path:
     return (Path(root) if root else default_root()) / datetime.now().strftime("%m%d%y")
 
 
+def previous_project(current) -> Optional[Path]:
+    """The most recently used project beside `current` that already has something in it.
+
+    The daily folder is deliberate — see default_project — but it has a sharp edge: cross midnight,
+    or just reopen the interface the next morning, and the session resolves to a brand-new empty
+    folder. Yesterday's analysis is one directory over and nothing on screen says so, which reads
+    as having lost it. Returns None when there is nothing to point at.
+    """
+    current = Path(current)
+    try:
+        others = [d for d in current.parent.iterdir()
+                  if d.is_dir() and d != current and any(d.iterdir())]
+    except OSError:
+        return None
+    return max(others, key=lambda d: d.stat().st_mtime, default=None)
+
+
 def normalize_path(text_: str, base: Optional[Path] = None) -> tuple:
     """Turns what the user types into a usable POSIX path.
 

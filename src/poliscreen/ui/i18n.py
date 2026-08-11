@@ -345,6 +345,8 @@ _ES = {
     'Cannot create that folder: ': 'No puedo crear esa carpeta: ',
     'ADMET-AI is not installed on this machine: what you see are the properties computed from the structure (MW, LogP, QED), not predicted endpoints. docs/INSTALL.md explains how to add it.':
         'ADMET-AI no está instalado en esta máquina: lo que ves son las propiedades calculadas a partir de la estructura (MW, LogP, QED), no predicciones. docs/INSTALL.md explica cómo añadirlo.',
+    'This project is empty — it is a new day. The previous one, with your analysis in it, is `{v1}`: paste that path above to go back to it.':
+        'Este proyecto está vacío — es un día nuevo. El anterior, con tu análisis dentro, es `{v1}`: pega esa ruta arriba para volver a él.',
     'Cannot find the design engine (admelab).': 'No encuentro el motor de diseño (admelab).',
     'Cannot find the reaction engine (admelab).': 'No encuentro el motor de reacción (admelab).',
     "Cannot find this pose's files in the project folder.": 'No encuentro los archivos de esta pose en la carpeta del proyecto.',
