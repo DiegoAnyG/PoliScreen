@@ -8,7 +8,7 @@ dist/
 venv/
 env/
 
-# Entornos y credenciales
+# Environments and credentials
 .env
 *.key
 *.pem
@@ -26,18 +26,20 @@ san/
 *.dcd
 *.zip
 
-# Modelos descargados
+# Downloaded models
 *.pt
 *.ckpt
 
-# Notas de herramientas
+# Editor and tooling state: a developer's machine, not part of the product
 .ipynb_checkpoints/
 .claude/
+.vscode/
+.idea/
 # Personal MCP server config (memory, etc.): a developer's tool, not part of the product,
 # and it must never reach the public repo.
 .mcp.json
 
-# Sistema
+# Operating system
 .DS_Store
 Thumbs.db
 
