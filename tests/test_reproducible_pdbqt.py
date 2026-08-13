@@ -74,6 +74,43 @@ def test_the_prepared_hydrogens_are_the_ones_that_reach_vina(tmp_path):
     assert " 3.012   0.345   2.789" in out, "the serine hydroxyl hydrogen was moved"
 
 
+def test_a_pdbqt_from_an_older_conversion_is_not_reused(tmp_path):
+    """The cache was keyed on existence, and that is how a fixed pipeline keeps the old answer.
+
+    A project folder carried over from an earlier version kept its receptor pdbqt -- the randomly
+    re-protonated one -- and every later run docked against it. The code on disk was correct, the
+    results were not, and nothing on screen could tell a cached file from a fresh one.
+    """
+    src = tmp_path / "ready.pdb"
+    src.write_text(PROTONATED)
+    old = tmp_path / "old.pdbqt"
+    _convert(src, old)
+    assert dk.pdbqt_is_current(old)
+
+    unstamped = "\n".join(line for line in old.read_text().splitlines()
+                          if not line.startswith("REMARK POLISCREEN"))
+    old.write_text(unstamped + "\n")
+    assert not dk.pdbqt_is_current(old), "no stamp means it predates the fix and must be rebuilt"
+
+    old.write_text(f"REMARK POLISCREEN PDBQT RECIPE {dk.PDBQT_RECIPE - 1}\n" + unstamped)
+    assert not dk.pdbqt_is_current(old), "an earlier recipe must be rebuilt"
+
+
+def test_an_empty_or_missing_pdbqt_is_not_current(tmp_path):
+    assert not dk.pdbqt_is_current(tmp_path / "absent.pdbqt")
+    (tmp_path / "empty.pdbqt").write_text("")
+    assert not dk.pdbqt_is_current(tmp_path / "empty.pdbqt")
+
+
+def test_the_stamp_does_not_disturb_the_structure(tmp_path):
+    """It is a REMARK, which every pdbqt reader skips -- but the atoms must still be intact."""
+    src = tmp_path / "ready.pdb"
+    src.write_text(PROTONATED)
+    out = _convert(src, tmp_path / "a.pdbqt")
+    assert [ln for ln in out.splitlines() if ln.startswith(("ATOM", "HETATM"))]
+    assert out.rstrip().splitlines()[-1].startswith("REMARK POLISCREEN")
+
+
 def test_a_receptor_without_hydrogens_still_gets_them(tmp_path):
     """Skipping the protonation must not leave a bare structure bare."""
     src = tmp_path / "bare.pdb"

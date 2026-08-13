@@ -191,6 +191,41 @@ def auto_box(pdb) -> Box:
     return Box.around(pts, pad=0.0, lo=24.0, hi=24.0)
 
 
+# Bumped whenever to_pdbqt changes how the file is made. The conversion was cached by existence
+# alone, so a pdbqt written before a fix was reused for ever: on a project folder carried over from
+# an earlier version the receptor reaching Vina was still the randomly re-protonated one, and the
+# ranking moved with it while the code on disk was correct. Nothing said so, because from the
+# outside a cached file and a fresh one are the same file.
+#   1  the original conversion, which let obabel re-protonate the receptor at random
+#   2  hydrogens kept as prepared -- see to_pdbqt
+PDBQT_RECIPE = 2
+_STAMP = "REMARK POLISCREEN PDBQT RECIPE "
+
+
+def pdbqt_is_current(path) -> bool:
+    """True when this pdbqt was written by the conversion in use now.
+
+    An unstamped file predates the stamp, and therefore comes from the conversion that randomised
+    the hydrogens, so it is rebuilt. Rebuilding costs about a second for a receptor; being wrong
+    costs a ranking nobody can reproduce.
+    """
+    path = Path(path)
+    if not path.exists() or path.stat().st_size == 0:
+        return False
+    # The stamp is appended, so it is at the end; the whole file is already in memory from the read
+    # and a receptor is a few thousand lines, so there is nothing to gain by stopping early.
+    for line in reversed(path.read_text(errors="ignore").splitlines()):
+        if line.startswith(_STAMP):
+            return line[len(_STAMP):].strip() == str(PDBQT_RECIPE)
+    return False
+
+
+def _write_stamp(path) -> None:
+    """A REMARK, which every pdbqt reader ignores and Vina has always skipped."""
+    with Path(path).open("a", encoding="utf-8") as fh:
+        fh.write(f"{_STAMP}{PDBQT_RECIPE}\n")
+
+
 def has_hydrogens(path) -> bool:
     """True if the structure already carries explicit hydrogens."""
     for line in Path(path).read_text(errors="ignore").splitlines():
@@ -206,6 +241,8 @@ def to_pdbqt(src, dst, receptor: bool = False, ph: float = 7.4) -> bool:
     src, dst = Path(src), Path(dst)
     if src.suffix.lower() == ".pdbqt":
         shutil.copy(src, dst)
+        if dst.exists():
+            _write_stamp(dst)
         return dst.exists()
     dst.parent.mkdir(parents=True, exist_ok=True)
     cmd = ["obabel", str(src), "-O", str(dst)]
@@ -228,7 +265,10 @@ def to_pdbqt(src, dst, receptor: bool = False, ph: float = 7.4) -> bool:
     if src.suffix.lower() == ".smi":
         cmd += ["--gen3d"]
     subprocess.run(cmd, capture_output=True, text=True)
-    return dst.exists() and dst.stat().st_size > 0
+    made = dst.exists() and dst.stat().st_size > 0
+    if made:
+        _write_stamp(dst)
+    return made
 
 
 def scores_from_pdbqt(path) -> list:
@@ -496,17 +536,33 @@ def dock_batch(receptors: Sequence, ligands: Sequence, boxes: dict, work_dir,
     if targets is None:
         targets = [(r, Path(r).stem, boxes[str(r)]) for r in receptors if str(r) in boxes]
 
+    # Inputs rebuilt on this run. Their poses were docked against a different file and cannot be
+    # reused: invalidating the pdbqt without invalidating what was docked with it would move the
+    # staleness one level down and leave it just as invisible.
+    rebuilt = set()
+
     rec_pdbqt = {}
     for rpath, _sid, _box in targets:
         if str(rpath) in rec_pdbqt:
             continue
         dst = prep / f"{Path(rpath).stem}.pdbqt"
-        rec_pdbqt[str(rpath)] = dst if (dst.exists() or to_pdbqt(rpath, dst, receptor=True, ph=ph)) else None
+        # pdbqt_is_current, not exists: a file from an older conversion has to be rebuilt, or a
+        # project carried over from a previous version keeps docking against the receptor that
+        # version produced, silently, for ever.
+        if pdbqt_is_current(dst):
+            rec_pdbqt[str(rpath)] = dst
+        else:
+            rec_pdbqt[str(rpath)] = dst if to_pdbqt(rpath, dst, receptor=True, ph=ph) else None
+            rebuilt.add(str(rpath))
 
     lig_pdbqt = {}
     for l in ligands:
         dst = prep / f"{Path(l).stem}.pdbqt"
-        lig_pdbqt[str(l)] = dst if (dst.exists() or to_pdbqt(l, dst, ph=ph)) else None
+        if pdbqt_is_current(dst):
+            lig_pdbqt[str(l)] = dst
+        else:
+            lig_pdbqt[str(l)] = dst if to_pdbqt(l, dst, ph=ph) else None
+            rebuilt.add(str(l))
 
     # Ligands too flexible for Vina are set aside: their pose would be meaningless and they can exhaust memory.
     previous_errors = []
@@ -529,8 +585,14 @@ def dock_batch(receptors: Sequence, ligands: Sequence, boxes: dict, work_dir,
                 continue
             base = pose_name(sid, Path(l).stem)
             out = poses / f"{base}.pdbqt"
-            if out.exists() and list(poses.glob(f"{base}-model*.pdb")):
+            stale = str(rpath) in rebuilt or str(l) in rebuilt
+            if not stale and out.exists() and list(poses.glob(f"{base}-model*.pdb")):
                 continue
+            if stale:
+                # The split models are regenerated from the pose file, and split_models returns
+                # early when they are already there, so they have to go with it.
+                for old in [out] + list(poses.glob(f"{base}-model*.pdb")):
+                    old.unlink(missing_ok=True)
             tasks.append((rpath, l, box, base, out))
 
     def run(t):
