@@ -30,4 +30,16 @@ services:
       # nothing and the bridge reports the engine as unavailable, which is handled.
       POLISCREEN_ADME_PYTHON: ${POLISCREEN_ADME_PYTHON:-/opt/conda/envs/admet/bin/python}
       POLISCREEN_ADME_ROOT: ${POLISCREEN_ADME_ROOT:-/opt/adme}
-    restart: unless-stopped
+    # Ctrl+C has to stop everything and leave nothing behind, the way the Windows launcher does.
+    # Two things were in the way.
+    #
+    # `restart: unless-stopped` is the obvious one: it brings the container back after a crash and
+    # starts it again when Docker Desktop next starts, which is precisely the parasite process
+    # this is meant not to leave. A screening is something you start, not a service.
+    #
+    # `init` is the quiet one. streamlit is PID 1 in the container, and PID 1 is exempt from the
+    # default signal handlers: Python installs one for SIGINT but not for SIGTERM, so the SIGTERM
+    # compose sends on Ctrl+C was ignored, and the container was SIGKILLed ten seconds later with
+    # the run half-written. tini takes PID 1, forwards the signal to streamlit and reaps whatever
+    # the docking left behind.
+    init: true
