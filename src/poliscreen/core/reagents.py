@@ -21,6 +21,23 @@ from . import reactions as rx
 SOURCES = ("yours", "internal", "pubchem")
 PUG = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
 
+# PubChem renamed these in 2025: IsomericSMILES became SMILES, and CanonicalSMILES became
+# ConnectivitySMILES. The request still accepts the old spelling, which is what made this so quiet
+# -- the search kept returning rows, every row was missing the key the code asked for, every row
+# was skipped, and the interface reported "PubChem responded but with no useful results" as if the
+# database had nothing. The current name is requested and all four are read, so the discovery keeps
+# working whichever spelling comes back.
+SMILES_PROPERTY = "SMILES"
+_SMILES_KEYS = ("SMILES", "IsomericSMILES", "ConnectivitySMILES", "CanonicalSMILES")
+
+
+def smiles_of(record: dict) -> Optional[str]:
+    """The SMILES out of one PubChem property record, whichever spelling it arrived under."""
+    for key in _SMILES_KEYS:
+        if record.get(key):
+            return record[key]
+    return None
+
 
 @dataclass
 class Reagent:
@@ -130,7 +147,7 @@ def from_pubchem(reaction: rx.Reaction, max_records: int = 25, timeout: int = 30
     """
     smarts = reaction.partner_smarts
     url = (f"{PUG}/compound/fastsubstructure/smarts/{urllib.parse.quote(smarts)}/property/"
-           f"IsomericSMILES,Title/JSON?MaxRecords={int(max_records)}")
+           f"{SMILES_PROPERTY},Title/JSON?MaxRecords={int(max_records)}")
     last_ = ""
     for attempt in range(retries + 1):
         try:
@@ -138,7 +155,7 @@ def from_pubchem(reaction: rx.Reaction, max_records: int = 25, timeout: int = 30
                 props = json.loads(resp.read())["PropertyTable"]["Properties"]
             out = []
             for pr in props:
-                smi = pr.get("IsomericSMILES") or pr.get("CanonicalSMILES")
+                smi = smiles_of(pr)
                 if not smi:
                     continue
                 r = _mk(pr.get("Title") or "unnamed CID", smi, "pubchem")
