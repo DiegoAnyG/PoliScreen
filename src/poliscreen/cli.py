@@ -148,12 +148,47 @@ def cmd_ui(args) -> int:
            "--server.address", address,
            "--server.port", str(args.port),
            "--browser.gatherUsageStats", "false"]
+    url = f"http://localhost:{args.port}"
+    if getattr(args, "window", False):
+        return _ui_in_a_window(cmd, url, args.port)
+
     if address == "127.0.0.1":
-        print(f"Local interface at http://localhost:{args.port} (this machine only). Ctrl+C to close.")
-        _open_when_serving(f"http://localhost:{args.port}", args.port)
+        print(f"Local interface at {url} (this machine only). Ctrl+C to close.")
+        _open_when_serving(url, args.port)
     else:
         print(f"WARNING: exposed on the local network, no authentication. http://<your-ip>:{args.port}")
     return subprocess.call(cmd)
+
+
+def _ui_in_a_window(cmd, url: str, port: int) -> int:
+    """The interface as a desktop window, with the server tied to that window's lifetime.
+
+    Kept apart from the ordinary path above, which is untouched: that one hands the terminal to
+    Streamlit so Ctrl+C reaches it, and it is what the Windows launcher relies on for its
+    "Terminate batch job" prompt. Here there is no terminal to hand over, so the server is a
+    background process this function owns and has to clean up -- when the window is closed, on
+    Ctrl+C, and on the way out of an exception. The `finally` is the whole point: a return path
+    that skips it is a screening still running with nothing on screen.
+    """
+    from .ui import desktop
+
+    proc = None
+    try:
+        proc = desktop.spawn_group(cmd)
+        if not desktop.wait_until_serving(port, proc=proc):
+            print("ERROR: the interface did not start. Run `poliscreen ui` without --window to "
+                  "see what it says.", file=sys.stderr)
+            return proc.returncode or 1
+        if desktop.open_window(url) == "browser-tab":
+            # Only a tab was opened, and a tab cannot be waited on. Falling back to the ordinary
+            # behaviour beats exiting and killing the server the user is about to read.
+            print(f"No window backend available; opened {url} in the browser. Ctrl+C to close.")
+            return proc.wait()
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        desktop.kill_group(proc)
+    return 0
 
 
 def cmd_prep(args) -> int:
@@ -255,6 +290,9 @@ def main(argv=None) -> int:
     pui.add_argument("--port", type=int, default=8501)
     pui.add_argument("--expose", action="store_true",
                      help="listen on the local network (no authentication); by default only 127.0.0.1")
+    pui.add_argument("--window", action="store_true",
+                     help="open in a desktop window instead of a browser tab; closing the window "
+                          "stops the interface and everything it started")
     pui.set_defaults(func=cmd_ui)
 
     pprep = sub.add_parser("prep", help="prepare a receptor: download, inspect and clean")
