@@ -126,14 +126,42 @@ def normalize_path(text_: str, base: Optional[Path] = None) -> tuple:
         first_ = p.parts[0] if p.parts else ""
         p = Path("/") / p if (Path("/") / first_).is_dir() else (base or Path.home()) / p
 
+    lost = warn_if_not_persistent(p)
     if str(p) == raw_text:
-        return p, ""
+        return p, lost
     if "\\" in raw_text:
         notice = (f"A Windows path was detected. PoliScreen runs inside Linux (WSL), "
                  f"so `{p}` will be used.")
     else:
         notice = f"Path adjusted to `{p}`."
-    return p, notice
+    return p, (f"{notice} {lost}" if lost else notice)
+
+
+def in_container() -> bool:
+    """True when running inside a container, where most of the filesystem does not outlive it."""
+    return Path("/.dockerenv").exists() or os.environ.get("POLISCREEN_IN_CONTAINER") == "1"
+
+
+def warn_if_not_persistent(path) -> str:
+    """Empty unless this path is inside a container and will be discarded with it.
+
+    A container mounts one folder from the host and invents the rest. Typing a Windows path there
+    does not fail: the translation yields a Linux path, nothing exists at it, so it gets created --
+    inside the container. The screening then runs, writes, reports success, and every file goes
+    when the container stops. Nothing looks wrong until everything is gone.
+    """
+    if not in_container():
+        return ""
+    mounted = os.environ.get("POLISCREEN_PROJECTS")
+    if not mounted:
+        return ""
+    try:
+        Path(path).resolve().relative_to(Path(mounted).resolve())
+        return ""
+    except (ValueError, OSError):
+        return (f"WARNING: `{path}` is inside the container, not on your machine. Only `{mounted}` "
+                f"comes from the host, so anything written elsewhere disappears when the container "
+                f"stops. Choose a folder under `{mounted}`.")
 
 BASE_FILES = ("run.json", "ranking.csv", lay.SUMMARY_CSV, lay.INTERACTIONS_CSV,
                  lay.DOCKING_CSV, lay.VALIDATION_CSV, lay.ANALOGUES_CSV,

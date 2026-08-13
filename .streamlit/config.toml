@@ -1,7 +1,17 @@
-# Configuracion de la interfaz de PoliScreen.
+# PoliScreen interface configuration.
+#
+# `base` is deliberately not set. Fixing it here made the page and the code disagree about which
+# theme was in use: the page rendered light because of this setting, while the theme reported at
+# runtime followed the system preference and said dark, so the brand was inverted to white on a
+# white background and disappeared. It also left no way to switch, because a theme pinned here
+# overrides the one the user chooses. Without it, what is rendered and what is detected are the
+# same thing, and the choice belongs to whoever is looking at the screen.
+#
+# This file is only read when Streamlit starts with this directory as its working directory, which
+# is why the container saw it and a terminal started elsewhere did not -- the same build, two
+# different themes, and only one of them made the wordmark vanish.
 [theme]
-base = "light"
-primaryColor = "#2E9E7E" 
+primaryColor = "#2E9E7E"
 showWidgetBorder = true
 borderColor = "#4A4A4A"
 baseRadius = "small"

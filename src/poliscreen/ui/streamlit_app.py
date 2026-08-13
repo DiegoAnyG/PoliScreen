@@ -2000,7 +2000,18 @@ def _stage_results():
         d1, d2, d3 = st.columns(3)
         R = d1.selectbox(t("Receptor"), sorted(inter["receptor"].unique()))
         sr = inter[inter["receptor"] == R]
-        cmp_ = d2.selectbox(t("Compound"), sorted(sr["compound"].unique()))
+        # The control first, not whatever sorts first alphabetically. This diagram is read to judge
+        # every other one -- the contacts it reproduces are the reference the ranking is built on --
+        # so opening on 1-butanol meant a deliberate step before the panel said anything useful.
+        compounds = sorted(sr["compound"].unique())
+        first = 0
+        if "is_control" in sr.columns:
+            controls = [c for c in compounds if bool(sr[sr["compound"] == c]["is_control"].any())]
+            if controls:
+                first = compounds.index(controls[0])
+        cmp_ = d2.selectbox(t("Compound"), compounds, index=first,
+                            help=t("Opens on the control, which is the reference the other "
+                                   "diagrams are judged against."))
         scmp = sr[sr["compound"] == cmp_]
         mods = sorted({sc.model_of(n) for n in scmp["name"]})
         mod = d3.selectbox(t("Pose"), mods)
