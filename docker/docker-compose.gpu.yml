@@ -1,13 +1,22 @@
-# Overlay that hands the NVIDIA GPU to the container, which is what gnina needs in order to
-# run at all. Stack it on top of the normal file:
+# Overlay that builds gnina into the image and hands it the NVIDIA GPU, which is what it needs in
+# order to run at all. Stack it on top of the normal file:
 #
 #   docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up --build
 #
-# Needs the NVIDIA Container Toolkit on Linux, or the WSL 2 GPU support that Docker Desktop
-# sets up on Windows when the NVIDIA driver is installed. Without either, compose refuses to
-# start the service, which is why this lives in a separate file instead of the default one.
+# The build argument is set here rather than left to an environment variable. Handing over the GPU
+# without building gnina produced a container with a GPU and nothing to use it, and the interface
+# reported gnina as not installed on the one setup expressly assembled to run it -- with no hint
+# that a second, undocumented switch existed. The two halves belong together, so they live in the
+# same file: this overlay both installs it and gives it the hardware.
+#
+# It costs about 4.5 GB, which is why it is not in the default file. Needs the NVIDIA Container
+# Toolkit on Linux, or the WSL 2 GPU support Docker Desktop sets up on Windows when the NVIDIA
+# driver is installed. Without either, compose refuses to start the service.
 services:
   poliscreen:
+    build:
+      args:
+        WITH_GNINA: 1
     deploy:
       resources:
         reservations:

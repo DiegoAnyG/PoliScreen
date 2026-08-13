@@ -1314,7 +1314,23 @@ def _stage_ligands():
             if not any(p.get("alcohol_smiles") for p in prods):
                 st.caption(t("The IUPAC name is only generated for coupling reactions, where it is composed from the two fragments and verified with OPSIN. In decoration, products are identified by their SMILES."))
             if any(p.get("alcohol_smiles") for p in prods):
-                if st.button(t("Name (IUPAC, verified with OPSIN)")):
+                # Without OPSIN nothing can be checked against the structure, and the count said so
+                # honestly -- "0 of 44 verified" -- while names for the simple esters appeared in
+                # the table anyway, because those are composed rather than verified. Two true
+                # statements that read as a contradiction. A composed name is a guess: on a
+                # benzofuroxan the N-oxide can sit on either nitrogen and both parse, so an
+                # unchecked name is exactly the one that would reach a paper wrong. The button is
+                # closed rather than left to produce names nobody can vouch for.
+                if not nm.available():
+                    st.button(t("Name (IUPAC, verified with OPSIN)"), disabled=True)
+                    st.caption(t("IUPAC naming is off in this build: verifying a name means "
+                                 "rebuilding the structure from it and comparing, which needs "
+                                 "OPSIN and a Java runtime — together larger than the rest of "
+                                 "PoliScreen, for a label that never changes a result. Products "
+                                 "are identified by their SMILES, which is what is docked. To "
+                                 "turn it on, point `POLISCREEN_OPSIN` at opsin.jar with Java on "
+                                 "`PATH`; a future build may carry both."))
+                elif st.button(t("Name (IUPAC, verified with OPSIN)")):
                     with st.spinner(t("Naming and verifying by round-trip...")):
                         named = AdmelabBridge().name_esters(
                             [p["smiles"] for p in prods], [p.get("alcohol_smiles") or "" for p in prods],
@@ -1322,11 +1338,7 @@ def _stage_ligands():
                     by = {n["smiles"]: n for n in named}
                     # On a benzofuroxan the N-oxide can be named on the wrong nitrogen and still parse: the name is checked against the structure.
                     _names = [by.get(p["smiles"], {}).get("iupac_name") for p in prods]
-                    if nm.available():
-                        checked = nm.verify(_names, [p["smiles"] for p in prods])
-                    else:
-                        checked = [(n, bool(by.get(p["smiles"], {}).get("verified")))
-                                   for n, p in zip(_names, prods)]
+                    checked = nm.verify(_names, [p["smiles"] for p in prods])
                     for p, (_nm, _ok) in zip(prods, checked):
                         p["iupac_name"], p["iupac_verif"] = _nm, _ok
                     S["products"] = prods

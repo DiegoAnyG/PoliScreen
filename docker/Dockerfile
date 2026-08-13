@@ -85,8 +85,22 @@ RUN if [ "$WITH_GNINA" = "1" ]; then \
         bash scripts/get_gnina.sh; \
     fi
 
+# Everything that was asked for has to be usable before the image counts as built. Checking only
+# that the imports work let an image ship in which the ADMET engine had been requested and was not
+# reachable, so the interface reported it missing at the moment it was needed -- on a machine whose
+# owner had asked for it and watched the build succeed. A build that cannot deliver what was
+# requested should fail while someone is still watching it.
 RUN vina --version && obabel -V && plip --version >/dev/null 2>&1 || true \
- && python -c "import rdkit, py3Dmol, streamlit, poliscreen; print('PoliScreen ready')"
+ && python -c "import rdkit, py3Dmol, streamlit, poliscreen; print('PoliScreen ready')" \
+ && if [ "$WITH_ADMET" = "1" ]; then \
+        python -c "from poliscreen.core.design import AdmelabBridge; b = AdmelabBridge(); \
+assert b.available(), 'ADMET was requested but the bridge cannot reach it: python=%s root=%s' % (b.python, b.root); \
+print('ADMET engine ready:', b.python)"; \
+    fi \
+ && if [ "$WITH_GNINA" = "1" ]; then \
+        python -c "from poliscreen.core.docking import gnina_exe; e = gnina_exe(); \
+assert e, 'gnina was requested but no executable was found'; print('gnina ready:', e)"; \
+    fi
 
 VOLUME ["/data"]
 EXPOSE 8501
