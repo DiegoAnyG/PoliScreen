@@ -24,6 +24,33 @@ def t(text: str) -> str:
 
 
 _ES = {
+    'Screen approved drugs': 'Cribar fármacos aprobados',
+    'Compounds already approved as medicines, from ChEMBL. Nothing is designed here: they exist, so there is no synthesis feasibility to judge — only whether they fit the properties you want.': 'Compuestos ya aprobados como medicamentos, de ChEMBL. Aquí no se diseña nada: existen, así que no hay viabilidad de síntesis que juzgar, solo si encajan en las propiedades que buscas.',
+    'Sources add up. Compounds from one source stay when you switch to another, so a run can hold five products from the builder, five approved drugs and anything you uploaded — and the results table says which is which.': 'Los orígenes se suman. Los compuestos de un origen se conservan al cambiar a otro, así que un análisis puede llevar cinco productos del constructor, cinco fármacos aprobados y lo que hayas subido, y la tabla de resultados dice cuál es cuál.',
+    'How many to bring from the library': 'Cuántos traer de la biblioteca',
+    'ChEMBL holds about 4200 approved compounds. They are saved inside this project, so the run records exactly which library it used and the next one is instant.': 'ChEMBL tiene unos 4200 compuestos aprobados. Se guardan dentro de este proyecto, así que el análisis registra exactamente qué biblioteca usó y la siguiente vez es inmediata.',
+    'Download library': 'Descargar biblioteca',
+    'Asking ChEMBL...': 'Consultando ChEMBL...',
+    'Download the library to start. It needs the internet once; after that this project works offline.': 'Descarga la biblioteca para empezar. Necesita internet una vez; después este proyecto funciona sin conexión.',
+    '{v0} compounds in the library of this project. Delete `chembl_approved.csv` from the project folder to refresh it.': '{v0} compuestos en la biblioteca de este proyecto. Borra `chembl_approved.csv` de la carpeta del proyecto para actualizarla.',
+    '##### Filters': '##### Filtros',
+    'Lipinski (rule of five)': 'Lipinski (regla de cinco)',
+    'MW under 500, LogP under 5, at most 5 donors and 10 acceptors.': 'PM menor que 500, LogP menor que 5, como mucho 5 donadores y 10 aceptores.',
+    'Veber (oral bioavailability)': 'Veber (biodisponibilidad oral)',
+    'At most 10 rotatable bonds and 140 A^2 of polar surface. Looks at flexibility, which Lipinski does not.': 'Como mucho 10 enlaces rotables y 140 A^2 de superficie polar. Mira la flexibilidad, que Lipinski no considera.',
+    'Adjust the ranges by hand': 'Ajustar los rangos a mano',
+    'Anything set here replaces the preset for that property. The values are the same ones the ranking table reports later, computed the same way.': 'Lo que definas aquí reemplaza el preajuste de esa propiedad. Los valores son los mismos que la tabla de ranking reporta después, calculados igual.',
+    'Properties to bound': 'Propiedades a acotar',
+    'Applying the filters...': 'Aplicando los filtros...',
+    'No compound passes these filters. Loosen one of them.': 'Ningún compuesto pasa estos filtros. Relaja alguno.',
+    '{v0} of {v2} compounds pass.': '{v0} de {v2} compuestos pasan.',
+    'Showing the first 200. All {v0} are docked if you continue.': 'Se muestran los primeros 200. Los {v0} se acoplan si continúas.',
+    'How many to dock': 'Cuántos acoplar',
+    'Taken from the top of the filtered table. Docking is the slow step: start small, widen once the box is right.': 'Se toman desde arriba de la tabla filtrada. El acoplamiento es el paso lento: empieza con pocos y amplía cuando la caja esté bien.',
+    'These drugs are already loaded for the screening. Change the selection to regenerate them.': 'Estos fármacos ya están cargados para el cribado. Cambia la selección para regenerarlos.',
+    'Add these drugs to the screening': 'Agregar estos fármacos al cribado',
+    '{v0} drugs added. The screening now has {v2} compounds in total, from every source you have used.': '{v0} fármacos agregados. El cribado tiene ahora {v2} compuestos en total, de todos los orígenes que has usado.',
+
     # Reaction metadata: English data that the interface drops into translated sentences.
     'Fischer esterification': 'Esterificación de Fischer',
     'Aromatic decoration (R-group)': 'Decoración aromática (grupo R)',

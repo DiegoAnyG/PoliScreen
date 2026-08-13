@@ -18,6 +18,7 @@ import streamlit as st
 from poliscreen import __version__
 from poliscreen.core import adcp
 from poliscreen.core import docking as dk
+from poliscreen.core import drugs as dg
 from poliscreen.core import ligands as lig
 from poliscreen.core import pipeline as pl
 from poliscreen.core import peptides as pp
@@ -908,6 +909,129 @@ def _stage_receptors():
             st.caption(t("Controls with no receptor: {v1}").format(
                 v1=", ".join(_rname(c) for c in _huerfanos)))
 
+def _drug_mode():
+    """Approved drugs as a ligand source, filtered by property.
+
+    Deliberately separate from the reaction builder, and not merely a different button: nothing
+    here is designed or made, so there is no synthesizability to judge and no reaction under which
+    to be feasible. Asking whether an approved drug is "synthesizable by this reaction" is a
+    category error, and the two must not share that column.
+
+    They do share the run. Compounds land in the same input folder as everything else, so a
+    screening of five products from the builder beside five drugs from here is one experiment, not
+    two.
+    """
+    st.caption(t("Compounds already approved as medicines, from ChEMBL. Nothing is designed here: "
+                 "they exist, so there is no synthesis feasibility to judge — only whether they "
+                 "fit the properties you want."))
+    cache = proj / "chembl_approved.csv"
+    library = dg.read_csv(cache)
+
+    top = st.columns([2, 1])
+    wanted = top[0].number_input(t("How many to bring from the library"), min_value=100,
+                                 max_value=5000, value=2000, step=100,
+                                 help=t("ChEMBL holds about 4200 approved compounds. They are "
+                                        "saved inside this project, so the run records exactly "
+                                        "which library it used and the next one is instant."))
+    if top[1].button(t("Download library"), disabled=bool(library)):
+        with st.spinner(t("Asking ChEMBL...")):
+            library, notice = dg.fetch_approved(cache=cache, max_records=int(wanted))
+        if notice:
+            st.warning(notice)
+    if not library:
+        st.info(t("Download the library to start. It needs the internet once; after that this "
+                  "project works offline."))
+        return
+    st.caption(t("{v0} compounds in the library of this project. Delete "
+                 "`chembl_approved.csv` from the project folder to refresh it.").format(
+                     v0=len(library)))
+
+    st.markdown(t("##### Filters"))
+    cols = st.columns(2)
+    limits = {}
+    if cols[0].checkbox(t("Lipinski (rule of five)"), value=True,
+                        help=t("MW under 500, LogP under 5, at most 5 donors and 10 acceptors.")):
+        limits.update(dg.LIPINSKI)
+    if cols[1].checkbox(t("Veber (oral bioavailability)"), value=False,
+                        help=t("At most 10 rotatable bonds and 140 A^2 of polar surface. Looks at "
+                               "flexibility, which Lipinski does not.")):
+        limits.update(dg.VEBER)
+
+    with st.expander(t("Adjust the ranges by hand")):
+        st.caption(t("Anything set here replaces the preset for that property. The values are the "
+                     "same ones the ranking table reports later, computed the same way."))
+        ranges = {"MW": (0.0, 1000.0, (0.0, 500.0)), "LogP": (-5.0, 10.0, (-5.0, 5.0)),
+                  "TPSA": (0.0, 300.0, (0.0, 140.0)), "HBD": (0.0, 20.0, (0.0, 5.0)),
+                  "HBA": (0.0, 30.0, (0.0, 10.0)), "RotB": (0.0, 30.0, (0.0, 10.0))}
+        picked = st.multiselect(t("Properties to bound"), list(ranges), default=[],
+                                format_func=lambda k: k)
+        for prop in picked:
+            lo, hi, default = ranges[prop]
+            limits[prop] = st.slider(prop, min_value=lo, max_value=hi, value=default,
+                                     key=f"drug_range_{prop}")
+
+    with st.spinner(t("Applying the filters...")):
+        kept = dg.apply_filters(library, limits)
+    if not kept:
+        st.warning(t("No compound passes these filters. Loosen one of them."))
+        return
+    st.success(t("{v0} of {v2} compounds pass.").format(v0=len(kept), v2=len(library)))
+
+    shown = pd.DataFrame(kept)[["name", "chembl_id"] + list(dg.PROPERTIES)]
+    st.dataframe(shown.head(200), width="stretch", hide_index=True)
+    if len(shown) > 200:
+        st.caption(t("Showing the first 200. All {v0} are docked if you continue.").format(
+            v0=len(kept)))
+
+    how_many = st.number_input(t("How many to dock"), min_value=1, max_value=len(kept),
+                               value=min(25, len(kept)), step=1,
+                               help=t("Taken from the top of the filtered table. Docking is the "
+                                      "slow step: start small, widen once the box is right."))
+    chosen = kept[:int(how_many)]
+    signature = (tuple(c["chembl_id"] for c in chosen),)
+    already = _already_done("use_drugs", signature)
+    if already:
+        st.caption(t("These drugs are already loaded for the screening. Change the selection to "
+                     "regenerate them."))
+    if st.button(t("Add these drugs to the screening"), type="primary", disabled=already):
+        d = lay.artifact(proj, lay.INPUT_LIGANDS)
+        names_ = [lig.safe_name(c.get("name") or c.get("chembl_id")) for c in chosen]
+        with st.spinner(t('Generating 3D of {v1} compounds...').format(v1=len(chosen))):
+            made = lig.materialize([c["smiles"] for c in chosen], d, names=names_)
+        done_set = {nm for nm, _, _ in made}
+        # The whole folder, not only what was just built, so drugs sit beside anything the
+        # reaction builder or an upload already put there. That is the point of the section.
+        S["ligands"] = [str(p) for p in sorted(d.iterdir()) if p.is_file()]
+        rows_ = [{"name": nm, "smiles": c.get("smiles"), "source": "chembl",
+                  "product": c.get("name"), "iupac_name": None, "feasibility": None}
+                 for nm, c in zip(names_, chosen) if nm in done_set]
+        _merge_ligand_meta(rows_)
+        _mark_done("use_drugs", signature)
+        _notify(t('{v0} compounds built and ready for step 3.').format(v0=len(made)))
+        st.success(t("{v0} drugs added. The screening now has {v2} compounds in total, from "
+                     "every source you have used.").format(v0=len(made), v2=len(S["ligands"])))
+
+
+def _merge_ligand_meta(rows):
+    """Adds these rows to the project's ligand table, keeping what other sources already wrote.
+
+    Every source writes the same file, and one overwriting another is how a mixed run loses half
+    its provenance: the compounds still dock, and the table can no longer say where they came from.
+    Matched on `name`, which is the 3D file stem and therefore what the rest of the pipeline joins
+    on; a repeated name is the same compound rebuilt, so the new row wins.
+    """
+    path = proj / "ligands_meta.csv"
+    previous = []
+    if path.exists():
+        try:
+            previous = pd.read_csv(path).to_dict("records")
+        except Exception:
+            previous = []
+    fresh = {r["name"] for r in rows}
+    merged = [r for r in previous if r.get("name") not in fresh] + list(rows)
+    path.write_text(pd.DataFrame(merged).to_csv(index=False))
+
+
 def _peptide_mode():
     """Peptide design: a path independent of reaction synthesis. Kept apart
     (its own state keys) so it does not mix with the products of the chemical builder."""
@@ -1061,10 +1185,17 @@ def _peptide_mode():
 def _stage_ligands():
     st.subheader(t("What do you want to dock?"))
     modo = st.radio(t("Source of the compounds"),
-                    ["Build by reaction", "Generate peptides", "Upload ready ligands"],
+                    ["Build by reaction", "Screen approved drugs", "Generate peptides",
+                     "Upload ready ligands"],
                     horizontal=True, format_func=t, key="ligand_mode")
+    st.caption(t("Sources add up. Compounds from one source stay when you switch to another, so a "
+                 "run can hold five products from the builder, five approved drugs and anything "
+                 "you uploaded — and the results table says which is which."))
 
-    if modo == "Generate peptides":
+    if modo == "Screen approved drugs":
+        S["lead"] = None
+        _drug_mode()
+    elif modo == "Generate peptides":
         _peptide_mode()
     elif modo == "Build by reaction":
         S["lead"] = None
