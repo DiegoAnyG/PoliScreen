@@ -12,7 +12,8 @@ than YAML on purpose -- the recipe test does the same, and neither is worth a de
 import re
 from pathlib import Path
 
-COMPOSE = Path(__file__).resolve().parent.parent / "docker" / "docker-compose.yml"
+DOCKER = Path(__file__).resolve().parent.parent / "docker"
+COMPOSE = DOCKER / "docker-compose.yml"
 
 
 def _settings() -> str:
@@ -33,3 +34,10 @@ def test_the_signal_reaches_streamlit():
     assert re.search(r"^\s*init:\s*true\s*$", _settings(), re.M), (
         "without init, tini is not PID 1, the SIGTERM from Ctrl+C is ignored and the container "
         "is killed ten seconds later mid-write")
+
+
+def test_the_inner_tini_can_reap_what_the_docking_leaves():
+    """Two tinis stack: Docker's takes PID 1, the base image's lands behind it and needs telling."""
+    assert "TINI_SUBREAPER=1" in (DOCKER / "Dockerfile").read_text(encoding="utf-8"), (
+        "the image's own tini is not PID 1 under init: true, so without this it reaps nothing "
+        "and warns about it at every start")

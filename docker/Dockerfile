@@ -112,6 +112,13 @@ print('ADMET engine ready:', b.python)"; \
 assert e, 'gnina was requested but no executable was found'; print('gnina ready:', e)"; \
     fi
 
+# The base image already sets tini as its entrypoint, and `init: true` puts Docker's own tini in
+# front of it, so the inner one starts at PID 7 and says so on every start. It is right to say it:
+# a process that is not PID 1 and not registered as a subreaper cannot reap what the docking
+# leaves behind. Registering it costs one variable, silences the warning and keeps both halves
+# doing their job.
+ENV TINI_SUBREAPER=1
+
 VOLUME ["/data"]
 EXPOSE 8501
 
