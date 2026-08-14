@@ -50,7 +50,7 @@ jobs:
     needs: fpocket-windows
     # The repository hands workflows a read-only token, so attaching the installers to the release
     # needed this and would have failed at the last step of a tag build, after twenty minutes of
-    # work on three runners. Only this job asks for it, and only for the release.
+    # work on both runners. Only this job asks for it, and only for the release.
     permissions:
       contents: write
     strategy:
@@ -61,13 +61,11 @@ jobs:
             artifact: PoliScreen-Windows-x86_64
           - os: ubuntu-latest
             artifact: PoliScreen-Linux-x86_64
-          - os: macos-latest
-            artifact: PoliScreen-macOS-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      # Only the Windows recipe references these; the other two resolve fpocket from conda-forge.
+      # Only the Windows recipe references these; Linux resolves fpocket from conda-forge.
       - name: Collect fpocket
         if: runner.os == 'Windows'
         uses: actions/download-artifact@v4
