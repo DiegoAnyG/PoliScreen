@@ -191,6 +191,29 @@ def _ui_in_a_window(cmd, url: str, port: int) -> int:
     return 0
 
 
+def cmd_fingerprint(args) -> int:
+    """Print what the docking consumed and produced, hashed, so two machines can be compared.
+
+    Run it on both and diff the output. The first line that differs names the stage that caused
+    the divergence, which is the question that repeated guessing could not answer.
+    """
+    from pathlib import Path
+
+    from .core import fingerprint as fp
+
+    proj = Path(args.project)
+    if not proj.is_dir():
+        print(f"ERROR: {proj} is not a folder.", file=sys.stderr)
+        return 1
+    text = fp.render(proj)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"Written to {args.out}. Run this on the other machine too and diff the two files.")
+    else:
+        print(text, end="")
+    return 0
+
+
 def cmd_prep(args) -> int:
     from pathlib import Path
 
@@ -294,6 +317,12 @@ def main(argv=None) -> int:
                      help="open in a desktop window instead of a browser tab; closing the window "
                           "stops the interface and everything it started")
     pui.set_defaults(func=cmd_ui)
+
+    pfp = sub.add_parser("fingerprint",
+                         help="hashes of what went into the docking, to compare two machines")
+    pfp.add_argument("project", help="project folder")
+    pfp.add_argument("--out", help="write to this file instead of the screen")
+    pfp.set_defaults(func=cmd_fingerprint)
 
     pprep = sub.add_parser("prep", help="prepare a receptor: download, inspect and clean")
     pprep.add_argument("--pdb-id", help="PDB identifier, e.g. 4D44")

@@ -37,8 +37,11 @@ RUN curl -fsSL "https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/
 
 ENV PATH=/opt/conda/envs/poliscreen/bin:${PATH}
 
-COPY . ${POLISCREEN_HOME}
-RUN pip install --no-deps -e .
+# Everything below is ordered by how often it changes, because Docker throws away every layer
+# after the first one that does. The source used to be copied in here, before the engines, so
+# editing a single Python file invalidated the ADMET layer and downloaded torch again -- a minute
+# of work costing the better part of an hour, every time. What nothing in the source can affect
+# now comes first, the scripts next, and the source last.
 
 # The ADMET engine, on by default: without it the screening cycle still runs, but the
 # reaction-based analogue builder and the ADMET report are disabled, which is the gap users
@@ -61,7 +64,7 @@ RUN if [ "$WITH_ADMET" = "1" ]; then \
     fi
 
 # core/design.py wants a directory that contains admelab/, which the clone above satisfies the
-# same way ~/adme does outside the container.
+# same way a hand-installed copy does outside the container.
 ENV POLISCREEN_ADME_PYTHON=/opt/conda/envs/admet/bin/python \
     POLISCREEN_ADME_ROOT=/opt/adme
 
@@ -70,6 +73,9 @@ ENV POLISCREEN_ADME_PYTHON=/opt/conda/envs/admet/bin/python \
 # where PoliScreen looks by default, so nothing else has to be configured.
 ARG WITH_ADCP=0
 ARG WITH_GNINA=0
+
+# Only the installer scripts, so these two layers survive an edit anywhere else in the source.
+COPY scripts ${POLISCREEN_HOME}/scripts
 
 # The ADFR installer accepts the Scripps academic licence on the spot, so an image built with
 # this flag is for whoever built it and must not be redistributed. parche_adfr.py fixes the
@@ -84,6 +90,10 @@ RUN if [ "$WITH_ADCP" = "1" ]; then \
 RUN if [ "$WITH_GNINA" = "1" ]; then \
         bash scripts/get_gnina.sh; \
     fi
+
+# Last, so that editing it rebuilds this layer and the check below, and nothing else.
+COPY . ${POLISCREEN_HOME}
+RUN pip install --no-deps -e .
 
 # Everything that was asked for has to be usable before the image counts as built. Checking only
 # that the imports work let an image ship in which the ADMET engine had been requested and was not
