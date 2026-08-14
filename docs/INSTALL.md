@@ -24,8 +24,12 @@ ADCP and gnina are Linux-only builds, so on Windows they exist only through Dock
 ```bash
 git clone https://github.com/DiegoAnyG/PoliScreen.git
 cd PoliScreen
-docker compose -f docker/docker-compose.yml up --build
+bash scripts/install-docker.sh
 ```
+
+It asks which engines go in the image, then builds and starts it. Answer up front to skip the
+question: `bash scripts/install-docker.sh 4`. The plain equivalent of option 1 is
+`docker compose -f docker/docker-compose.yml up --build`.
 
 <http://localhost:8501>. Projects go to `/data`, mounted from `./proyectos`, so they survive the
 container. Set `POLISCREEN_PROJECTS` to move them.
@@ -36,7 +40,8 @@ a run if the project folder is not inside it.
 Later runs: `docker compose -f docker/docker-compose.yml up` — no `--build`. After a code change,
 `--build` reuses the cached environment layers and takes seconds.
 
-With gnina and a GPU (adds ~4.5 GB, needs an NVIDIA GPU and the Container Toolkit):
+gnina is option 3 of that menu: ~4.5 GB, an NVIDIA GPU and the Container Toolkit. Both halves,
+the build and the device, come from the overlay:
 
 ```bash
 docker compose -f docker/docker-compose.yml -f docker/docker-compose.gpu.yml up --build
