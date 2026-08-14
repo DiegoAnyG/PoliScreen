@@ -1,226 +1,153 @@
 # PoliScreen — Tutorial
 
-A walkthrough of the four-step cycle and the scientific rationale behind each
-control. The panels below mirror the app's **Help** menu.
+The four-step cycle and the reasoning behind each control. Mirrors the app's **Help** menu.
 
-> Images will be added per section. Placeholders point to `docs/img/`.
+**Receptors → Ligands → Run → Results.** The right-hand panel follows the active step.
 
----
+What distinguishes the scoring: it measures *which* contacts are made and *with which residues*,
+not affinity and contact count, and attaches a measure of how much to trust each result.
 
-## 1. Getting started
+**Project folder.** Everything is written there — poses, complexes, PLIP XML, tables. Changing it
+changes the analysis; anything already prepared in it is detected on entry. The path is a Linux
+path; a pasted Windows path is translated and you are told which was used. In Docker, only the
+mounted volume survives the container.
 
-**What PoliScreen does.** It chains the full screening cycle: prepare the target,
-obtain compounds, dock them, and evaluate binding quality. The difference from an
-ordinary docking panel is *how it scores* — instead of rewarding affinity and
-contact count, it measures **which contacts** are made and **with which
-residues**, and adds a measure of **how much to trust** each result.
+**Sessions.** *File › Save session* packs the analysis into a `.poliscreen` file. Restoring it
+brings back tables, receptors and ligands, and lets you change the weighting **without re-running
+the docking**.
 
-**Order of work.**
-
-1. **Receptors** — download or upload the structure, choose what to keep, and
-   extract the co-crystallized ligand as the control.
-2. **Ligands** — build the series by reaction, generate peptides, or upload ready
-   structures.
-3. **Run** — define where to search and launch docking.
-4. **Results** — adjust the weighting and examine the ranking.
-
-The right-hand panel always shows what corresponds to the active step.
-
-![Workspace overview](img/overview.png)
-
-**Save and restore.** *File › Save session* packs the analysis into a
-`.poliscreen` file. Restoring it brings back tables, receptors and ligands, and
-lets you **change the weighting without re-running the docking**. The light
-session is a few megabytes; the full one adds poses and complexes.
-
-**The project folder.** Everything is written there: poses, complexes, PLIP XML
-and tables. Changing folder changes analysis, and anything already prepared in it
-(receptors, controls, ligands) is auto-detected on entry. PoliScreen runs inside
-Linux, so the path is a Linux path (`/home/user/...`); a pasted Windows path is
-translated automatically and you are told which one was used.
-
-**What to download.** *File › Download results* builds a single ZIP with what you
-select, leaving no copies in the project folder. Most of it already lives in that
-folder; downloading only makes sense to move the analysis elsewhere, attach it to
-a manuscript, or archive it. The **recommended** items form the minimal
-reproducible package: the **Methods** section (the only item that does not exist
-until exported), the **ranking**, **interaction matrix** and **ligand table**,
-the **redocking validation**, and the **input receptors and ligands**.
+**Downloads.** *File › Download results* builds one ZIP. The minimal reproducible set: Methods
+(only exists once exported), ranking, interaction matrix, ligand table, redocking validation, and
+the input receptors and ligands.
 
 ---
 
-## 2. Receptors
+## 1. Receptors
 
-**What preparation does.** Removes waters, adds hydrogens, and keeps the original
-residue numbering. Preserving the numbering matters: if it changes, an active-site
-residue can be identified with another's name and the whole pharmacophoric
-analysis is wrong.
+Preparation removes waters, adds hydrogens, and **keeps the original residue numbering** — if that
+changes, an active-site residue is identified with another's name and the pharmacophoric analysis
+is wrong.
 
-![Receptor preparation](img/receptor.png)
+**The co-crystallised control is the most important part of the setup.** It defines the reference
+everything is measured against, marks the real site, and enables redocking validation. Give its
+**SMILES** when extracting: PDB stores no bond orders, and without that template heterocycles such
+as a benzofuroxan *N*-oxide are read incorrectly.
 
-**Cofactors — when to keep them.** A cofactor that is part of the site (e.g. NADP
-in a reductase) must be kept: the ligand competes or cooperates with it, and
-removing it changes the pocket shape. Ions and crystallization molecules that do
-not participate can be removed.
+**Cofactors.** Keep one that is part of the site (NADP in a reductase): the ligand competes or
+cooperates with it and removing it changes the pocket. Ions and crystallisation molecules that do
+not participate can go.
 
-**The co-crystallized control.** The most important piece of the setup. It defines
-the reference everything is measured against, marks the real binding site, and
-enables protocol validation by redocking. When extracting it, provide its
-**SMILES**: PDB does not store bond orders, and without that template heterocycles
-such as the benzofuroxan *N*-oxide are read incorrectly.
+**Waters** are removed because rigid docking does not model them or the cost of displacing them.
+The exception is conserved structural waters that mediate binding — a case-by-case decision, after
+which PoliScreen detects water-mediated bridges automatically.
 
-**Why waters are removed.** Standard practice in rigid docking. AutoDock Vina does
-not model explicit waters or the cost of displacing them, so leaving them produces
-artifacts. The exception is **conserved structural waters** that mediate binding;
-keeping them is a case-by-case decision, and PoliScreen then detects
-water-mediated bridges automatically.
+## 2. Ligands
 
----
+Four sources, and they add up: one run can hold compounds from several, and the results table says
+which is which.
 
-## 3. Ligands
+- **Build by reaction** — a core plus a reagent library, filtered by real chemical feasibility, so
+  what is docked is what can be synthesised.
+- **Screen approved drugs** — compounds already approved as medicines, from ChEMBL, filtered by
+  property (Lipinski, Veber, or any of MW/LogP/TPSA/HBD/HBA/RotB). Nothing is designed here, so
+  there is no synthesis feasibility to judge. The library is cached in the project, so the run
+  records which library it screened.
+- **Generate peptides** — sequences enumerated under composition and property rules.
+- **Upload ready ligands** — prepared structures, whose chemistry is read for ADMET and descriptors.
 
-**Three routes.** *Build by reaction* — start from a core and a reagent library,
-filtered by real chemical feasibility, so what is docked is what can be
-synthesized. *Generate peptides* — enumerate sequences under composition and
-property rules. *Upload ready ligands* — prepared structures, whose chemistry is
-read to compute ADMET and descriptors.
+### Peptides
 
-![Ligand design](img/ligands.png)
+Filters: alphabet restricted by class, fixed prefix or suffix, repeats forbidden, consecutive
+residues limited. For antimicrobials the discriminating properties are **net positive charge** (the
+bacterial membrane is anionic) and moderate hydrophobicity.
 
-**Peptides — the rules.** The alphabet is restricted by class (hydrophobic,
-cationic, aromatic…); a prefix or suffix can be fixed, repeats forbidden, or
-consecutive residues limited. The physicochemical filters discriminate most in
-antimicrobial peptides: **net positive charge** (the bacterial membrane is
-anionic) and moderate hydrophobicity.
+- **Net charge** at pH 7.4 — most associated with antimicrobial activity.
+- **GRAVY** — mean hydropathy.
+- **Hydrophobic moment** — amphipathicity; whether, folded into a helix, hydrophobic residues sit
+  on one face. This is what allows membrane insertion.
+- **Boman index** — tendency to bind other proteins; above 2.5 kcal/mol is promiscuous.
 
-**Peptides — the descriptors.**
+Termini: *C-terminal amidation* removes the terminal negative charge (+1 net, usually more active);
+*N-terminal acetylation* protects against aminopeptidases; *head-to-tail cyclisation* rigidifies —
+fewer degrees of freedom, protease resistance, more reliable docking.
 
-- **Net charge** at pH 7.4 — the trait most associated with antimicrobial activity.
-- **GRAVY** — mean hydropathy; positive indicates overall hydrophobic character.
-- **Hydrophobic moment** — amphipathicity: whether, folded into a helix,
-  hydrophobic residues sit on one face and polar ones on the other. This is what
-  enables membrane insertion.
-- **Boman index** — tendency to bind other proteins; above 2.5 kcal/mol is
-  considered promiscuous.
+Peptides go to **ADCP**, not Vina, because Vina treats the ligand as a torsion tree and the
+sampling stops covering the space (saFtsZ, 23 Å box, exhaustiveness 8, one thread):
 
-**Peptides — the termini.** *C-terminal amidation* removes the terminal negative
-charge and adds +1 to the net charge, usually increasing antimicrobial activity.
-*N-terminal acetylation* protects against aminopeptidases. *Head-to-tail
-cyclization* rigidifies the peptide: fewer degrees of freedom, protease
-resistance, and more reliable docking.
-
-**Peptides use a dedicated engine (ADCP).** Vina treats the ligand as an
-independent torsion tree; with the many rotatable bonds of a peptide its sampling
-stops covering the space (measured on saFtsZ, 23 Å box, exhaustiveness 8, one
-thread):
-
-| Residues | Rotatable bonds | Vina time |
+| Residues | Rotatable bonds | Vina |
 |---|---|---|
 | 3 | 15 | ~98 s |
 | 5 | 23 | > 2 min |
 | 10 | 43 | does not finish |
 
-That is why PoliScreen routes peptides (5–20 residues) **automatically to
-AutoDock CrankPep (ADCP)**, which builds the conformation with a rotamer library
-instead of a torsion tree; if ADCP is not installed, peptides fall back to Vina
-with a warning. Peptide docking still ranks candidates rather than asserting an
-exact binding mode, but ADCP handles their flexibility as Vina cannot.
+Without ADCP they fall back to Vina with a warning. Peptide docking ranks candidates rather than
+asserting a binding mode.
 
----
+## 3. Run
 
-## 4. Run
+**The box** is most reliable centred on the co-crystallised ligand, which marks the real site.
+Otherwise the geometric centre, or a cofactor.
 
-**The search box.** Most reliable when centered on the co-crystallized ligand: it
-marks the real site. The protein's geometric center or a cofactor point elsewhere.
-The X, Y and Z axes are drawn in the viewer to show which direction each control
-moves.
+**Cavities.** `Cavity` is the pocket's real extent; `Box` is the search region assigned to it, with
+a 14 Å minimum (below that a ligand does not fit), marked `*` when it applies. **Druggability**
+estimates whether the pocket can bind a small molecule at all.
 
-![Search box](img/run.png)
+**Hybrid docking** screens the same compounds against several pockets of one receptor, each with
+its own ranking and its own reference — site-selectivity information a single-site screen cannot
+give.
 
-**Detected cavities.** `Cavity` is the pocket's real extent; `Box` is the search
-region assigned to it, with a **14 Å minimum** because below that a ligand would
-not fit. When that minimum applies it is marked with `*`, so cavities of different
-volume can share the same box size. **Druggability** estimates whether the pocket
-has suitable shape and chemistry to bind a small molecule.
+**Parameters.** *Exhaustiveness* — how much the search explores. *Poses per ligand* — below 3 the
+confidence metric loses resolution. *Energy range* — window for reporting alternative modes. *Seed
+and one thread* — Vina is not deterministic with more than one thread per docking.
 
-**Hybrid docking.** Docks the same compounds into **several pockets** of the same
-receptor, each with its own ranking — **site-selectivity** information that a
-single-site screen does not give. Each site uses its own reference: the control if
-present, a cofactor if inside the box, or the catalytic residues you designate.
+**gnina** re-scores poses Vina already found, with a network trained on crystallographic complexes.
+The value is independence, not speed: Vina's score is empirical, gnina's is learned, and agreement
+between two different assumptions is evidence neither gives alone. It cannot recover a pose the
+sampling missed.
 
-**Docking parameters.** *Exhaustiveness* — how much the search explores; higher is
-finer and slower. *Poses per ligand* — how many binding modes are kept; below 3
-the confidence metric loses resolution. *Energy range* — window relative to the
-best pose for reporting alternative modes. *Seed and one thread* — guarantee that
-two identical runs give the same result; with more than one thread per docking,
-Vina stops being deterministic.
+## 4. Results
 
-**Second scoring with gnina.** Re-evaluates with a **neural network** the poses
-Vina already generated, without repeating the search. Its value is not speed but
-independence: Vina's score is empirical, gnina's is learned from crystallographic
-complexes. Agreement between two methods with different assumptions is evidence
-neither gives alone, and it feeds the confidence metric. *Limitation*: the network
-can only judge poses Vina found; if sampling missed the correct pose, re-scoring
-does not recover it.
-
----
-
-## 5. Results
-
-**Effectiveness.** Percentage relative to that site's reference ligand, which sits
-at 100 %. Interaction quality does **not** measure similarity to the control: it
-sums each contact weighted by bond type (salt bridge > H-bond > π > hydrophobic)
-and residue role (catalytic, secondary, cavity, external). A compound beats the
+**Effectiveness** — percentage against that site's reference ligand, which sits at 100 %. It is not
+similarity to the control: each contact is weighted by bond type (salt bridge > H-bond > π >
+hydrophobic) and residue role (catalytic, secondary, cavity, external). A compound beats the
 control by making **more and better productive contacts**, not by copying it.
 
-![Results ranking](img/results.png)
+**Confidence** — orthogonal to effectiveness: not how good the compound is, but how much to trust
+the number. A geometric mean, so one failing piece of evidence pulls it down: binding-mode
+convergence, affinity↔interaction agreement, and Vina vs. network consensus when re-scoring ran. It
+falls if the target fails its redocking. **High effectiveness with low confidence is an alarm.**
 
-**Confidence — what it is and why it differs.** **Orthogonal to effectiveness**:
-it measures not how good the compound is, but how much to trust the number. It is
-a **geometric** mean — one failing piece of evidence pulls it down — of *conv*
-(binding-mode convergence, interaction overlap between the best poses), *conc*
-(affinity↔interaction agreement), and *consensus* (Vina vs. the neural network, if
-re-scoring was enabled). It drops if the target fails its redocking. **High
-effectiveness with low confidence is an alarm**: good score, disagreeing evidence.
+**Affinity.** *best_dock* — kcal/mol, more negative is better. *pKi* — sortable, but does **not**
+enter the score: it derives from the docking score, so scoring it would count the same evidence
+twice. *LE* and *LLE* reward binding per atom, guarding against size bias.
 
-**Affinity metrics.** *best_dock* — Vina energy in kcal/mol; more negative is
-better. *pKi* — −log₁₀ of the estimated Ki, numeric and sortable; Ki does **not**
-enter the score (it derives from the docking score, so scoring it would count the
-same thing twice). *LE* and *LLE* reward binding **per atom**, guarding against
-size bias.
+**Catalytic and secondary residues.** Catalytic are mandatory — not touching them penalises through
+the catalytic gate — and are a property of the enzyme, determined experimentally. Secondary are
+known anchors that add more than an ordinary contact without being required. Where the catalytic
+site is unknown, PoliScreen suggests the residues the crystallographic ligand makes directional
+interactions with: a starting point, not an answer. **This list moves the ranking more than any
+weight.**
 
-**Catalytic and secondary residues.** *Catalytic* — mandatory: not touching them
-penalizes via the catalytic gate. They are a property of the enzyme, determined
-experimentally, not of the ligand. *Secondary* — known pocket anchors that add
-more than an ordinary contact but are not required. If you do not know the
-catalytic site, PoliScreen suggests the residues with which the crystallographic
-ligand makes directional interactions — a starting point, not an answer: **this
-list influences the ranking more than any weight**.
+**Weighting** auto-normalises; all axes at 1.0 is a simple average. An axis with weight but no data
+(toxicity without ADMET) is ignored and flagged, so the Methods section does not claim something
+that never intervened.
 
-**Weighting.** Axis weights **auto-normalize**: they need not sum to 1, and all at
-1.0 is a simple average. An axis with weight but **no data** (toxicity without
-ADMET) is ignored and flagged, so the Methods section does not declare something
-that did not intervene.
+**Percentage vs. percentile.** The percentage is measured against that target's control, so it
+depends on how strong that control is and does not compare across targets. The percentile places
+the compound within its own library and does.
 
-**Percentile vs. percentage.** The **percentage** is measured against that
-target's control, so it depends on how strong that control is and is not
-comparable across targets. The **percentile** places the compound within its own
-library and does allow comparison.
+## 5. Reproducibility
 
----
+Fixed seed, one thread per docking, pinned environment, Vina pinned by SHA256. Two runs with the
+same configuration give the same result.
 
-## 6. Reproducibility
+`poliscreen fingerprint <project>` hashes each stage and lists tool versions — run it on two
+machines and diff to find where they diverge.
 
-**What is fixed.** Constant seed and one thread per docking; pinned environment and
-AutoDock Vina binary, verified by its SHA256 sum. Two runs with the same
-configuration give the same result.
+*File › Export Methods* writes the parameters, box, weights, reference and exact versions for a
+paper.
 
-**Export the methods.** *File › Export Methods* generates a document with the
-parameters, box, weights, reference used, and exact tool versions, ready for a
-paper's Methods section.
-
-**Declared limitations.** **Rigid** docking (the receptor does not change
-conformation); **non-covalent** (covalent bonds with the target are not modeled);
-**estimated Ki** from Vina's affinity (informative, not measured); **LD50 and
-toxicity** from a single predictive model, which tend to be optimistic — contrast
-with a second predictor before claiming low toxicity.
+**Declared limitations.** Rigid docking (the receptor does not change conformation); non-covalent
+only; Ki estimated from Vina's affinity, informative rather than measured; LD50 and toxicity from a
+single model and tending optimistic — contrast with a second predictor before claiming low
+toxicity.
