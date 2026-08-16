@@ -44,3 +44,28 @@ def test_an_empty_neighbour_is_not_offered(tmp_path):
 
 def test_the_first_project_ever_has_nothing_to_point_at(tmp_path):
     assert ss.previous_project(_project(tmp_path, "081026", with_content=False)) is None
+
+
+def test_a_second_analysis_the_same_day_gets_its_own_folder(tmp_path):
+    """Two analyses in one day landed in the same folder, so results were deleted to make room."""
+    day = _project(tmp_path, "081626")
+    assert ss.next_project(day) == tmp_path / "081626-2"
+
+
+def test_it_keeps_counting_past_the_first_spare(tmp_path):
+    _project(tmp_path, "081626")
+    _project(tmp_path, "081626-2")
+    assert ss.next_project(tmp_path / "081626") == tmp_path / "081626-3"
+
+
+def test_an_empty_spare_is_reused_rather_than_skipped(tmp_path):
+    """A folder the interface created and nothing was done in is not someone else's analysis."""
+    _project(tmp_path, "081626")
+    _project(tmp_path, "081626-2", with_content=False)
+    assert ss.next_project(tmp_path / "081626") == tmp_path / "081626-2"
+
+
+def test_the_daily_name_is_untouched(tmp_path):
+    """The roll-forward must stay opt-in: reopening the interface has to land in today's work."""
+    _project(tmp_path, "081626")
+    assert ss.default_project(tmp_path).name != "081626-2"

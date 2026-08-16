@@ -578,6 +578,16 @@ with _menu_archivo:
             st.info(t('This project is empty — it is a new day. The previous one, with your '
                       'analysis in it, is `{v1}`: paste that path above to go back to it.'
                       ).format(v1=_prev))
+    elif lay.artifact(proj, lay.DOCKING_CSV).exists():
+        # The other half of the same edge. The day's folder already holds a finished analysis, and
+        # a second one started here would mix with it -- the reason results were being deleted by
+        # hand to make room. Offered, not automatic: reopening this folder is the normal case.
+        _next = ss.next_project(proj)
+        st.caption(t('This project already holds an analysis. To start another without mixing '
+                     'them, use `{v1}`.').format(v1=_next))
+        if st.button(t('Start a new analysis'), key='new_proj'):
+            S['_proj_pending'] = str(_next)
+            st.rerun()
     if S.get("_proj_loaded") != str(proj):
         S["_proj_loaded"] = str(proj)
         rec_dir, lig_dir = lay.artifact(proj, lay.RECEPTORS), lay.artifact(proj, lay.INPUT_LIGANDS)

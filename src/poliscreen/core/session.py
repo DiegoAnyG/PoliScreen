@@ -77,6 +77,23 @@ def default_project(root: Optional[Path] = None) -> Path:
     return (Path(root) if root else default_root()) / datetime.now().strftime("%m%d%y")
 
 
+def next_project(current) -> Path:
+    """The next free sibling of `current`, for a second analysis on the same day.
+
+    default_project() hands out one folder per day on purpose, and that is what makes reopening
+    the interface land back in the morning's work. The cost is that the day's second analysis
+    starts on top of the first. Rolling forward is offered, never automatic: a folder that renamed
+    itself would break the very reopening the daily name exists to serve.
+    """
+    current = Path(current)
+    n = 2
+    while True:
+        candidate = current.with_name(f"{current.name}-{n}")
+        if not _has_content(candidate):
+            return candidate
+        n += 1
+
+
 def previous_project(current) -> Optional[Path]:
     """The most recently used project beside `current` that already has something in it.
 
