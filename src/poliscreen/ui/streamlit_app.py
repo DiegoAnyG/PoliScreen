@@ -884,7 +884,7 @@ def _stage_receptors():
                 for k in extract:
                     het = info.find(k)
                     p = rc.extract_ligand(src, het, lay.artifact(proj, lay.RECEPTORS) / f"control_{het.resname}.sdf",
-                                          smiles=smiles or None)
+                                          smiles=smiles or None, on_notice=st.info)
                     if str(p) not in S["controls"]:
                         S["controls"].append(str(p))
                 for c in control_chain:

@@ -16,6 +16,7 @@ from typing import Optional, Sequence
 
 WATERS = {"HOH", "WAT", "H2O", "DOD"}
 RCSB_URL = "https://files.rcsb.org/download/{}.pdb"
+RCSB_LIGAND_URL = "https://files.rcsb.org/ligands/download/{}_ideal.sdf"
 
 
 class ReceptorError(RuntimeError):
@@ -149,17 +150,66 @@ def _het_lines(pdb, het: Het) -> list:
     return out
 
 
-def extract_ligand(pdb, het: Het, out_path, ph: float = 7.4, smiles: Optional[str] = None) -> Path:
+def ccd_template(resname: str, cache: "Optional[Path]" = None, timeout: float = 15.0) -> Optional[str]:
+    """SMILES of a hetero component, from the definition the PDB itself publishes.
+
+    A coordinate file carries positions, a name and a formula, never bond orders -- the format has
+    no field for them. Everything downstream has to infer the chemistry from geometry, and that
+    inference is a chain of comparisons against thresholds: two builds of the same converter
+    resolved one fused aromatic ring differently, and the losing assignment left a ring nitrogen
+    free to be protonated at pH 7.4, which it is not. The control is what the whole ranking is
+    normalised against, so the two machines were measuring against different molecules.
+
+    The dictionary entry settles it, and stops the chemistry depending on who compiled the reader.
+    Cached beside the control so a rerun needs no network, and so the project records which
+    definition it used. Returns None on any failure: the caller falls back to perception, which is
+    what happened before this existed.
+    """
+    code = (resname or "").strip().upper()
+    if not code:
+        return None
+    cached = Path(cache) / f"{code}_ccd.sdf" if cache else None
+    try:
+        if cached and cached.exists() and cached.stat().st_size:
+            block = cached.read_text(errors="ignore")
+        else:
+            with urllib.request.urlopen(RCSB_LIGAND_URL.format(code), timeout=timeout) as resp:
+                block = resp.read().decode("utf-8", "ignore")
+            if cached:
+                cached.parent.mkdir(parents=True, exist_ok=True)
+                cached.write_text(block)
+        from rdkit import Chem, RDLogger
+        RDLogger.DisableLog("rdApp.*")
+        m = Chem.MolFromMolBlock(block)
+        return Chem.MolToSmiles(m) if m is not None else None
+    except Exception:
+        return None
+
+
+def extract_ligand(pdb, het: Het, out_path, ph: float = 7.4, smiles: Optional[str] = None,
+                   on_notice=None) -> Path:
     """Extracts a hetero group as a standalone molecule, useful as a reference control.
 
-    With `smiles` the bond orders are corrected from a template: the PDB does not store them and
-    without them some ligands end up with impossible valences.
+    Bond orders come from a template, because the PDB does not store them and without them some
+    ligands end up with impossible valences. `smiles` is that template when the caller has one;
+    otherwise it is fetched from the chemical component dictionary -- see ccd_template, which also
+    explains what inferring them from geometry instead used to cost.
     """
     lines = _het_lines(pdb, het)
     if not lines:
         raise ReceptorError(f"No encontre el grupo {het.label} en {Path(pdb).name}.")
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    if not smiles:
+        smiles = ccd_template(het.resname, cache=out_path.parent)
+        if smiles and on_notice:
+            on_notice(f"{het.resname}: bond orders taken from the PDB chemical component "
+                      f"dictionary ({smiles}).")
+        elif not smiles and on_notice:
+            on_notice(f"{het.resname}: no template available, so its bond orders are inferred "
+                      "from the geometry. That inference is not identical on every platform, and "
+                      "this molecule sets the 100% reference. Give its SMILES if the ranking has "
+                      "to be reproduced elsewhere.")
     with tempfile.TemporaryDirectory() as td:
         raw = Path(td) / "raw.pdb"
         raw.write_text("\n".join(lines) + "\nEND\n")
