@@ -35,11 +35,14 @@ STAGES = (
 
 
 def sha256(path) -> str:
-    h = hashlib.sha256()
-    with Path(path).open("rb") as fh:
-        for block in iter(lambda: fh.read(1 << 20), b""):
-            h.update(block)
-    return h.hexdigest()
+    """Content hash, with line endings normalised first.
+
+    Every artifact hashed here is a text format, and the Windows build writes CRLF where Linux
+    writes LF. Hashing the raw bytes made a byte-for-byte identical prepared receptor look like a
+    divergence at the very first stage -- the one place a false positive costs the most, because
+    it sends the reader to inspect a preparation step that in fact agreed.
+    """
+    return hashlib.sha256(Path(path).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def _folder(proj: Path, name: str) -> Path:

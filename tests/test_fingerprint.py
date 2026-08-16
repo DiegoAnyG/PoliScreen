@@ -63,3 +63,23 @@ def test_an_unrun_project_says_so_instead_of_looking_identical(tmp_path):
     empty = tmp_path / "nothing"
     empty.mkdir()
     assert "nothing found" in fp.render(empty)
+
+
+def test_a_windows_line_ending_is_not_a_divergence(tmp_path):
+    """The same file written on Windows and on Linux must hash the same.
+
+    It did not: CRLF made an identical prepared receptor differ at the first stage, which is
+    exactly the reading that sends someone to audit a preparation step that in fact agreed.
+    """
+    lf, crlf = tmp_path / "lf.pdb", tmp_path / "crlf.pdb"
+    lf.write_bytes(b"ATOM      1  N   HIS A  10\nEND\n")
+    crlf.write_bytes(b"ATOM      1  N   HIS A  10\r\nEND\r\n")
+    assert fp.sha256(lf) == fp.sha256(crlf)
+
+
+def test_real_content_still_changes_the_hash(tmp_path):
+    """Normalising line endings must not blunt the diagnostic this exists to serve."""
+    a, b = tmp_path / "a.pdb", tmp_path / "b.pdb"
+    a.write_bytes(b"ATOM      1  N   HIS A  10\n")
+    b.write_bytes(b"ATOM      1  N   HIS A  11\n")
+    assert fp.sha256(a) != fp.sha256(b)

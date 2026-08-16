@@ -35,7 +35,7 @@ specs:
   - python 3.11.*
   - rdkit 2025.03.*
   - openbabel 3.1.*
-  - plip 3.0.*
+  - plip 3.0.1
   - openmm 8.5.*
   # Pinned like every other one, and to the same version as environment.yml. Left open, the
   # installer solved a different pdbfixer from the development environment, and pdbfixer and

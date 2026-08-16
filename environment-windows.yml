@@ -16,7 +16,7 @@ dependencies:
   - python=3.11
   - rdkit=2025.03
   - openbabel=3.1
-  - plip=3.0
+  - plip=3.0.1
   - openmm=8.5
   - pdbfixer=1.12
   - biopython=1.87
