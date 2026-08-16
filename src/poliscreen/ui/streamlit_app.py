@@ -488,6 +488,31 @@ def _img_inline(path_, height_, cls_name="", estilo=""):
 
 
 _INV = "filter:invert(1) hue-rotate(180deg) brightness(1.1);"
+
+
+def _png_size(path_):
+    """Pixel size straight from the PNG header, so the mask below can be given a width."""
+    b = Path(path_).read_bytes()[16:24]
+    return int.from_bytes(b[:4], "big"), int.from_bytes(b[4:], "big")
+
+
+def _img_tinted(path_, height_):
+    """A single-colour brand image painted with the theme's own text colour.
+
+    The colour used to be decided in Python from `st.context.theme` and written into the tag.
+    That is stale the moment the theme changes: switching it does not re-run the script, so the
+    wordmark kept the previous theme's colour until something else forced a rerun -- changing the
+    language was what usually did it. Painted as a mask filled with `currentColor`, the browser
+    resolves it on every repaint and no rerun is involved.
+    """
+    import base64
+    w, h = _png_size(path_)
+    url = f"url('data:image/png;base64,{base64.b64encode(Path(path_).read_bytes()).decode()}')"
+    return (f"<span style=\"display:inline-block;height:{height_}px;width:{height_ * w / h:.0f}px;"
+            f"background-color:currentColor;-webkit-mask:{url} no-repeat center/contain;"
+            f"mask:{url} no-repeat center/contain\"></span>")
+
+
 try:
     _tema = st.context.theme.type
 except Exception:
@@ -501,15 +526,18 @@ if _tema is None and not S.get("_theme_probed"):
     S["_theme_probed"] = True
     st.rerun()
 _est_marca = _INV if _tema == "dark" else ""
-_col_ver = "#e6e6e6" if _tema == "dark" else "#666"
 
 _marca = []
 if _logo_f and _logo_f.suffix.lower() != ".svg":
     _marca.append(_img_inline(_logo_f, 72, "", _est_marca))
-_marca.append(_img_inline(_wm, 56, "", _est_marca) if _wm
-              else "<span style='font-size:2.1rem;font-weight:700'>PoliScreen</span>")
-_marca.append(f"<span style='color:{_col_ver};font-size:.85rem;align-self:flex-end;"
-              f"padding-bottom:.5rem'>v{__version__}</span>")
+if not _wm:
+    _marca.append("<span style='font-size:2.1rem;font-weight:700'>PoliScreen</span>")
+elif _wm.suffix.lower() == ".png":
+    _marca.append(_img_tinted(_wm, 56))
+else:
+    _marca.append(_img_inline(_wm, 56, "", _est_marca))
+_marca.append("<span style='color:currentColor;opacity:.65;font-size:.85rem;"
+              f"align-self:flex-end;padding-bottom:.5rem'>v{__version__}</span>")
 _izq.markdown("<div style='display:flex;align-items:center;gap:.7rem;margin:-.3rem 0 .4rem'>"
               + "".join(_marca) + "</div>", unsafe_allow_html=True)
 _menu_archivo = _m1.popover(t("File"), width="stretch")
