@@ -161,6 +161,29 @@ def plip_available() -> bool:
     return shutil.which("plip") is not None
 
 
+def has_ligand_hydrogens(pdb) -> bool:
+    """Whether the fused complex already carries hydrogens on the ligand.
+
+    PLIP runs on Open Babel, and by default calls AddPolarHydrogens() on the complex before
+    looking for anything -- so the hydrogens that decide every hydrogen bond were placed by the
+    library whose builds differ from machine to machine. Two machines on the same commit reported
+    different anchor residues for that reason, after the ligand chemistry itself had been fixed.
+
+    When the complex already has them, --nohydro tells PLIP to use those instead. Ours come from
+    PDBFixer for the receptor and RDKit for the ligand, both pinned by version, so the decision
+    moves to files that hash the same on both platforms. When it does not have them -- an uploaded
+    ligand stripped of hydrogens -- PLIP has to add them or every hydrogen bond would be missed,
+    so the flag is conditional rather than always on.
+    """
+    for line in Path(pdb).read_text(errors="ignore").splitlines():
+        if not line.startswith("HETATM"):
+            continue
+        element = line[76:78].strip()
+        if element == "H" or (not element and line[12:16].strip()[:1] == "H"):
+            return True
+    return False
+
+
 def run_plip(complex_pdb, xml_dir, san_dir) -> Optional[Path]:
     """Runs PLIP on a complex and leaves its XML. Reuses the one that already exists."""
     complex_pdb = Path(complex_pdb)
@@ -175,7 +198,10 @@ def run_plip(complex_pdb, xml_dir, san_dir) -> Optional[Path]:
         return None
     tmp = xml_dir / f"_tmp_{complex_pdb.stem}"
     tmp.mkdir(exist_ok=True)
-    subprocess.run(["plip", "-f", str(san), "-x", "--nopdb", "-o", str(tmp)], capture_output=True, text=True)
+    cmd = ["plip", "-f", str(san), "-x", "--nopdb", "-o", str(tmp)]
+    if has_ligand_hydrogens(san):
+        cmd.append("--nohydro")
+    subprocess.run(cmd, capture_output=True, text=True)
     found = list(tmp.glob("*.xml"))
     if found:
         found[0].rename(xml)
