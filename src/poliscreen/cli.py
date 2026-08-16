@@ -60,6 +60,18 @@ def cmd_info(args) -> int:
         print("  without it, screening works; only analogue design and ADMET are disabled.")
         print("  set POLISCREEN_ADME_PYTHON and POLISCREEN_ADME_ROOT if the paths differ.")
 
+    # gnina was missing from this report entirely, so a machine with an NVIDIA GPU that had
+    # just installed PoliScreen had no way to find out why the second scoring never appeared.
+    from .core import docking as dk
+    g = dk.gnina_exe()
+    if g:
+        print(f"second scoring (gnina): {g}")
+    elif sys.platform == "win32":
+        print("second scoring (gnina): not on Windows -- it is only built for Linux. A GPU on "
+              "this machine can still run it through Docker, docker-compose.gpu.yml.")
+    else:
+        print("second scoring (gnina): not installed (optional). scripts/get_gnina.sh, NVIDIA GPU.")
+
     if faltan:
         print(f"\nMISSING required tools: {', '.join(faltan)}. See docs/INSTALL.md.")
         return 1
