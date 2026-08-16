@@ -694,7 +694,7 @@ def _docking_params():
     uses_adcp = has_peptides and adcp_ok
     uses_vina = has_vina or (has_peptides and not adcp_ok)
 
-    exhaust, energy_range, ph, cpu, workers = 8, 3.0, 7.4, 1, 0
+    exhaust, energy_range, ph, cpu, workers = 24, 3.0, 7.4, 1, 0
     adcp_steps, adcp_reps = 250_000, 20
 
     with st.expander(t("Advanced docking settings")):
@@ -713,7 +713,11 @@ def _docking_params():
 
         if uses_vina:
             st.markdown(t("**Vina** — small molecules"))
-            exhaust = st.slider(t("Exhaustiveness"), 8, 64, 8, 8,
+            # 24, matching the CLI. At 8 the search is not converged: docking one ligand
+            # against 8HTB with five seeds, one of the five landed 0.29 kcal/mol away from the
+            # other four, which is enough to change what sits at the top of the ranking. At 24
+            # that outlier is gone (spread 0.11); 32 was no better, so the cost is not worth it.
+            exhaust = st.slider(t("Exhaustiveness"), 8, 64, 24, 8,
                                 help=t("Higher = finer and slower search."))
             energy_range = st.slider(t("Energy range (kcal/mol)"), 1.0, 8.0, 3.0, 0.5,
                                      help=t("Energy window relative to the best pose for reporting alternative modes."))
