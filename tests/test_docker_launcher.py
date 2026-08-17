@@ -63,3 +63,27 @@ def test_the_release_carries_the_launcher():
     """A double-click needs a direct download, not four clicks through a source tree."""
     wf = WORKFLOW.read_text(encoding="utf-8")
     assert "files: scripts/PoliScreen-Docker.bat" in wf
+
+
+def test_the_banner_states_the_version_it_ships():
+    """A launcher that does not say which version it is leaves support guessing."""
+    import re
+    version = re.search(r'^version = "([^"]+)"',
+                        (ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.M).group(1)
+    assert f"v{version}" in LAUNCHER.read_text(encoding="utf-8"), (
+        f"the banner does not name v{version}; it drifted from pyproject")
+
+
+def test_it_is_utf8_without_a_bom():
+    """cmd.exe reads a BOM as part of the first command and fails on line one."""
+    raw = LAUNCHER.read_bytes()
+    assert not raw.startswith(b"" + bytes([0xEF, 0xBB, 0xBF])), "a BOM breaks the first line"
+    raw.decode("utf-8")
+
+
+def test_the_banner_fits_a_default_console():
+    """80 columns is the stock cmd width and a line that fills it wraps, doubling the banner."""
+    for line in LAUNCHER.read_text(encoding="utf-8").splitlines():
+        if line.startswith("echo %C") and "%RESET%" in line:
+            drawn = line.split("%", 2)[2].replace("%RESET%", "")
+            assert len(drawn) < 80, f"{len(drawn)} columns wraps in an 80-column window"

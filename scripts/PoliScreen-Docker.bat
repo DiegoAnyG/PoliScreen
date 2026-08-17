@@ -11,14 +11,31 @@ set "IMAGE=ghcr.io/diegoanyg/poliscreen:latest"
 set "FALLBACK=ghcr.io/diegoanyg/poliscreen:edge"
 set "PROJECTS=%USERPROFILE%\PoliScreen"
 
-echo   ____           _  _   ____
-echo  ^|  _ \    ___  ^| ^|(_) / ___^|   ___  _ __   ___   ___  _ __
-echo  ^| ^|_) ^|  / _ \ ^| ^|^| ^| \___ \  / __^|^| '__^| / _ \/ _ \^| '_ \
-echo  ^|  __/  ^| (_) ^|^| ^|^| ^|  ___) ^|^| (__ ^| ^|   ^|  __/^|  __/^| ^| ^| ^|
-echo  ^|_^|      \___/ ^|_^|^|_^| ^|____/  \___^|^|_^|    \___^| \___^|^|_^| ^|_^|
+rem A UTF-8 code page and a real ESC character, so the block letters and the colour
+rem gradient render instead of arriving as literal escape sequences. The prompt trick is
+rem the only way to get ESC into a variable in batch. Delayed expansion is deliberately
+rem NOT enabled: it would eat any exclamation mark in the messages further down.
+chcp 65001 >nul
+for /F %%a in ('"prompt $E$S & for %%b in (1) do rem"') do set "ESC=%%a"
+set "C1=%ESC%[38;2;0;240;255m"
+set "C2=%ESC%[38;2;30;190;255m"
+set "C3=%ESC%[38;2;60;140;255m"
+set "C4=%ESC%[38;2;100;90;255m"
+set "C5=%ESC%[38;2;150;40;255m"
+set "C6=%ESC%[38;2;150;40;255m"
+set "DIM=%ESC%[38;2;120;160;170m"
+set "RESET=%ESC%[0m"
+
+cls
 echo.
-echo   Reproducible virtual screening -- container setup
-echo   ---------------------------------------------------------------
+echo %C1% ██████╗  ██████╗ ██╗     ██╗███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗%RESET%
+echo %C2% ██╔══██╗██╔═══██╗██║     ██║██╔════╝██╔════╝██╔══██╗██╔════╝██╔════╝████╗  ██║%RESET%
+echo %C3% ██████╔╝██║   ██║██║     ██║███████╗██║     ██████╔╝█████╗  █████╗  ██╔██╗ ██║%RESET%
+echo %C4% ██╔═══╝ ██║   ██║██║     ██║╚════██║██║     ██╔══██╗██╔══╝  ██╔══╝  ██║╚██╗██║%RESET%
+echo %C5% ██║     ╚██████╔╝███████╗██║███████║╚██████╗██║  ██║███████╗███████╗██║ ╚████║%RESET%
+echo %C6% ╚═╝      ╚═════╝ ╚══════╝╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝%RESET%
+echo.
+echo %DIM%      Reproducible virtual screening   v1.0.0   container setup%RESET%
 echo.
 
 rem Docker Desktop is never started from here on purpose: it is the user's machine and starting a
