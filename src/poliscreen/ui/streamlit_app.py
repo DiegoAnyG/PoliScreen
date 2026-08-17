@@ -513,19 +513,15 @@ def _img_tinted(path_, height_):
             f"mask:{url} no-repeat center/contain\"></span>")
 
 
-try:
-    _tema = st.context.theme.type
-except Exception:
-    _tema = None
-# The theme is not always known on the first pass. Letting the browser decide through
-# `prefers-color-scheme` was wrong: that is the operating system's preference, not the app's
-# theme, so an OS in dark with Streamlit in light inverted the brand to white on a white page and
-# it stayed invisible until something redrew it. Ask for one more pass instead of guessing, and
-# invert nothing meanwhile — light is Streamlit's default, so that is the harmless miss.
-if _tema is None and not S.get("_theme_probed"):
-    S["_theme_probed"] = True
-    st.rerun()
-_est_marca = _INV if _tema == "dark" else ""
+# The theme is pinned in .streamlit/config.toml, so nothing here has to guess it. Detecting it at
+# runtime was the old approach and it was wrong twice over: the value followed the system
+# preference rather than the theme actually rendered, and it was read once per script run, so
+# switching the theme left the answer stale until something forced a rerun.
+#
+# The wordmark needs none of this -- it is painted with currentColor. The logo is a single-tone
+# drawing with internal shading, which a mask would flatten, so it is inverted instead. If the
+# theme is ever overridden to light, this inversion is the one line to drop with it.
+_est_marca = _INV
 
 _marca = []
 if _logo_f and _logo_f.suffix.lower() != ".svg":
@@ -687,7 +683,8 @@ with _menu_cfg:
     st.radio(t("Language"), list(LANGUAGES), key="_lang_pick", horizontal=True,
              help=t("Only the interface translates; results, data and file names stay as generated."))
     st.markdown(t("**Appearance**"))
-    st.caption(t("The light/dark theme is set in the top-right menu (⋮) -> Settings -> Theme. Leave it on \"Use system setting\" to follow the system."))
+    st.caption(t("The interface is dark by default. Start with POLISCREEN_THEME=light for the "
+                 "light one; the theme is fixed at start so the brand and the page always agree."))
     # Seeded through the key, not through a default value: these keys are reassigned every pass to
     # survive changing stage, and a widget cannot take both without Streamlit dropping the default.
     S.setdefault("cfg_split", 0.50)

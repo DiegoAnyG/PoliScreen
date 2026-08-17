@@ -1,17 +1,20 @@
 # PoliScreen interface configuration.
 #
-# No [theme] block, and that is the point.
+# Read only when Streamlit starts with this directory as its working directory. The container does
+# (WORKDIR /opt/poliscreen); the Windows installer ships no .streamlit and so loads none of this.
+# That asymmetry is why the same build had an appearance switcher on Windows and not in the
+# container: a loaded [theme] block replaces Streamlit's own theme choice. Keeping the block is a
+# deliberate trade -- the accent colour and the widget borders in exchange for the switcher -- so
+# the theme is chosen here instead, and `dark` is the default.
 #
-# `base` was removed first, because pinning it made the page and the runtime disagree about which
-# theme was in use and the brand inverted to white on white. Then the rest of the block turned out
-# to cost more: this file is read only when Streamlit starts with this directory as its working
-# directory, which the container does (WORKDIR /opt/poliscreen) and the Windows installer does not
-# (it ships no .streamlit). So the same build had a theme switcher on Windows and none in the
-# container -- the difference was never Docker, it was whether these options were loaded at all.
-#
-# An accent colour is worth less than being able to read the screen at night. For a container that
-# has to start dark regardless, POLISCREEN_THEME=dark sets STREAMLIT_THEME_BASE in compose and in
-# the launcher.
+# Override at start without editing this file: POLISCREEN_THEME=light, which compose and the
+# launcher pass through as STREAMLIT_THEME_BASE.
+[theme]
+base = "dark"
+primaryColor = "#2E9E7E"
+showWidgetBorder = true
+borderColor = "#4A4A4A"
+baseRadius = "small"
 
 [server]
 address = "127.0.0.1"

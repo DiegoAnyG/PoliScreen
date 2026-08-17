@@ -35,7 +35,7 @@ echo %C4% ██╔═══╝ ██║   ██║██║     ██║╚�
 echo %C5% ██║     ╚██████╔╝███████╗██║███████║╚██████╗██║  ██║███████╗███████╗██║ ╚████║%RESET%
 echo %C6% ╚═╝      ╚═════╝ ╚══════╝╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝%RESET%
 echo.
-echo %DIM%      Reproducible virtual screening   v1.0.0   container setup%RESET%
+echo %DIM%      Reproducible virtual screening   v1.0.1   container setup%RESET%
 echo.
 
 rem Docker Desktop is never started from here on purpose: it is the user's machine and starting a
