@@ -73,3 +73,34 @@ def materialize(smiles_list: Sequence[str], out_dir, names: Optional[Sequence[st
         if on_progress:
             on_progress(i + 1, len(smiles_list), name, p is not None)
     return made
+
+
+def with_hydrogens(pose_pdb, smiles: str, out_pdb) -> Optional[Path]:
+    """A docked pose given its hydrogens back, from the molecule's own chemistry.
+
+    Vina works on a united-atom PDBQT and the pose that comes back has no hydrogens at all -- and
+    a PDB has no bond orders to rebuild them from. Today PLIP fills that gap itself with openbabel,
+    which is where the interaction fingerprint stops being portable. Taking the bond orders from
+    the SMILES the ligand was built from, the way the crystallographic control now takes them from
+    the component dictionary, puts the decision back on chemistry that is already recorded.
+
+    Returns None if the template does not match the pose, which is the honest outcome when the
+    recorded SMILES is not the molecule in the file.
+    """
+    from rdkit import Chem, RDLogger
+    from rdkit.Chem import AllChem
+    RDLogger.DisableLog("rdApp.*")
+
+    tmpl = Chem.MolFromSmiles(smiles or "")
+    mol = Chem.MolFromPDBFile(str(pose_pdb), removeHs=False, sanitize=False)
+    if tmpl is None or mol is None:
+        return None
+    mol.UpdatePropertyCache(strict=False)
+    try:
+        mol = AllChem.AssignBondOrdersFromTemplate(tmpl, mol)
+    except Exception:
+        return None
+    out_pdb = Path(out_pdb)
+    out_pdb.parent.mkdir(parents=True, exist_ok=True)
+    Chem.MolToPDBFile(Chem.AddHs(mol, addCoords=True), str(out_pdb))
+    return out_pdb if out_pdb.exists() and out_pdb.stat().st_size else None

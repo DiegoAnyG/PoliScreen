@@ -6,7 +6,9 @@ extracted, protonated and reattached separately.
 """
 from __future__ import annotations
 
+import os
 import random
+import shutil
 import subprocess
 import tempfile
 import urllib.request
@@ -237,6 +239,65 @@ def extract_ligand(pdb, het: Het, out_path, ph: float = 7.4, smiles: Optional[st
     if not out_path.exists() or out_path.stat().st_size == 0:
         raise ReceptorError(f"Could not write the ligand {het.label}.")
     return out_path
+
+
+PDB2PQR_NAMES = ("pdb2pqr30", "pdb2pqr")
+
+
+def pdb2pqr_exe() -> Optional[str]:
+    """The PDB2PQR executable, honouring POLISCREEN_PDB2PQR like the other external tools."""
+    forced = os.environ.get("POLISCREEN_PDB2PQR")
+    if forced and Path(forced).exists():
+        return forced
+    for name in PDB2PQR_NAMES:
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
+def optimize_hydrogens(pdb, out, ph: float = 7.4, timeout: int = 900) -> Optional[Path]:
+    """Rebuild the receptor's hydrogens with PDB2PQR/PROPKA, orienting the network.
+
+    PDBFixer places hydrogens from residue templates; it does not decide where the rotatable ones
+    point. That second decision is the one that matters: a Ser/Thr/Tyr hydroxyl turns freely, and
+    the amides of Asn/Gln and the ring of His can sit either way round because C, N and O scatter
+    too alike for the density to separate them. PLIP, left alone, makes that decision itself with
+    openbabel -- and openbabel is compiled per platform, which is where an 18.6% disagreement in
+    detected contacts between two machines came from.
+
+    Measured on 8HTB: every hydrogen moved, 1247 of them by more than 0.5 A, and the largest movers
+    were Gln144 and Asn36 amide flips at 4.1 and 3.7 A. Two runs gave a byte-identical file, and
+    the package is noarch -- literally the same Python on both platforms.
+
+    Two things this must not be asked to do, both learned the hard way:
+
+    - **Never hand it a complex.** It keeps residues it has no parameters for but gives them no
+      hydrogens, so a fused ligand comes back stripped: 41 atoms to 23, and the contacts with it.
+      Run it on the receptor, and let each hetero component's hydrogens come from its own
+      chemistry.
+    - **Never expect --ligand to rescue that.** Its ligand force field has no phosphorus, so a
+      receptor carrying a nucleotide cofactor (GDP here) fails outright.
+
+    Returns None when PDB2PQR is absent or fails: this is an improvement to the preparation, not a
+    requirement for it.
+    """
+    exe = pdb2pqr_exe()
+    if not exe:
+        return None
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            proc = subprocess.run(
+                [exe, "--ff=AMBER", f"--with-ph={ph}", "--titration-state-method=propka",
+                 "--keep-chain", "--pdb-output", str(out), str(pdb), str(Path(td) / "out.pqr")],
+                capture_output=True, text=True, timeout=timeout)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+    if proc.returncode != 0 or not out.exists() or out.stat().st_size == 0:
+        return None
+    return out
 
 
 def extract_chain(pdb, chain: str, out_path, polypeptide_only: bool = True,
