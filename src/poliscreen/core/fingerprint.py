@@ -105,3 +105,102 @@ def render(project, stages: Iterable = STAGES) -> str:
         counts[stage] = counts.get(stage, 0) + 1
     lines += ["", "## totals"] + [f"{s:<15} {counts.get(s, 0)}" for s, _f, _p in stages]
     return "\n".join(lines) + "\n"
+
+
+def protonation_report(project, n: int = 20, seed: int = 11) -> str:
+    """Contacts as PLIP finds them today, beside contacts with the protonation pinned down.
+
+    Today PLIP protonates the fused complex itself, with openbabel, which is compiled per platform:
+    two machines on the same commit disagreed on 18.6 % of the detected contacts from files that
+    hashed the same, and every single disagreement was a hydrogen bond or a salt bridge. The
+    alternative rebuilds the receptor's hydrogen network with PDB2PQR -- noarch, the same Python
+    everywhere -- takes the ligand's hydrogens from the SMILES it was built from, and tells PLIP to
+    leave them alone.
+
+    That alternative finds fewer contacts. Whether it finds the *same* ones on both platforms is
+    the question this answers, and it is answered by running it on two machines and diffing rather
+    than by arguing. Sorted and free of paths for exactly that reason.
+    """
+    import csv
+    import random
+    import re
+    import shutil
+    import subprocess
+    import tempfile
+
+    from . import interactions as ix
+    from . import ligands as lg
+    from . import receptor as rc
+    from . import screening as sc
+
+    proj = Path(project)
+    poses_dir = proj / "poses"
+    comps_dir = next((d for d in (_folder(proj, lay.COMPLEXES), proj / "fused_complexes")
+                      if d.is_dir()), None)
+    if not poses_dir.is_dir() or comps_dir is None:
+        return "nothing found: this project has no poses and complexes to compare.\n"
+
+    receptors = (sorted(_folder(proj, lay.RECEPTORS).glob("*_ready.pdb"))
+                 or sorted(_folder(proj, lay.RECEPTORS).glob("*_listo.pdb")))
+    if not receptors:
+        return "nothing found: no prepared receptor in this project.\n"
+    if not rc.pdb2pqr_exe():
+        return "PDB2PQR is not installed here. pip install pdb2pqr\n"
+
+    smiles = {}
+    for meta in ("ligands_meta.csv", "tablas/ligands_meta.csv"):
+        p = proj / meta
+        if p.exists():
+            with open(p, newline="", encoding="utf-8-sig") as f:
+                for row in csv.DictReader(f):
+                    if row.get("smiles"):
+                        smiles[sc.normalize_key(row["name"])] = row["smiles"]
+
+    def profile(complex_pdb, work, nohydro):
+        out = work / ("nohydro" if nohydro else "plip") / complex_pdb.stem
+        shutil.rmtree(out, ignore_errors=True)
+        out.mkdir(parents=True, exist_ok=True)
+        cmd = ["plip", "-f", str(complex_pdb), "-x", "--nopdb", "-o", str(out)]
+        if nohydro:
+            cmd.append("--nohydro")
+        subprocess.run(cmd, capture_output=True)
+        found = list(out.glob("*.xml"))
+        return {k for k, v in ix.parse_plip_xml(found[0]).items() if v} if found else None
+
+    poses = sorted(poses_dir.glob("*-model1.pdb"))
+    random.seed(seed)
+    sample = sorted(random.sample(poses, min(n, len(poses))), key=lambda p: p.name)
+
+    L = ["# protonation comparison", f"# receptor: {receptors[0].name}",
+         f"# sampled: {len(sample)} of {len(poses)} poses, seed {seed}", ""]
+    agree = only_current = only_optimised = 0
+    with tempfile.TemporaryDirectory() as td:
+        work = Path(td)
+        optimised = rc.optimize_hydrogens(receptors[0], work / "receptor_optimised.pdb")
+        if optimised is None:
+            return "PDB2PQR could not process this receptor; nothing to compare.\n"
+        for pose in sample:
+            key = re.sub(r"-model\d+$", "", pose.stem.split("compounds_a_")[-1])
+            smi = smiles.get(sc.normalize_key(key))
+            current = next((c for c in (comps_dir / f"{lay.COMPLEX_PREFIX}{pose.stem}.pdb",
+                                        comps_dir / f"Complejo_{pose.stem}.pdb") if c.exists()), None)
+            if not smi or current is None:
+                L.append(f"{pose.stem}\tSKIPPED\tno smiles or no complex")
+                continue
+            ligand = lg.with_hydrogens(pose, smi, work / f"lig_{pose.stem}.pdb")
+            if ligand is None:
+                L.append(f"{pose.stem}\tSKIPPED\tthe template does not match the pose")
+                continue
+            fused = ix.fuse(optimised, ligand, work / f"opt_{pose.stem}.pdb")
+            a, b = profile(current, work, False), profile(fused, work, True)
+            if a is None or b is None:
+                L.append(f"{pose.stem}\tSKIPPED\tPLIP produced no report")
+                continue
+            agree += len(a & b); only_current += len(a - b); only_optimised += len(b - a)
+            L.append(pose.stem)
+            L.append("  current  \t" + " ".join(sorted(a)))
+            L.append("  optimised\t" + " ".join(sorted(b)))
+
+    L += ["", "# totals", f"# agreeing\t{agree}", f"# only current\t{only_current}",
+          f"# only optimised\t{only_optimised}"]
+    return "\n".join(L) + "\n"

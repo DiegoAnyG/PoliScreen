@@ -208,6 +208,30 @@ def _ui_in_a_window(cmd, url: str, port: int) -> int:
     return 0
 
 
+def cmd_protonation_check(args) -> int:
+    """Whether pinning the protonation down costs contacts, and whether it buys portability.
+
+    Reachable from the installed launcher on purpose: the machine that has to run it is the one
+    with the divergence, and asking someone to clone a repository to answer that is how the
+    question stays unanswered.
+    """
+    from pathlib import Path
+
+    from .core import fingerprint as fp
+
+    proj = Path(args.project)
+    if not proj.is_dir():
+        print(f"ERROR: {proj} is not a folder.", file=sys.stderr)
+        return 1
+    text = fp.protonation_report(proj, n=args.n, seed=args.seed)
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+        print(f"Written to {args.out}. Run this on the other machine too and diff the two files.")
+    else:
+        print(text, end="")
+    return 0
+
+
 def cmd_fingerprint(args) -> int:
     """Print what the docking consumed and produced, hashed, so two machines can be compared.
 
@@ -340,6 +364,15 @@ def main(argv=None) -> int:
     pfp.add_argument("project", help="project folder")
     pfp.add_argument("--out", help="write to this file instead of the screen")
     pfp.set_defaults(func=cmd_fingerprint)
+
+    ppc = sub.add_parser("protonation-check",
+                         help="does pinning the protonation down cost contacts, and does it agree "
+                              "across machines")
+    ppc.add_argument("project", help="project folder with poses and fused complexes")
+    ppc.add_argument("--out", help="write to this file instead of the screen")
+    ppc.add_argument("--n", type=int, default=20, help="complexes to sample")
+    ppc.add_argument("--seed", type=int, default=11, help="which ones; keep it equal on both machines")
+    ppc.set_defaults(func=cmd_protonation_check)
 
     pprep = sub.add_parser("prep", help="prepare a receptor: download, inspect and clean")
     pprep.add_argument("--pdb-id", help="PDB identifier, e.g. 4D44")
