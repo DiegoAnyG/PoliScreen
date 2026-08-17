@@ -100,7 +100,31 @@ def test_line_endings_are_pinned_for_checkout():
 
 def test_the_banner_fits_a_default_console():
     """80 columns is the stock cmd width and a line that fills it wraps, doubling the banner."""
-    for line in LAUNCHER.read_text(encoding="utf-8").splitlines():
-        if line.startswith("echo %C") and "%RESET%" in line:
-            drawn = line.split("%", 2)[2].replace("%RESET%", "")
-            assert len(drawn) < 80, f"{len(drawn)} columns wraps in an 80-column window"
+    import base64
+    import re
+
+    m = re.search(r"FromBase64String\('([A-Za-z0-9+/=]+)'\)", LAUNCHER.read_text(encoding="utf-8"))
+    assert m, "the banner is no longer carried as base64"
+    art = base64.b64decode(m.group(1)).decode("utf-8")
+    for line in art.splitlines():
+        drawn = re.sub(r"\[[0-9;]*m", "", line)
+        assert len(drawn) < 80, f"{len(drawn)} columns wraps in an 80-column window"
+
+
+def test_the_banner_never_reaches_cmd_as_text():
+    """cmd reads this file with the console code page; the characters must not be in it at all."""
+    LAUNCHER.read_bytes().decode("ascii")
+
+
+def test_a_container_already_running_is_noticed():
+    """One left from another window keeps port 8501, and the browser shows that build instead."""
+    text = LAUNCHER.read_text(encoding="utf-8")
+    assert "--name poliscreen" in text, "an unnamed container cannot be looked for"
+    assert "choice /C YN" in text, "stopping someone's running screening must be asked, not assumed"
+
+
+def test_only_our_own_stale_images_are_removed():
+    """A blanket prune would take other projects' images on a machine that is not ours to tidy."""
+    text = LAUNCHER.read_text(encoding="utf-8")
+    assert "docker images ghcr.io/diegoanyg/poliscreen --filter \"dangling=true\"" in text
+    assert "docker image prune" not in text, "too broad: that removes every project's leftovers"

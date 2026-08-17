@@ -2,6 +2,25 @@
 
 Notable changes. Dates are release dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [1.0.4] — 2026-08-17
+
+### Changed
+
+- Panel height defaults to 580 px instead of 700.
+- The banner is carried as base64 and printed by PowerShell, so the block letters are back without
+  a single non-ASCII byte in the batch file. cmd reads that file with the console code page, which
+  is why the characters could not simply be pasted into it.
+
+### Fixed
+
+- **A container left running kept serving the previous build.** It held port 8501, so the browser
+  opened onto the old interface with nothing saying the new image had not started -- restarting the
+  Docker engine was the only way out. The container is named now, and a running one is reported with
+  the choice of stopping it, rather than stopped without asking: it may be a screening in progress.
+- **An updated image left the previous one behind, untagged, taking disk.** Pulling now removes the
+  dangling images of this repository only. A blanket `docker image prune` would take every other
+  project's leftovers on a machine that is not ours to tidy.
+
 ## [1.0.3] — 2026-08-17
 
 ### Fixed

@@ -11,30 +11,16 @@ set "IMAGE=ghcr.io/diegoanyg/poliscreen:latest"
 set "FALLBACK=ghcr.io/diegoanyg/poliscreen:edge"
 set "PROJECTS=%USERPROFILE%\PoliScreen"
 
-rem Seven-bit ASCII only, and CRLF endings. Both are the fix for the same report: block-drawing
-rem characters need chcp 65001, and changing the code page part-way through a batch file shifts
-rem the parser's byte offset so lines split mid-command -- and LF-only endings break cmd on their
-rem own. The colour is the part that carries the look anyway, and 24-bit colour is plain ASCII.
-rem The ESC character cannot be typed literally in a batch file; the prompt trick is how it is
-rem obtained. Delayed expansion stays off: it would eat any exclamation mark in the text below.
-for /F %%a in ('"prompt $E$S & for %%b in (1) do rem"') do set "ESC=%%a"
-set "C1=%ESC%[38;2;0;240;255m"
-set "C2=%ESC%[38;2;40;180;255m"
-set "C3=%ESC%[38;2;80;130;255m"
-set "C4=%ESC%[38;2;120;80;255m"
-set "C5=%ESC%[38;2;160;40;255m"
-set "DIM=%ESC%[38;2;120;160;170m"
-set "RESET=%ESC%[0m"
-
+rem The banner is base64 so that this file stays seven-bit ASCII. Block-drawing characters in a
+rem batch file need the console code page changed, and changing it part-way through shifts the
+rem parser's byte offset -- lines split mid-command and every fragment comes back as an
+rem unrecognised command, which is exactly how the first release failed to start. cmd never sees
+rem the characters here: it passes base64 to PowerShell, which decodes and prints them itself.
 cls
 echo.
-echo %C1% ####  ##  #    ###  ###  ### #### #### #### #  #%RESET%
-echo %C2% #  # #  # #     #  #    #    #  # #    #    ## #%RESET%
-echo %C3% #### #  # #     #   ##  #    #### ###  ###  # ##%RESET%
-echo %C4% #    #  # #     #     # #    #  # #    #    #  #%RESET%
-echo %C5% #     ##  #### ### ###   ### #  # #### #### #  #%RESET%
+powershell -NoProfile -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('G1szODsyOzA7MjQwOzI1NW0g4paI4paI4paI4paI4paI4paI4pWXICDilojilojilojilojilojilojilZcg4paI4paI4pWXICAgICDilojilojilZfilojilojilojilojilojilojilojilZcg4paI4paI4paI4paI4paI4paI4pWX4paI4paI4paI4paI4paI4paI4pWXIOKWiOKWiOKWiOKWiOKWiOKWiOKWiOKVl+KWiOKWiOKWiOKWiOKWiOKWiOKWiOKVl+KWiOKWiOKWiOKVlyAgIOKWiOKWiOKVlxtbMG0KG1szODsyOzMwOzE5MDsyNTVtIOKWiOKWiOKVlOKVkOKVkOKWiOKWiOKVl+KWiOKWiOKVlOKVkOKVkOKVkOKWiOKWiOKVl+KWiOKWiOKVkSAgICAg4paI4paI4pWR4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWd4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWd4paI4paI4pWU4pWQ4pWQ4paI4paI4pWX4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWd4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWd4paI4paI4paI4paI4pWXICDilojilojilZEbWzBtChtbMzg7Mjs3MDsxNDA7MjU1bSDilojilojilojilojilojilojilZTilZ3ilojilojilZEgICDilojilojilZHilojilojilZEgICAgIOKWiOKWiOKVkeKWiOKWiOKWiOKWiOKWiOKWiOKWiOKVl+KWiOKWiOKVkSAgICAg4paI4paI4paI4paI4paI4paI4pWU4pWd4paI4paI4paI4paI4paI4pWXICDilojilojilojilojilojilZcgIOKWiOKWiOKVlOKWiOKWiOKVlyDilojilojilZEbWzBtChtbMzg7MjsxMjA7OTA7MjU1bSDilojilojilZTilZDilZDilZDilZ0g4paI4paI4pWRICAg4paI4paI4pWR4paI4paI4pWRICAgICDilojilojilZHilZrilZDilZDilZDilZDilojilojilZHilojilojilZEgICAgIOKWiOKWiOKVlOKVkOKVkOKWiOKWiOKVl+KWiOKWiOKVlOKVkOKVkOKVnSAg4paI4paI4pWU4pWQ4pWQ4pWdICDilojilojilZHilZrilojilojilZfilojilojilZEbWzBtChtbMzg7MjsxNzA7NDA7MjU1bSDilojilojilZEgICAgIOKVmuKWiOKWiOKWiOKWiOKWiOKWiOKVlOKVneKWiOKWiOKWiOKWiOKWiOKWiOKWiOKVl+KWiOKWiOKVkeKWiOKWiOKWiOKWiOKWiOKWiOKWiOKVkeKVmuKWiOKWiOKWiOKWiOKWiOKWiOKVl+KWiOKWiOKVkSAg4paI4paI4pWR4paI4paI4paI4paI4paI4paI4paI4pWX4paI4paI4paI4paI4paI4paI4paI4pWX4paI4paI4pWRIOKVmuKWiOKWiOKWiOKWiOKVkRtbMG0KG1szODsyOzE3MDs0MDsyNTVtIOKVmuKVkOKVnSAgICAgIOKVmuKVkOKVkOKVkOKVkOKVkOKVnSDilZrilZDilZDilZDilZDilZDilZDilZ3ilZrilZDilZ3ilZrilZDilZDilZDilZDilZDilZDilZ0g4pWa4pWQ4pWQ4pWQ4pWQ4pWQ4pWd4pWa4pWQ4pWdICDilZrilZDilZ3ilZrilZDilZDilZDilZDilZDilZDilZ3ilZrilZDilZDilZDilZDilZDilZDilZ3ilZrilZDilZ0gIOKVmuKVkOKVkOKVkOKVnRtbMG0='))"
 echo.
-echo %DIM%     Reproducible virtual screening   v1.0.3   container setup%RESET%
+echo      Reproducible virtual screening   v1.0.4   container setup
 echo.
 
 rem Docker Desktop is never started from here on purpose: it is the user's machine and starting a
@@ -100,6 +86,12 @@ if errorlevel 1 (
         echo   Image               local copy (no network^)
     ) else (
         echo   Image               up to date
+        rem A pull that replaced the image leaves the previous one untagged. Only this
+        rem repository's dangling images are removed -- a blanket prune would take other
+        rem projects' with it, on a machine that is not ours to tidy.
+        for /f %%i in ('docker images ghcr.io/diegoanyg/poliscreen --filter "dangling=true" -q') do (
+            docker rmi %%i >nul 2>&1
+        )
     )
 )
 
@@ -122,6 +114,27 @@ rem the choice is made when the container starts.
 set "THEME="
 if defined POLISCREEN_THEME set "THEME=-e STREAMLIT_THEME_BASE=%POLISCREEN_THEME%"
 
-docker run --rm -it --init -p 127.0.0.1:8501:8501 -v "%PROJECTS%:/data" %THEME% %IMAGE%
+rem A container from a previous window keeps port 8501, so the browser opened to the build that
+rem was already there and nothing said the new image had not started. Naming it makes that
+rem visible; stopping it is asked for rather than done, because it may be someone's running
+rem screening.
+docker ps -q --filter "name=poliscreen" > "%TEMP%\poliscreen_running.txt"
+for /f %%i in (%TEMP%\poliscreen_running.txt) do set "RUNNING=%%i"
+del "%TEMP%\poliscreen_running.txt" >nul 2>&1
+if defined RUNNING (
+    echo.
+    echo   PoliScreen is already running in another window, on this same port.
+    echo   That older container is what your browser will show.
+    echo.
+    choice /C YN /M "Stop it and start this one"
+    if errorlevel 2 (
+        echo   Left running. Open http://localhost:8501 to use it.
+        pause
+        exit /b 0
+    )
+    docker stop poliscreen >nul 2>&1
+)
+
+docker run --rm -it --init --name poliscreen -p 127.0.0.1:8501:8501 -v "%PROJECTS%:/data" %THEME% %IMAGE%
 
 endlocal

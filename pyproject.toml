@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "poliscreen"
-version = "1.0.3"
+version = "1.0.4"
 description = "Reproducible virtual screening: analogue design with synthesizability, molecular docking and objective interaction-quality scoring."
 readme = "README.md"
 requires-python = ">=3.10"
