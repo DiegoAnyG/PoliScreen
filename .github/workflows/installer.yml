@@ -149,3 +149,44 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: out/*
+
+  # The image, published so nobody has to build it. Downloading a finished image is the difference
+  # between the Docker route taking a minute and taking the ten that the conda solve costs, and it
+  # is what makes scripts/PoliScreen-Docker.bat a double-click rather than a checkout plus a build.
+  # It also gives the reproducible reference a name that can be cited: an image digest pins every
+  # binary in it, which is exactly what the native Windows build cannot promise.
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Lower-cased because ghcr rejects capitals in a repository name, and the account has one.
+      - name: Work out the tags
+        id: tags
+        run: |
+          repo=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          if [ "${{ startsWith(github.ref, 'refs/tags/') }}" = "true" ]; then
+            echo "tags=ghcr.io/$repo:${GITHUB_REF_NAME#v},ghcr.io/$repo:latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=ghcr.io/$repo:edge" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/build-push-action@v6
+        id: push
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+
+      # The digest is what a paper cites; printing it here saves pulling the image to read it.
+      - name: The digest to cite
+        run: echo "${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"

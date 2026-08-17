@@ -7,6 +7,13 @@
 | conda | development | yes |
 | conda on native Windows | no WSL, no Docker | **no** — conda-forge has no Windows build |
 
+> **The native Windows build detects fewer hydrogen bonds.** Measured over 60 complexes on
+> identical input, 18.6 % of detected contacts differ from the container, all of them hydrogen
+> bonds or salt bridges; affinities, poses and hydrophobic contacts agree. PLIP protonates the
+> complex with Open Babel, whose build differs per platform. Explore and triage with it freely,
+> and use the container for anything published — a Methods file exported on Windows says so
+> itself. This is why the container is the reference, not merely the recommendation.
+
 The screening cycle is identical on all of them. Optional engines are never installed by default.
 
 | | Docker | installer | conda |
@@ -21,6 +28,12 @@ ADCP and gnina are Linux-only builds, so on Windows they exist only through Dock
 
 ## Docker
 
+**Windows, no terminal.** Install Docker Desktop, download `scripts/PoliScreen-Docker.bat`,
+double-click it. It pulls the published image the first time and starts the interface; projects go
+to `%USERPROFILE%\PoliScreen`. Nothing to build and nothing to clone.
+
+**From a checkout**, when you want to choose the engines or run your own code:
+
 ```bash
 git clone https://github.com/DiegoAnyG/PoliScreen.git
 cd PoliScreen
@@ -30,6 +43,15 @@ bash scripts/install-docker.sh
 It asks which engines go in the image, then builds and starts it. Answer up front to skip the
 question: `bash scripts/install-docker.sh 4`. The plain equivalent of option 1 is
 `docker compose -f docker/docker-compose.yml up --build`.
+
+**The published image**, to pull without a checkout:
+
+```bash
+docker run --rm -it --init -p 127.0.0.1:8501:8501 -v "$PWD/proyectos:/data"   ghcr.io/diegoanyg/poliscreen:latest
+```
+
+Cite its **digest**, not the tag: the digest pins every binary inside it, which is what makes a
+result reproducible. The release workflow prints it in the run summary.
 
 <http://localhost:8501>. Projects go to `/data`, mounted from `./proyectos`, so they survive the
 container. Set `POLISCREEN_PROJECTS` to move them.
