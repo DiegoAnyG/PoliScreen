@@ -1,0 +1,7 @@
+# Shows a Sponsor button on the repository. Symbolic for a project this size -- it is here because
+# it costs nothing, not because it is expected to fund anything.
+github: [DiegoAnyG]
+
+# Uncomment and put your handle in if you open a Ko-fi page. GitHub Sponsors is not available
+# everywhere; the signup flow says so immediately, and Ko-fi is the usual fallback.
+# ko_fi: your-handle

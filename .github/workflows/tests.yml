@@ -1,0 +1,41 @@
+# The safety net, run where anyone can see it.
+#
+# The suite exists to catch what only shows up at runtime -- Streamlit widget keys, packaging,
+# Windows paths, a residue number read from the wrong column. Running it only on the author's
+# machine means a green tick nobody else can check, and a broken main nobody notices until they
+# clone it.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same environment file users install from, so a solve that breaks for them breaks here
+      # first. Cached by its hash: unchanged dependencies mean the solve is skipped entirely.
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: environment.yml
+          activate-environment: poliscreen
+          miniforge-version: latest
+          use-mamba: true
+
+      - name: Install PoliScreen and pytest
+        run: |
+          pip install --no-deps -e .
+          pip install pytest
+
+      # Vina is not on conda and the suite does not dock anything, so it is not fetched here. If a
+      # test ever needs it, scripts/get_vina.sh is the step to add rather than a mock.
+      - name: Run the suite
+        run: python -m pytest tests/ -q
