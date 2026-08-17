@@ -1,3 +1,5 @@
+![PoliScreen](docs/banner.png)
+
 # PoliScreen
 
 Reproducible virtual screening that closes the loop **design → synthesizability
