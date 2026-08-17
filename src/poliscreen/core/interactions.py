@@ -56,22 +56,50 @@ def receptor_text(pdb, cache_dir=None) -> str:
                    if not l.strip().startswith(("END", "ENDMDL")))
 
 
-def ligand_text(pose_pdb) -> str:
-    """Rewrites the pose as HETATM/LIG in its own chain. Keeps the CONECT records."""
-    out = []
-    for l in Path(pose_pdb).read_text(errors="ignore").splitlines():
-        if l.startswith(("ATOM", "HETATM")):
+def max_serial(pdb_text: str) -> int:
+    """Highest atom serial in a PDB body, so whatever is appended to it can start above."""
+    top = 0
+    for line in pdb_text.splitlines():
+        if line.startswith(("ATOM", "HETATM")):
             try:
-                serial = l[6:11].strip()
-                name = l[12:16]
-                x, y, z = float(l[30:38]), float(l[38:46]), float(l[46:54])
-                el = (l[76:78].strip() or name.strip()[0])
-                out.append(f"{'HETATM':<6}{serial:>5} {name:<4} {LIGAND_RESNAME:>3} {LIGAND_CHAIN}{LIGAND_RESSEQ:>4}"
-                           f"    {x:>8.3f}{y:>8.3f}{z:>8.3f}  1.00  0.00          {el:>2}\n")
-            except Exception:
+                top = max(top, int(line[6:11]))
+            except ValueError:
                 continue
-        elif l.startswith("CONECT"):
-            out.append(l + "\n")
+    return top
+
+
+def ligand_text(pose_pdb, serial_offset: int = 0) -> str:
+    """Rewrites the pose as HETATM/LIG in its own chain, with its bonds still meaning something.
+
+    A pose numbers its atoms from 1 and so does the receptor, so fusing the two produced a file in
+    which CONECT 1 named two different atoms. Those records are the ligand's real bonds -- a PDB
+    has no other way to state them -- and a complex handed to PLIP without them leaves openbabel to
+    infer the connectivity from distances, which costs hydrogen bonds that were known all along.
+    Offsetting the serials makes the records unambiguous, so they can be kept.
+    """
+    text = Path(pose_pdb).read_text(errors="ignore")
+    out, renumber = [], {}
+    for line in text.splitlines():
+        if not line.startswith(("ATOM", "HETATM")):
+            continue
+        try:
+            old = int(line[6:11])
+            name = line[12:16]
+            x, y, z = float(line[30:38]), float(line[38:46]), float(line[46:54])
+        except ValueError:
+            continue
+        el = (line[76:78].strip() or name.strip()[:1])
+        renumber[old] = old + serial_offset
+        out.append(f"{'HETATM':<6}{renumber[old]:>5} {name:<4} {LIGAND_RESNAME:>3} "
+                   f"{LIGAND_CHAIN}{LIGAND_RESSEQ:>4}    {x:>8.3f}{y:>8.3f}{z:>8.3f}"
+                   f"  1.00  0.00          {el:>2}\n")
+    for line in text.splitlines():
+        if not line.startswith("CONECT"):
+            continue
+        fields = [line[i:i + 5] for i in range(6, len(line), 5)]
+        mapped = [renumber[int(f)] for f in fields if f.strip().isdigit() and int(f) in renumber]
+        if len(mapped) > 1:
+            out.append("CONECT" + "".join(f"{m:>5}" for m in mapped) + "\n")
     return "".join(out)
 
 
@@ -81,7 +109,8 @@ def fuse(receptor, pose_pdb, out_pdb, cache_dir=None) -> Path:
     body = receptor_text(receptor, cache_dir)
     if not body.endswith("\n"):
         body += "\n"
-    out_pdb.write_text(body + ligand_text(pose_pdb) + "END\n")
+    out_pdb.write_text(body + ligand_text(pose_pdb, serial_offset=max_serial(body))\
+                       + "END\n")
     return out_pdb
 
 
@@ -128,6 +157,12 @@ def sanitize_pdb(src, dst) -> bool:
                 continue
         elif line.startswith("TER"):
             clean.append("TER\n")
+        elif line.startswith("CONECT"):
+            # The ligand's bonds. Dropping them left openbabel re-inferring the connectivity
+            # from distances inside PLIP, and hydrogen bonds went with it. The column rewriting
+            # above is what this function is for -- a misaligned residue number is read as the
+            # neighbouring residue -- and it never required throwing the bonds away.
+            clean.append(line.rstrip() + "\n")
     if not clean:
         return False
     Path(dst).parent.mkdir(parents=True, exist_ok=True)
