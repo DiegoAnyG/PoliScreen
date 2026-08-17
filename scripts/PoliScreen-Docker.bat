@@ -117,6 +117,12 @@ start "" /b cmd /c "timeout /t 8 >nul & start "" http://localhost:8501"
 
 rem --init so Ctrl+C reaches streamlit instead of being ignored by PID 1, --rm so nothing is left
 rem behind, and the port bound to 127.0.0.1 because the interface has no authentication.
-docker run --rm -it --init -p 127.0.0.1:8501:8501 -v "%PROJECTS%:/data" %IMAGE%
+rem Dark interface: set POLISCREEN_THEME=dark before running this, or add the line here. The
+rem menu in Streamlit 1.59 no longer carries the switcher when the app defines its own theme, so
+rem the choice is made when the container starts.
+set "THEME="
+if defined POLISCREEN_THEME set "THEME=-e STREAMLIT_THEME_BASE=%POLISCREEN_THEME%"
+
+docker run --rm -it --init -p 127.0.0.1:8501:8501 -v "%PROJECTS%:/data" %THEME% %IMAGE%
 
 endlocal

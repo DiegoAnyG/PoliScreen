@@ -30,6 +30,9 @@ services:
       # nothing and the bridge reports the engine as unavailable, which is handled.
       POLISCREEN_ADME_PYTHON: ${POLISCREEN_ADME_PYTHON:-/opt/conda/envs/admet/bin/python}
       POLISCREEN_ADME_ROOT: ${POLISCREEN_ADME_ROOT:-/opt/adme}
+      # light, dark, or unset to follow the browser. Streamlit 1.59 dropped the switcher from its
+      # own menu for apps that define a theme, so this is where the choice is made.
+      STREAMLIT_THEME_BASE: ${POLISCREEN_THEME:-}
     # Ctrl+C has to stop everything and leave nothing behind, the way the Windows launcher does.
     # Two things were in the way.
     #

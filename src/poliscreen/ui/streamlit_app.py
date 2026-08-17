@@ -751,12 +751,15 @@ def _docking_params():
 
         if uses_vina:
             st.markdown(t("**Vina** — small molecules"))
-            # 24, matching the CLI. At 8 the search is not converged: docking one ligand
-            # against 8HTB with five seeds, one of the five landed 0.29 kcal/mol away from the
-            # other four, which is enough to change what sits at the top of the ranking. At 24
-            # that outlier is gone (spread 0.11); 32 was no better, so the cost is not worth it.
-            exhaust = st.slider(t("Exhaustiveness"), 8, 64, 24, 8,
-                                help=t("Higher = finer and slower search."))
+            # 8 by default, which is fast enough to explore with. It is not converged: docking
+            # one ligand against 8HTB with five seeds, one of the five landed 0.29 kcal/mol from
+            # the other four, enough to move the top of the ranking. At 24 that outlier is gone
+            # (spread 0.11) and 32 was no better. The help text says so; the choice is the user's,
+            # because most of a session is exploring and only the final run has to be converged.
+            exhaust = st.slider(t("Exhaustiveness"), 8, 64, 8, 8,
+                                help=t("Higher = finer and slower search. 8 is for exploring; "
+                                       "raise it to 24 for a run whose ranking you will report, "
+                                       "where a single unlucky seed should not decide the order."))
             energy_range = st.slider(t("Energy range (kcal/mol)"), 1.0, 8.0, 3.0, 0.5,
                                      help=t("Energy window relative to the best pose for reporting alternative modes."))
             ph = st.slider(t("Protonation pH"), 5.0, 9.0, 7.4, 0.1,
@@ -1365,13 +1368,10 @@ def _stage_ligands():
                 # closed rather than left to produce names nobody can vouch for.
                 if not nm.available():
                     st.button(t("Name (IUPAC, verified with OPSIN)"), disabled=True)
-                    st.caption(t("IUPAC naming is off in this build: verifying a name means "
-                                 "rebuilding the structure from it and comparing, which needs "
-                                 "OPSIN and a Java runtime — together larger than the rest of "
-                                 "PoliScreen, for a label that never changes a result. Products "
-                                 "are identified by their SMILES, which is what is docked. To "
-                                 "turn it on, point `POLISCREEN_OPSIN` at opsin.jar with Java on "
-                                 "`PATH`; a future build may carry both."))
+                    # The reasoning lives in Help and in docs/INSTALL.md. An explanation this
+                    # long belongs where someone goes looking for it, not in the way of the work.
+                    st.caption(t("IUPAC naming is off in this build. Products are identified by "
+                                 "their SMILES, which is what gets docked. See Help."))
                 elif st.button(t("Name (IUPAC, verified with OPSIN)")):
                     with st.spinner(t("Naming and verifying by round-trip...")):
                         named = AdmelabBridge().name_esters(
@@ -1926,6 +1926,10 @@ def _stage_results():
         rk = sc.compute_ranking(inter, dc, ckeys, cassign, ref_info, icols, dscore, cat, w,
                                 smiles_map=smap, pocket_res_map=pocket_res_map, sec_map=sec,
                                 pose_stability=pose_stab, reliable_map=reliable_map)
+        # Handed to the summary panel, which used to re-read ranking.csv from disk. That file was
+        # written with the weights of the run; this table is recomputed with the weights on screen.
+        # Move a slider and the two disagreed about the same compound, with nothing saying why.
+        S["_rk_live"] = rk.copy()
         rk["Ki"] = rk["pred_ki_M"].map(_fmt_ki) if "pred_ki_M" in rk.columns else None
         # An axis weighted without data does not score, and must not be declared in Methods.
         faltan = []
@@ -2128,7 +2132,7 @@ def _viewer_panel(etapa: str):
             try:
                 receptor = _orig if (cual == "Original" and _orig) else rsel
                 ligand_ = _ctrl if cual == "With its control" else None
-                _h = _viewer_height(250)
+                _h = _viewer_height(120)
                 st.iframe(vw.view_html(receptor=receptor, ligand_=ligand_,
                                              show_waters=False, axes_=axes_, height_=_h), height=_h + 12)
                 if cual == "With its control" and _ctrl:
@@ -2227,7 +2231,7 @@ def _viewer_panel(etapa: str):
             axes_ = c3.checkbox(t("XYZ axes"), key="vis_axes_box")
             groups_ = groups_by_receptor if (ver_cav and groups_by_receptor) else None
             try:
-                _h = _viewer_height(210)
+                _h = _viewer_height(150)
                 st.iframe(vw.view_html(receptor=rsel, box_=boxes_[rsel], cavities=groups_,
                                              show_waters=False, axes_=axes_, height_=_h), height=_h + 12)
                 b = boxes_[rsel]
@@ -2308,7 +2312,7 @@ def _complex_viewer():
     rec_f = next((p for p in (lay.artifact(proj_p, lay.RECEPTORS)).glob(f"{R}.*")
                   if p.suffix.lower() in (".pdb", ".pdbqt")), None)
 
-    _h = _viewer_height(300)
+    _h = _viewer_height(190)
     try:
         if pose_f.exists() and rec_f is not None:
             html = vw.view_html(receptor=rec_f, ligand_=pose_f, show_waters=False,
@@ -2338,11 +2342,15 @@ def _complex_viewer():
 def _visual_summary():
     """Results summary meant to be read at a glance: the exhaustive detail stays in the tools panel;
     here goes what you show someone in ten seconds."""
-    rk_p = proj / "ranking.csv"
-    if not rk_p.exists():
-        _empty_state("Run a screening and the results summary will appear here.")
-        return
-    rk = sc.normalize_columns(pd.read_csv(rk_p))
+    live = S.get("_rk_live")
+    if live is not None and not live.empty:
+        rk = live.copy()
+    else:
+        rk_p = proj / "ranking.csv"
+        if not rk_p.exists():
+            _empty_state("Run a screening and the results summary will appear here.")
+            return
+        rk = sc.normalize_columns(pd.read_csv(rk_p))
     sites = sorted(rk["receptor"].unique()) if "receptor" in rk.columns else []
     if len(sites) > 1:
         sel = st.selectbox(t("Site"), sites, key="vis_res_site",
