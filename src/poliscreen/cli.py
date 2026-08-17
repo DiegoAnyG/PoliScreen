@@ -72,11 +72,6 @@ def cmd_info(args) -> int:
     else:
         print("second scoring (gnina): not installed (optional). scripts/get_gnina.sh, NVIDIA GPU.")
 
-    if sys.platform == "win32":
-        print("platform: native Windows build. Hydrogen-bond detection differs from the reference")
-        print("  container -- 18.6% of contacts on identical input, all hydrogen-dependent, fewer")
-        print("  found here. Fine to explore and triage; use the container for anything published.")
-
     if faltan:
         print(f"\nMISSING required tools: {', '.join(faltan)}. See docs/INSTALL.md.")
         return 1

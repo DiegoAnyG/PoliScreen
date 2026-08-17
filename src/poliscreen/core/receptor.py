@@ -263,8 +263,7 @@ def optimize_hydrogens(pdb, out, ph: float = 7.4, timeout: int = 900) -> Optiona
     point. That second decision is the one that matters: a Ser/Thr/Tyr hydroxyl turns freely, and
     the amides of Asn/Gln and the ring of His can sit either way round because C, N and O scatter
     too alike for the density to separate them. PLIP, left alone, makes that decision itself with
-    openbabel -- and openbabel is compiled per platform, which is where an 18.6% disagreement in
-    detected contacts between two machines came from.
+    openbabel, so it is made by a library the project does not pin and cannot inspect.
 
     Measured on 8HTB: every hydrogen moved, 1247 of them by more than 0.5 A, and the largest movers
     were Gln144 and Asn36 amide flips at 4.1 and 3.7 A. Two runs gave a byte-identical file, and

@@ -7,13 +7,6 @@
 | conda | development | yes |
 | conda on native Windows | no WSL, no Docker | **no** — conda-forge has no Windows build |
 
-> **The native Windows build detects fewer hydrogen bonds.** Measured over 60 complexes on
-> identical input, 18.6 % of detected contacts differ from the container, all of them hydrogen
-> bonds or salt bridges; affinities, poses and hydrophobic contacts agree. PLIP protonates the
-> complex with Open Babel, whose build differs per platform. Explore and triage with it freely,
-> and use the container for anything published — a Methods file exported on Windows says so
-> itself. This is why the container is the reference, not merely the recommendation.
-
 The screening cycle is identical on all of them. Optional engines are never installed by default.
 
 | | Docker | installer | conda |

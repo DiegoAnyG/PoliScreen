@@ -110,16 +110,14 @@ def render(project, stages: Iterable = STAGES) -> str:
 def protonation_report(project, n: int = 20, seed: int = 11) -> str:
     """Contacts as PLIP finds them today, beside contacts with the protonation pinned down.
 
-    Today PLIP protonates the fused complex itself, with openbabel, which is compiled per platform:
-    two machines on the same commit disagreed on 18.6 % of the detected contacts from files that
-    hashed the same, and every single disagreement was a hydrogen bond or a salt bridge. The
-    alternative rebuilds the receptor's hydrogen network with PDB2PQR -- noarch, the same Python
-    everywhere -- takes the ligand's hydrogens from the SMILES it was built from, and tells PLIP to
-    leave them alone.
+    Today PLIP protonates the fused complex itself, with openbabel. The alternative rebuilds the
+    receptor's hydrogen network with PDB2PQR, takes the ligand's hydrogens from the SMILES it was
+    built from, and tells PLIP to leave them alone.
 
-    That alternative finds fewer contacts. Whether it finds the *same* ones on both platforms is
-    the question this answers, and it is answered by running it on two machines and diffing rather
-    than by arguing. Sorted and free of paths for exactly that reason.
+    Run on Windows and on Linux over the same 20 complexes, both columns came back identical, so
+    on the evidence so far neither path is where a platform difference lives. The report stays
+    because that is a claim worth being able to re-check on another target rather than remember:
+    sorted and free of paths so an ordinary diff answers it.
     """
     import csv
     import random

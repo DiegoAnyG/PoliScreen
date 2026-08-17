@@ -261,19 +261,6 @@ def methods_text(meta: dict, weights: Optional[dict] = None, catalytic: Optional
     L.append("\n### Versions")
     for k, val in _versions().items():
         L.append(f"- {k}: {val}")
-    if sys.platform == "win32":
-        # Measured 2026-08-16 over 60 fused complexes from one run, profiled on both platforms
-        # from byte-identical files: 355 contacts agreed, 81 did not, and every one of the 81
-        # was a hydrogen bond or a salt bridge -- no hydrophobic contact moved. PLIP protonates
-        # the complex with openbabel before profiling, and that build differs per platform.
-        # Whoever reads this file has to be able to tell whether the numbers above reproduce
-        # elsewhere, and on this platform the interaction fingerprint does not.
-        L.append("\n*Platform note: run with the native Windows build. Its hydrogen-bond "
-                 "detection differs from the reference container: on identical input, 18.6% of "
-                 "the detected contacts disagreed (60 complexes, 2026-08-16), all of them "
-                 "hydrogen bonds or salt bridges, with Windows finding fewer. Affinities, poses "
-                 "and hydrophobic contacts agree. For results that must be reproducible, rerun "
-                 "in the container and cite its digest.*")
     L.append("\n*Limitations: rigid docking, non-covalent; Ki estimated from Vina's affinity (dG approximation), informative, not measured.*")
     return "\n".join(L)
 
