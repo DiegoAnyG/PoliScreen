@@ -57,19 +57,33 @@ docker image inspect %IMAGE% >nul 2>&1
 if errorlevel 1 (
     echo   First run: downloading the image, about 3 GB. This happens once;
     echo   every run after this one starts in seconds.
+    echo.
     docker pull %IMAGE%
     if errorlevel 1 (
-        echo No released image yet, trying the development one.
+        echo   No released image yet, trying the development one.
         docker pull %FALLBACK% || (
             echo.
-            echo Could not download the image. If this says "denied" or "unauthorized", the
-            echo package is still private: make it public once at
-            echo   https://github.com/users/DiegoAnyG/packages/container/poliscreen/settings
+            echo   Could not download the image.
+            echo   If the message above says "denied" or "unauthorized", the package is
+            echo   private: make it public once, at
+            echo     https://github.com/users/DiegoAnyG/packages/container/poliscreen/settings
             echo.
             pause
             exit /b 1
         )
         set "IMAGE=%FALLBACK%"
+    )
+) else (
+    rem Already downloaded. Checking for a newer one costs a few kilobytes -- the manifest, not
+    rem the layers -- and skipping it is how somebody keeps running a version fixed months ago
+    rem without ever being told. Offline, the copy on disk is used and nothing is said, because
+    rem being offline is not an error here.
+    echo   Checking for updates...
+    docker pull %IMAGE% >nul 2>&1
+    if errorlevel 1 (
+        echo   Image               local copy (no network^)
+    ) else (
+        echo   Image               up to date
     )
 )
 

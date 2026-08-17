@@ -43,3 +43,23 @@ def test_the_launcher_never_starts_docker_itself():
 def test_the_port_stays_on_the_loopback():
     """The interface has no authentication, so it must not be published to the network."""
     assert "127.0.0.1:8501:8501" in LAUNCHER.read_text(encoding="utf-8")
+
+
+def test_it_checks_for_a_newer_image_when_one_is_already_there():
+    """Otherwise somebody runs a version fixed months ago and is never told."""
+    text = LAUNCHER.read_text(encoding="utf-8")
+    after_first_run = text.split("else (", 1)
+    assert len(after_first_run) == 2, "no branch for the image already being present"
+    assert "docker pull" in after_first_run[1], "an existing image is never refreshed"
+
+
+def test_being_offline_is_not_treated_as_a_failure():
+    """The screening itself needs no network; refusing to start without one would be wrong."""
+    text = LAUNCHER.read_text(encoding="utf-8").lower()
+    assert "no network" in text
+
+
+def test_the_release_carries_the_launcher():
+    """A double-click needs a direct download, not four clicks through a source tree."""
+    wf = WORKFLOW.read_text(encoding="utf-8")
+    assert "files: scripts/PoliScreen-Docker.bat" in wf

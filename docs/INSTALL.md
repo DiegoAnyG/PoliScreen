@@ -21,9 +21,12 @@ ADCP and gnina are Linux-only builds, so on Windows they exist only through Dock
 
 ## Docker
 
-**Windows, no terminal.** Install Docker Desktop, download `scripts/PoliScreen-Docker.bat`,
-double-click it. It pulls the published image the first time and starts the interface; projects go
-to `%USERPROFILE%\PoliScreen`. Nothing to build and nothing to clone.
+**Windows, no terminal.** Install Docker Desktop, download **`PoliScreen-Docker.bat`** from the
+release page, double-click it. It pulls the published image the first time, checks for a newer one
+on every later start, and opens the interface; projects go to `%USERPROFILE%\PoliScreen`. Nothing
+to build and nothing to clone.
+
+Full list of what you need, including the obvious: [REQUIREMENTS.md](REQUIREMENTS.md).
 
 **From a checkout**, when you want to choose the engines or run your own code:
 

@@ -159,6 +159,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: write
+      # The launcher is attached to the release from here, so reaching it is one link rather than
+      # a hunt through the source tree for a single file.
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -190,3 +193,11 @@ jobs:
       # The digest is what a paper cites; printing it here saves pulling the image to read it.
       - name: The digest to cite
         run: echo "${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+
+      # A double-click needs a direct download. Opening the repository, finding scripts/, opening
+      # a .bat and pressing raw is four steps to reach a file whose whole point is having none.
+      - name: Attach the launcher to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: scripts/PoliScreen-Docker.bat
