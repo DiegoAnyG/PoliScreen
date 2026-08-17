@@ -1,20 +1,17 @@
 # PoliScreen interface configuration.
 #
-# `base` is deliberately not set. Fixing it here made the page and the code disagree about which
-# theme was in use: the page rendered light because of this setting, while the theme reported at
-# runtime followed the system preference and said dark, so the brand was inverted to white on a
-# white background and disappeared. It also left no way to switch, because a theme pinned here
-# overrides the one the user chooses. Without it, what is rendered and what is detected are the
-# same thing, and the choice belongs to whoever is looking at the screen.
+# No [theme] block, and that is the point.
 #
-# This file is only read when Streamlit starts with this directory as its working directory, which
-# is why the container saw it and a terminal started elsewhere did not -- the same build, two
-# different themes, and only one of them made the wordmark vanish.
-[theme]
-primaryColor = "#2E9E7E"
-showWidgetBorder = true
-borderColor = "#4A4A4A"
-baseRadius = "small"
+# `base` was removed first, because pinning it made the page and the runtime disagree about which
+# theme was in use and the brand inverted to white on white. Then the rest of the block turned out
+# to cost more: this file is read only when Streamlit starts with this directory as its working
+# directory, which the container does (WORKDIR /opt/poliscreen) and the Windows installer does not
+# (it ships no .streamlit). So the same build had a theme switcher on Windows and none in the
+# container -- the difference was never Docker, it was whether these options were loaded at all.
+#
+# An accent colour is worth less than being able to read the screen at night. For a container that
+# has to start dark regardless, POLISCREEN_THEME=dark sets STREAMLIT_THEME_BASE in compose and in
+# the launcher.
 
 [server]
 address = "127.0.0.1"
