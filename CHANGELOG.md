@@ -2,6 +2,20 @@
 
 Notable changes. Dates are release dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [1.0.3] — 2026-08-17
+
+### Fixed
+
+- **The installers did not build for 1.0.1 or 1.0.2.** `installer/construct.yaml` names the wheel
+  by file name and still asked for `poliscreen-1.0.0-py3-none-any.whl`, so both tag builds failed
+  with a FileNotFoundError after the container image had already published. The releases went out
+  with an image and no installers, and without the launcher attached.
+- **The interface reported 1.0.0 from a 1.0.2 image.** `__init__.py` carried the version as a
+  literal and was never bumped; it now reads the installed distribution metadata.
+- Tests hold the version identical across pyproject, CITATION.cff, the installer recipe, the
+  launcher banner and this changelog. Five hand-written copies with nothing checking them is what
+  caused all of the above.
+
 ## [1.0.2] — 2026-08-17
 
 ### Fixed

@@ -25,7 +25,7 @@
 # parsed, which is why the same key can appear more than once.
 
 name: PoliScreen
-version: 1.0.0
+version: 1.0.3
 company: Anaya Guerrero DC
 
 channels:
@@ -74,7 +74,7 @@ keep_pkgs: false
 # installer because post_install calls get_vina, and because the optional engines are installed
 # from them afterwards.
 extra_files:
-  - ../dist/poliscreen-1.0.0-py3-none-any.whl
+  - ../dist/poliscreen-1.0.3-py3-none-any.whl
   # The design/ADMET engine, without ADMET-AI: the analogue design and the reaction filter work
   # from RDKit alone, and admelab falls back to its own descriptors when the ML half is absent.
   # The release workflow builds this wheel; keep the version in step with ADMELAB_VERSION there.
