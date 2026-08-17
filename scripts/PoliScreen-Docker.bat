@@ -11,27 +11,52 @@ set "IMAGE=ghcr.io/diegoanyg/poliscreen:latest"
 set "FALLBACK=ghcr.io/diegoanyg/poliscreen:edge"
 set "PROJECTS=%USERPROFILE%\PoliScreen"
 
-echo PoliScreen (container)
+echo   ____           _  _   ____
+echo  ^|  _ \    ___  ^| ^|(_) / ___^|   ___  _ __   ___   ___  _ __
+echo  ^| ^|_) ^|  / _ \ ^| ^|^| ^| \___ \  / __^|^| '__^| / _ \/ _ \^| '_ \
+echo  ^|  __/  ^| (_) ^|^| ^|^| ^|  ___) ^|^| (__ ^| ^|   ^|  __/^|  __/^| ^| ^| ^|
+echo  ^|_^|      \___/ ^|_^|^|_^| ^|____/  \___^|^|_^|    \___^| \___^|^|_^| ^|_^|
+echo.
+echo   Reproducible virtual screening -- container setup
+echo   ---------------------------------------------------------------
 echo.
 
 rem Docker Desktop is never started from here on purpose: it is the user's machine and starting a
 rem background service behind their back is not this script's business. Say what is wrong instead.
-docker version >nul 2>&1
+where docker >nul 2>&1
 if errorlevel 1 (
-    echo Docker is not responding.
+    echo   Docker is not installed.
     echo.
-    echo   - If Docker Desktop is installed, start it and wait for the whale icon to stop animating.
-    echo   - If it is not, install it from https://www.docker.com/products/docker-desktop
+    echo   Install Docker Desktop, then run this again:
+    echo     https://www.docker.com/products/docker-desktop
+    echo.
+    echo   It is the only thing you have to install. Everything else travels
+    echo   inside the image: Python, Vina, RDKit, PLIP, fpocket, the ADMET engine.
     echo.
     pause
     exit /b 1
 )
 
+docker version >nul 2>&1
+if errorlevel 1 (
+    echo   Docker is installed but not running.
+    echo.
+    echo   Start Docker Desktop and wait for the whale icon to stop animating,
+    echo   then run this again.
+    echo.
+    pause
+    exit /b 1
+)
+echo   Docker              OK
+
 if not exist "%PROJECTS%" mkdir "%PROJECTS%"
+echo   Projects folder     %PROJECTS%
+echo.
 
 docker image inspect %IMAGE% >nul 2>&1
 if errorlevel 1 (
-    echo First run: downloading the image. This happens once.
+    echo   First run: downloading the image, about 3 GB. This happens once;
+    echo   every run after this one starts in seconds.
     docker pull %IMAGE%
     if errorlevel 1 (
         echo No released image yet, trying the development one.
@@ -48,8 +73,11 @@ if errorlevel 1 (
     )
 )
 
-echo Projects are saved in %PROJECTS%
-echo Opening http://localhost:8501 - close this window to stop PoliScreen.
+echo.
+echo   ---------------------------------------------------------------
+echo   Ready. The interface opens at  http://localhost:8501
+echo   Close this window to stop PoliScreen.
+echo   ---------------------------------------------------------------
 echo.
 
 rem Opened on a delay because the page only answers once streamlit is up; opening it immediately

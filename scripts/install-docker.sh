@@ -12,6 +12,24 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Plain ASCII on purpose: it renders the same in a Windows console, a bare tty and inside CI,
+# where a box-drawing character turns into a question mark and looks broken rather than plain.
+banner() {
+    printf '%s
+'         "  ____           _  _   ____" \
+        " |  _ \\    ___  | |(_) / ___|   ___  _ __   ___   ___  _ __" \
+        " | |_) |  / _ \\ | || | \\___ \\  / __|| '__| / _ \\/ _ \\| '_ \\" \
+        " |  __/  | (_) || || |  ___) || (__ | |   |  __/|  __/| | | |" \
+        " |_|      \\___/ |_||_| |____/  \\___||_|    \\___| \\___||_| |_|"
+    echo
+    echo "  Reproducible virtual screening -- container setup"
+    echo "  ---------------------------------------------------------------"
+    echo
+}
+
+banner
+
+
 choice="${1:-}"
 if [ -z "$choice" ]; then
     cat <<'MENU'
@@ -36,6 +54,34 @@ case "${choice:-1}" in
     4) adcp=1; gnina=1 ;;
     *) echo "Not one of 1-4: ${choice}" >&2; exit 2 ;;
 esac
+
+# Skipped when only printing the command: that mode exists to show what would run, and
+# it is what the tests and CI use, where no daemon is listening by design.
+if [ -z "${POLISCREEN_PRINT_ONLY:-}" ]; then
+    # Nothing here can install Docker for you, so say which piece is missing rather than failing on
+    # the first command that happens to need it.
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "  Docker is not installed."
+        echo "    Linux    : https://docs.docker.com/engine/install/"
+        echo "    Windows  : Docker Desktop, https://www.docker.com/products/docker-desktop"
+        exit 1
+    fi
+    if ! docker version >/dev/null 2>&1; then
+        echo "  Docker is installed but not running. Start it and run this again."
+        echo "  (On Windows that is Docker Desktop; wait for the whale to stop animating.)"
+        exit 1
+    fi
+    echo "  Docker              OK"
+    free_gb=$(df -Pk . | awk 'NR==2 {print int($4/1048576)}')
+    if [ "${free_gb:-99}" -lt 15 ]; then
+        echo "  Free disk           ${free_gb} GB -- 15 GB is the realistic minimum"
+    else
+        echo "  Free disk           ${free_gb} GB"
+    fi
+    echo
+
+fi
+
 
 files=(-f docker/docker-compose.yml)
 if [ "$gnina" = 1 ]; then
