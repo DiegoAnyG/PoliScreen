@@ -34,9 +34,18 @@ anchors exactly where it should. PoliScreen is built on four ideas.
    reaction feasibility (regioselectivity, OH classification, steric hindrance),
    so what gets docked is what a chemist can actually make.
 
-4. **Explicit reproducibility.** Fixed seed, one thread per docking, pinned
-   environment and Vina binary (SHA256-verified), and a Methods export with every
-   parameter and version.
+4. **Explicit reproducibility.** Fixed seed, one thread per docking, and a
+   Methods export with every parameter and version. Inside one container image,
+   two runs of the same configuration give the same result — and the image digest
+   is what a paper cites. Across different installs they do not: three steps of the
+   pipeline do floating-point arithmetic in libraries compiled per platform.
+   `poliscreen fingerprint` hashes each stage so two machines can be compared.
+
+The co-crystallised control defines the reference everything is measured against,
+so its chemistry is not guessed: bond orders come from the **PDB's own chemical
+component dictionary**, looked up from the ligand code. A PDB file stores
+coordinates, not bonds, and letting a converter infer them gave different molecules
+on different machines.
 
 A single interaction engine (**PLIP**) feeds both the table and the diagrams:
 same author numbering, same bond types, no mismatch between what is measured and
@@ -54,23 +63,20 @@ machine.
 
 ## Install
 
-Docker (one command) or conda. Full guide: **[docs/INSTALL.md](docs/INSTALL.md)**.
+**Windows, no terminal**: install Docker Desktop, download `PoliScreen-Docker.bat`
+from the [latest release](https://github.com/DiegoAnyG/PoliScreen/releases/latest),
+double-click it.
+
+**Anywhere with Docker**:
 
 ```bash
-git clone https://github.com/DiegoAnyG/PoliScreen.git
-cd PoliScreen
-docker compose -f docker/docker-compose.yml up --build   # http://localhost:8501
+docker run --rm -it --init -p 127.0.0.1:8501:8501 \
+  -v "$PWD/proyectos:/data" ghcr.io/diegoanyg/poliscreen:latest
+# then open http://localhost:8501
 ```
 
-conda (development):
-
-```bash
-conda env create -f environment.yml
-conda activate poliscreen
-pip install -e .
-bash scripts/get_vina.sh
-poliscreen ui
-```
+Requirements, including the obvious: **[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)**.
+Every route, and conda for development: **[docs/INSTALL.md](docs/INSTALL.md)**.
 
 ---
 
@@ -81,8 +87,9 @@ everything the UI does is reproducible from the command line.
 
 1. **Receptors** — fetch or upload the structure, choose what to keep, extract
    the co-crystallized ligand as the control.
-2. **Ligands** — build a series by reaction, enumerate peptides, or upload ready
-   structures.
+2. **Ligands** — build a series by reaction, screen approved drugs from ChEMBL
+   under property filters, enumerate peptides, or upload ready structures. The
+   sources add up: one run can hold compounds from several.
 3. **Run** — define the search box and launch docking.
 4. **Results** — adjust the weighting and inspect the ranking.
 
