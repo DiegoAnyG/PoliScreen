@@ -9,9 +9,28 @@ repainted here -- pasted unchanged onto a dark banner they show nothing at all.
 import os
 from PIL import Image, ImageDraw, ImageFont
 
-ROOT = "/home/diego/PoliScreen"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "src", "poliscreen", "assets")
-FONTS = "/home/diego/miniforge3/envs/cribado/lib/python3.11/site-packages/matplotlib/mpl-data/fonts/ttf"
+
+
+def _fonts() -> str:
+    """Where DejaVu lives. Asked for rather than written down, so this runs on anyone's machine."""
+    try:
+        import matplotlib
+        found = os.path.join(matplotlib.get_data_path(), "fonts", "ttf")
+        if os.path.exists(os.path.join(found, "DejaVuSans.ttf")):
+            return found
+    except Exception:
+        pass
+    for path in ("/usr/share/fonts/truetype/dejavu",
+                 "/usr/share/fonts/dejavu",
+                 "C:/Windows/Fonts"):
+        if os.path.exists(os.path.join(path, "DejaVuSans.ttf")):
+            return path
+    raise SystemExit("DejaVu fonts not found: pip install matplotlib, or install fonts-dejavu.")
+
+
+FONTS = _fonts()
 
 S = 2                                  # drawn at 2x, downsampled at the end
 W, H = 1200 * S, 430 * S
