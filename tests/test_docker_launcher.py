@@ -74,11 +74,28 @@ def test_the_banner_states_the_version_it_ships():
         f"the banner does not name v{version}; it drifted from pyproject")
 
 
-def test_it_is_utf8_without_a_bom():
-    """cmd.exe reads a BOM as part of the first command and fails on line one."""
+def test_it_is_seven_bit_ascii():
+    """Block-drawing characters needed chcp 65001, and changing the code page part-way through a
+    batch file shifts the parser's byte offset: lines split mid-command and every fragment came
+    back as "is not recognized as an internal or external command"."""
     raw = LAUNCHER.read_bytes()
-    assert not raw.startswith(b"" + bytes([0xEF, 0xBB, 0xBF])), "a BOM breaks the first line"
-    raw.decode("utf-8")
+    assert not raw.startswith(bytes([0xEF, 0xBB, 0xBF])), "a BOM breaks the first line"
+    try:
+        raw.decode("ascii")
+    except UnicodeDecodeError as e:
+        raise AssertionError(f"non-ASCII byte at offset {e.start}; cmd needs a code page for it")
+
+
+def test_it_uses_crlf():
+    """cmd is unreliable with LF-only batch files, in the same way and with the same message."""
+    raw = LAUNCHER.read_bytes()
+    assert raw.count(b"\r\n") == raw.count(b"\n"), "some lines end in a bare LF"
+
+
+def test_line_endings_are_pinned_for_checkout():
+    """A .gitattributes is what stops the next clone handing out LF again."""
+    ga = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    assert "*.bat text eol=crlf" in ga
 
 
 def test_the_banner_fits_a_default_console():

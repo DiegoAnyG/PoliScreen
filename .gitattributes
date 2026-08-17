@@ -1,0 +1,9 @@
+# cmd.exe is unreliable with LF-only batch files: lines split mid-command and each fragment
+# comes back as "is not recognized as an internal or external command". Git must hand these
+# out with CRLF no matter which platform committed them.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Everything else keeps LF, including the shell scripts, which break the other way.
+*.sh text eol=lf
+*.py text eol=lf

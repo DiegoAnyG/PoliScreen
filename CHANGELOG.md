@@ -2,6 +2,20 @@
 
 Notable changes. Dates are release dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [1.0.2] — 2026-08-17
+
+### Fixed
+
+- **The Windows launcher did not run.** Two causes, one message. The file was committed with
+  LF-only line endings, which cmd.exe handles unreliably: lines split mid-command and each fragment
+  came back as *"is not recognized as an internal or external command"*. And the banner used
+  block-drawing characters, which need `chcp 65001`; changing the code page part-way through a
+  batch file shifts the parser's byte offset, splitting lines the same way.
+
+  The banner is seven-bit ASCII now, the file is CRLF, and `.gitattributes` keeps it that way
+  through any clone. The 24-bit colour gradient stays -- it is plain ASCII and it was carrying most
+  of the look. Tests fail on a non-ASCII byte, on a bare LF, and if the attributes go missing.
+
 ## [1.0.1] — 2026-08-17
 
 Polish on the container route, which is the one people install.

@@ -11,31 +11,30 @@ set "IMAGE=ghcr.io/diegoanyg/poliscreen:latest"
 set "FALLBACK=ghcr.io/diegoanyg/poliscreen:edge"
 set "PROJECTS=%USERPROFILE%\PoliScreen"
 
-rem A UTF-8 code page and a real ESC character, so the block letters and the colour
-rem gradient render instead of arriving as literal escape sequences. The prompt trick is
-rem the only way to get ESC into a variable in batch. Delayed expansion is deliberately
-rem NOT enabled: it would eat any exclamation mark in the messages further down.
-chcp 65001 >nul
+rem Seven-bit ASCII only, and CRLF endings. Both are the fix for the same report: block-drawing
+rem characters need chcp 65001, and changing the code page part-way through a batch file shifts
+rem the parser's byte offset so lines split mid-command -- and LF-only endings break cmd on their
+rem own. The colour is the part that carries the look anyway, and 24-bit colour is plain ASCII.
+rem The ESC character cannot be typed literally in a batch file; the prompt trick is how it is
+rem obtained. Delayed expansion stays off: it would eat any exclamation mark in the text below.
 for /F %%a in ('"prompt $E$S & for %%b in (1) do rem"') do set "ESC=%%a"
 set "C1=%ESC%[38;2;0;240;255m"
-set "C2=%ESC%[38;2;30;190;255m"
-set "C3=%ESC%[38;2;60;140;255m"
-set "C4=%ESC%[38;2;100;90;255m"
-set "C5=%ESC%[38;2;150;40;255m"
-set "C6=%ESC%[38;2;150;40;255m"
+set "C2=%ESC%[38;2;40;180;255m"
+set "C3=%ESC%[38;2;80;130;255m"
+set "C4=%ESC%[38;2;120;80;255m"
+set "C5=%ESC%[38;2;160;40;255m"
 set "DIM=%ESC%[38;2;120;160;170m"
 set "RESET=%ESC%[0m"
 
 cls
 echo.
-echo %C1% ██████╗  ██████╗ ██╗     ██╗███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗%RESET%
-echo %C2% ██╔══██╗██╔═══██╗██║     ██║██╔════╝██╔════╝██╔══██╗██╔════╝██╔════╝████╗  ██║%RESET%
-echo %C3% ██████╔╝██║   ██║██║     ██║███████╗██║     ██████╔╝█████╗  █████╗  ██╔██╗ ██║%RESET%
-echo %C4% ██╔═══╝ ██║   ██║██║     ██║╚════██║██║     ██╔══██╗██╔══╝  ██╔══╝  ██║╚██╗██║%RESET%
-echo %C5% ██║     ╚██████╔╝███████╗██║███████║╚██████╗██║  ██║███████╗███████╗██║ ╚████║%RESET%
-echo %C6% ╚═╝      ╚═════╝ ╚══════╝╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝%RESET%
+echo %C1% ####  ##  #    ###  ###  ### #### #### #### #  #%RESET%
+echo %C2% #  # #  # #     #  #    #    #  # #    #    ## #%RESET%
+echo %C3% #### #  # #     #   ##  #    #### ###  ###  # ##%RESET%
+echo %C4% #    #  # #     #     # #    #  # #    #    #  #%RESET%
+echo %C5% #     ##  #### ### ###   ### #  # #### #### #  #%RESET%
 echo.
-echo %DIM%      Reproducible virtual screening   v1.0.1   container setup%RESET%
+echo %DIM%     Reproducible virtual screening   v1.0.2   container setup%RESET%
 echo.
 
 rem Docker Desktop is never started from here on purpose: it is the user's machine and starting a
