@@ -4,7 +4,11 @@ rem reason the Windows build existed. This gets the same experience without the 
 rem hydrogen-bond divergence: no git, no terminal, no 10-minute conda solve. The image is already
 rem built and published, so the first run is a download and every run after that is instant.
 setlocal
+rem :latest is only published by a tagged release; every other build publishes :edge. Before the
+rem first tag exists, asking for :latest fails with a message about the tag rather than about the
+rem release that has not happened yet, so fall back rather than leave a double-click dead.
 set "IMAGE=ghcr.io/diegoanyg/poliscreen:latest"
+set "FALLBACK=ghcr.io/diegoanyg/poliscreen:edge"
 set "PROJECTS=%USERPROFILE%\PoliScreen"
 
 echo PoliScreen (container)
@@ -28,7 +32,20 @@ if not exist "%PROJECTS%" mkdir "%PROJECTS%"
 docker image inspect %IMAGE% >nul 2>&1
 if errorlevel 1 (
     echo First run: downloading the image. This happens once.
-    docker pull %IMAGE% || (echo Could not download the image. & pause & exit /b 1)
+    docker pull %IMAGE%
+    if errorlevel 1 (
+        echo No released image yet, trying the development one.
+        docker pull %FALLBACK% || (
+            echo.
+            echo Could not download the image. If this says "denied" or "unauthorized", the
+            echo package is still private: make it public once at
+            echo   https://github.com/users/DiegoAnyG/packages/container/poliscreen/settings
+            echo.
+            pause
+            exit /b 1
+        )
+        set "IMAGE=%FALLBACK%"
+    )
 )
 
 echo Projects are saved in %PROJECTS%
