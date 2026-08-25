@@ -81,6 +81,21 @@ def cmd_info(args) -> int:
         print("tunnel reading (caver-translate): not installed (optional)")
         print(f"  {tn.INSTALL_HINT}")
 
+    # Computing them is the opt-in half. CAVER is GPL-3 but needs a JVM; CaverDock is a Linux
+    # image under an academic licence. Neither is shipped, and both are found, never assumed.
+    from .core import caver as cv
+    jar, sif = cv.caver_jar(), cv.caverdock_image()
+    print(f"tunnel search (CAVER): {jar if cv.caver_available() else 'not available (optional)'}")
+    if jar and not cv.java_exe():
+        print("  found, but there is no java on PATH: CAVER is a Java program.")
+    elif not jar:
+        print("  set POLISCREEN_CAVER to caver.jar, or to the folder holding it.")
+    print(f"tunnel transport (CaverDock): {sif if cv.caverdock_available() else 'not available (optional)'}")
+    if sif and not cv.apptainer_exe():
+        print("  found, but there is no apptainer or singularity on PATH.")
+    elif not sif:
+        print("  set POLISCREEN_CAVERDOCK to the .sif. Linux only, academic licence.")
+
     if faltan:
         print(f"\nMISSING required tools: {', '.join(faltan)}. See docs/INSTALL.md.")
         return 1

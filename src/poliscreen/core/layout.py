@@ -17,6 +17,8 @@ SUMMARY_CSV = "summary.csv"
 ANALOGUES_CSV = "analogues.csv"
 SELECTION_JSON = "selection.json"
 CONTENTS_TXT = "CONTENTS.txt"
+# Transport tunnels. New in 1.1, so there is no Spanish predecessor to keep opening.
+TUNNELS = "tunnels"
 
 COMPLEX_PREFIX = "Complex_"
 COMPLEX_PREFIXES = (COMPLEX_PREFIX, "Complejo_")

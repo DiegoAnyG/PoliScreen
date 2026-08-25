@@ -17,6 +17,7 @@ import streamlit as st
 
 from poliscreen import __version__
 from poliscreen.core import adcp
+from poliscreen.core import caver as cv
 from poliscreen.core import docking as dk
 from poliscreen.core import drugs as dg
 from poliscreen.core import ligands as lig
@@ -1494,6 +1495,145 @@ def _stage_ligands():
         st.caption(t("Loaded controls and those extracted in step 1 are docked alongside the ligands and define the reference fingerprint. With several receptors, assign each to its receptor in step 3."))
 
 def _stage_run():
+    """Two things that can be launched from here, kept apart because one needs engines this
+    package does not ship."""
+    tab_screening, tab_tunnels = st.tabs([t("Screening"), t("Transport tunnels")])
+    with tab_tunnels:
+        _run_tunnels()
+    with tab_screening:
+        _run_screening()
+
+
+def _engine_status():
+    """What is installed, said once, with the one line that turns each on."""
+    rows = [
+        (t("CAVER (tunnels)"), cv.caver_available(), "POLISCREEN_CAVER",
+         t("GPL-3 and cross-platform, but a Java program: the runtime is larger than the rest of "
+           "PoliScreen. Point POLISCREEN_CAVER at caver.jar, with java on PATH.")),
+        (t("CaverDock (transport)"), cv.caverdock_available(), "POLISCREEN_CAVERDOCK",
+         t("A Linux Apptainer image under an academic licence, so it cannot be redistributed. "
+           "Point POLISCREEN_CAVERDOCK at the .sif, with apptainer on PATH.")),
+    ]
+    for label, ok, var, how in rows:
+        if ok:
+            st.success(f"{label} — {t('ready')}")
+        else:
+            st.info(f"**{label}** — {t('not installed')}. {how}")
+    return all(ok for _l, ok, _v, _h in rows)
+
+
+def _run_tunnels():
+    """CAVER and CaverDock, driven from the box PoliScreen already placed on the active site.
+
+    Nothing here is required to use the rest of PoliScreen, and nothing here is bundled: the two
+    engines are found on the machine or reported absent. Results are read back in the Results tab,
+    which needs neither of them.
+    """
+    st.subheader(t("Transport tunnels"))
+    st.caption(t("A docking score says how well a compound sits in the site. This asks whether it "
+                 "can reach it: CAVER finds the routes through the protein, CaverDock costs one."))
+
+    has_caver = cv.caver_available()
+    has_dock = cv.caverdock_available()
+    if not (has_caver and has_dock):
+        _engine_status()
+        if not has_caver:
+            return
+
+    recs = [Path(p) for p in S.get("receptors", []) if Path(p).exists()]
+    if not recs:
+        st.info(t("Stage a receptor in step 1 first."))
+        return
+
+    out_root = proj / lay.TUNNELS
+    rec = st.selectbox(t("Receptor"), recs, format_func=_rname, key="tun_rec")
+
+    # --- 1. the routes -------------------------------------------------------------------------
+    st.markdown(t("**1 · Find the routes**"))
+    # The Screening tab leaves each box here as a dict, so the centre this reads is the one the
+    # docking will actually use -- not a second guess at where the site is.
+    stored = (S.get("_boxes") or {}).get(str(rec))
+    if stored is None:
+        st.warning(t("No search box for this receptor yet. Set it in the Screening tab: its centre "
+                     "is the point CAVER measures the tunnels from."))
+        return
+    box = dk.Box(**stored)
+    st.caption(t("Starting point: the centre of the search box, {x}, {y}, {z}.").format(
+        x=box.cx, y=box.cy, z=box.cz))
+
+    caver_out = out_root / f"caver_{Path(rec).stem}" / "out"
+    found = cv.clusters(caver_out)
+    if st.button(t("Find tunnels"), key="tun_find", disabled=not has_caver):
+        with st.spinner(t("Running CAVER...")):
+            try:
+                cv.find_tunnels(rec, box, caver_out.parent)
+            except cv.CaverError as e:
+                st.error(str(e))
+                return
+        found = cv.clusters(caver_out)
+        st.success(t("{n} tunnels found.").format(n=len(found)))
+
+    if not found:
+        return
+
+    summary = caver_out / "summary.txt"
+    if summary.exists() and tn.available():
+        from caver_translate.parse import parse_tunnels
+        geometry = parse_tunnels(summary)
+        if geometry:
+            st.dataframe(pd.DataFrame([{
+                "tunnel": g.tunnel, "bottleneck_A": g.bottleneck_radius, "length_A": g.length,
+                "curvature": g.curvature, "priority": g.priority} for g in geometry],
+            ), width="stretch", hide_index=True)
+            st.caption(t("Priority and length have to be read together: a tunnel with nothing to "
+                         "cross costs nothing to cross, and tops the ranking meaning nothing."))
+
+    # --- 2. the transport ----------------------------------------------------------------------
+    st.markdown(t("**2 · Push a compound through one**"))
+    if not has_dock:
+        return
+
+    ligs = [Path(p) for p in S.get("ligands", []) if Path(p).exists()]
+    if not ligs:
+        st.info(t("No compounds staged. Add them in step 2."))
+        return
+
+    c = st.columns(2)
+    tunnel = c[0].selectbox(t("Tunnel"), found, format_func=lambda p: p.stem, key="tun_pick")
+    ligand = c[1].selectbox(t("Compound"), ligs, format_func=lambda p: p.stem, key="tun_lig")
+    c2 = st.columns(3)
+    direction = c2[0].radio(t("Direction"), ["in", "out"], horizontal=True, key="tun_dir",
+                            help=t("Entering the site, or leaving it. They are not symmetric."))
+    bound = c2[1].radio(t("Bound"), ["lb", "ub"], horizontal=True, key="tun_bound",
+                        help=t("Lower bound is minutes. Upper bound is tens of minutes and is the "
+                               "only way to know a barrier is not an artefact."))
+    cpus = c2[2].number_input(t("MPI processes"), min_value=2, max_value=16, step=1, key="tun_cpus")
+
+    if not cv.reproducible(int(cpus)):
+        # CaverDock says this once, in the middle of a log nobody reads.
+        st.warning(t("More than two processes: CaverDock warns that the seed no longer makes the "
+                     "run repeatable. Faster, and not reproducible."))
+
+    if st.button(t("Run transport"), key="tun_run", type="primary"):
+        with st.status(t("Running CaverDock..."), expanded=True) as status:
+            st.write(t("This takes minutes, and tens of minutes for an upper bound."))
+            try:
+                run = cv.transport(rec, ligand, tunnel, out_root, direction=direction,
+                                   bound=bound, cpus=int(cpus))
+            except cv.CaverError as e:
+                status.update(label=t("CaverDock failed"), state="error")
+                st.error(str(e))
+                return
+            status.update(label=t("Done"), state="complete")
+        st.success(t("Written to {p}").format(p=run))
+        _notify(t("Transport finished. Read it in Results, Transport tunnels."), str(run))
+
+    st.caption(t("Every run goes into `{p}`. Point the Results tab at that folder and they come "
+                 "out as one table, with the combinations not yet run counted as missing.").format(
+                     p=out_root))
+
+
+def _run_screening():
     st.subheader(t("Run the screening"))
     recs = [Path(p) for p in S["receptors"]]
     ctrls = [Path(p) for p in S["controls"]]
@@ -1871,7 +2011,7 @@ def _results_tunnels():
                 st.markdown(f"**`{flag}`** — {t(tn.FLAG_TEXT.get(flag, flag))}")
 
     if st.button(t("Write the full report"), key="tun_export"):
-        out = tn.export(folder, proj / "tuneles")
+        out = tn.export(folder, proj / lay.TUNNELS / "report")
         st.success(t("Written to {p}").format(p=out))
         page = out / "report.html"
         if page.exists():

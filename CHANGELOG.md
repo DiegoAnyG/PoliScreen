@@ -14,6 +14,18 @@ Notable changes. Dates are release dates; the format follows [Keep a Changelog](
   reports whether the reader is installed.
 - Missing and duplicated combinations are counted, not hidden. A combination that fails leaves
   nothing behind, so a table of what succeeded reads as a complete study unless the gap is named.
+- **Running them, in Run**, when the machine has the engines. CAVER measures the routes from the
+  centre of the search box — the point already chosen for the docking — and CaverDock pushes one
+  compound down one of them. Neither engine is shipped: CAVER needs a JVM (the reason OPSIN is not
+  shipped either) and CaverDock is a Linux image under an academic licence (the reason ADCP is
+  opt-in). Both are discovered, or reported absent with the one variable that turns them on:
+  `POLISCREEN_CAVER`, `POLISCREEN_CAVERDOCK`. `poliscreen info` reports both.
+
+Two upstream faults are worked around, because each silently changes the answer rather than
+failing: `cd-analysis` replaces the tunnel with its own two-angstrom extension and docks through
+that alone (10 discs instead of 68, finishing in seconds), and more than two MPI processes make
+CaverDock's seed meaningless. The run is therefore two processes by default, and says what it
+costs when asked for more.
 
 PoliScreen does not run CAVER or CaverDock: this is the reading half, which needs no engine, no
 licence and no gigabyte in the image. The reader is [caver-translate](https://github.com/DiegoAnyG/caver-translate),
