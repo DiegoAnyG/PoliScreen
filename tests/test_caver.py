@@ -161,6 +161,47 @@ def test_a_starting_point_from_nothing_is_refused(tmp_path):
         caver.start_point(caver.atoms_of(src, ["TRP999"]))
 
 
+SDF = """control
+  PoliScreen
+
+  3  2  0  0  0  0  0  0  0  0999 V2000
+  -14.9700  -13.7270   18.6430 C   0  0
+  -15.9700  -13.7270   18.6430 O   0  0
+  -13.9700  -13.7270   18.6430 N   0  0
+  2  1  1  0
+  3  2  2  0
+M  END
+$$$$
+"""
+
+
+def test_a_bond_is_not_an_atom(tmp_path):
+    """A bond in an SDF is written `  2  1  1  0`: four numeric fields, which a permissive reader
+    takes for a coordinate. On the real 33-atom control that made 69 atoms and moved the centre
+    from inside the site to outside the protein, and CAVER reported the outside as one tunnel."""
+    f = tmp_path / "control.sdf"
+    f.write_text(SDF)
+    atoms = caver.ligand_atoms(f)
+    assert len(atoms) == 3
+    assert caver.start_point(atoms) == (-14.97, -13.727, 18.643)
+
+
+def test_a_format_that_cannot_be_read_says_so(tmp_path):
+    """Silently returning nothing here is how a wrong centre gets computed from no atoms."""
+    f = tmp_path / "control.xyz"
+    f.write_text("3\n\nC 0 0 0\n")
+    with pytest.raises(caver.CaverError):
+        caver.ligand_atoms(f)
+
+
+def test_a_point_in_open_space_is_caught_before_caver_runs(tmp_path):
+    f = tmp_path / "in.pdb"
+    f.write_text(PDB)
+    assert not caver.inside_structure((500.0, 500.0, 500.0), f)
+    # The fixture has only a handful of atoms, so nowhere in it counts as enclosed either.
+    assert not caver.inside_structure((0.0, 0.0, 0.0), f)
+
+
 def test_a_tunnel_is_read_as_spheres_the_viewer_can_draw(tmp_path):
     """CAVER writes a tunnel as a chain of spheres with the radius where the occupancy would be,
     which is the shape fpocket's alpha spheres already arrive in."""

@@ -1616,6 +1616,14 @@ def _run_tunnels():
         return
     st.caption(t("Starting point: {x}, {y}, {z}.").format(x=x, y=y, z=z))
 
+    # CAVER measures outwards from this point. Placed outside the protein it finds the outside:
+    # one enormous tunnel, a wide bottleneck, and a warning nobody reads.
+    if not cv.inside_structure((x, y, z), source):
+        st.error(t("That point has no protein around it. CAVER would measure outwards into open "
+                   "space and report it as one very wide tunnel. Check the structure and the "
+                   "control you picked belong to the same chain."))
+        return
+
     caver_out = out_root / f"caver_{Path(rec).stem}" / "out"
     found = cv.clusters(caver_out)
     if st.button(t("Find tunnels"), key="tun_find", disabled=not has_caver):

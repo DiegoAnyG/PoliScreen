@@ -241,19 +241,70 @@ def atoms_of(path, residues=()) -> list:
 
 
 def ligand_atoms(path) -> list:
-    """(x, y, z) of a small molecule in any of the formats a control arrives as."""
+    """(x, y, z) of a small molecule, in any of the formats a control arrives as.
+
+    Each format is read by its own structure rather than by looking for lines that happen to start
+    with three numbers. A bond in an SDF is written ``  2  1  1  0`` -- four numeric fields, which
+    a permissive reader takes for a coordinate. On a 33-atom control that turned 33 atoms into 69
+    "atoms" and moved the centre from (-14.97, -13.73, 18.64), which is inside the site, to
+    (0.10, 2.04, 9.57), which is outside the protein. CAVER started there and reported the outside
+    world as one enormous tunnel.
+    """
     p = Path(path)
-    if p.suffix.lower() in (".pdb", ".pdbqt", ".ent"):
+    suffix = p.suffix.lower()
+    if suffix in (".pdb", ".pdbqt", ".ent"):
         return atoms_of(p)
-    out = []
-    for line in p.read_text(errors="ignore").splitlines():
-        fields = line.split()
-        if len(fields) >= 4:
+
+    lines = p.read_text(errors="ignore").splitlines()
+    if suffix in (".sdf", ".mol"):
+        # Line 4 is the counts line: atoms in the first three columns, bonds in the next three.
+        if len(lines) < 4:
+            return []
+        try:
+            count = int(lines[3][:3])
+        except ValueError:
+            return []
+        out = []
+        for line in lines[4:4 + count]:
             try:
-                out.append((float(fields[0]), float(fields[1]), float(fields[2])))
+                out.append((float(line[0:10]), float(line[10:20]), float(line[20:30])))
             except ValueError:
                 continue
-    return out
+        return out
+
+    if suffix == ".mol2":
+        out, inside = [], False
+        for line in lines:
+            if line.startswith("@<TRIPOS>"):
+                inside = line.strip() == "@<TRIPOS>ATOM"
+                continue
+            if inside:
+                fields = line.split()
+                if len(fields) >= 5:
+                    try:
+                        out.append((float(fields[2]), float(fields[3]), float(fields[4])))
+                    except ValueError:
+                        continue
+        return out
+
+    raise CaverError(f"Cannot read coordinates from a {suffix or 'nameless'} file: {p.name}")
+
+
+def inside_structure(point, structure, margin: float = 6.0) -> bool:
+    """Whether a starting point has protein around it, rather than open space.
+
+    CAVER measures outwards from the point, so one placed outside the protein finds the outside:
+    a single enormous "tunnel" with a wide bottleneck and no meaning. It says so in a warning
+    nobody reads, and reports the result either way.
+    """
+    x, y, z = start_point(point)
+    near = 0
+    for ax, ay, az in atoms_of(structure):
+        if abs(ax - x) < margin and abs(ay - y) < margin and abs(az - z) < margin:
+            near += 1
+            if near >= 12:            # a dozen atoms within a few angstroms is a pocket, not space
+                return True
+    return False
 
 
 def tunnel_spheres(cluster_pdb) -> list:
