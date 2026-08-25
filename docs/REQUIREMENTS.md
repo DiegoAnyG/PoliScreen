@@ -80,14 +80,33 @@ Not software — inputs:
 | **ADCP**, peptide docking | ~900 MB | accepting the Scripps academic licence |
 | **ADMET-AI** | already included | nothing |
 | **Tunnel reading** (caver-translate) | already included | nothing |
+| **Tunnel search** (CAVER) | ~330 MB | the CAVER zip at build time |
+| **Tunnel transport** (CaverDock) | ~490 MB | a Linux install outside the container |
 
-Both optional engines are Linux-only builds, which is another reason the container route is the
-one that has everything.
+gnina and ADCP are Linux-only builds, which is another reason the container route is the one that
+has everything.
 
-Reading tunnels is free because PoliScreen does not run the engines that produce them. **CAVER**
-(GPL-3, Java) and **CaverDock** (academic licence, Linux, ~490 MB as an Apptainer image) are
-installed separately if you want to compute the routes yourself; a folder of results reads the same
-whether it came from them or from CaverWeb.
+### The two tunnel engines, and why only one is in the image
+
+**CAVER** is GPL-3 and written in Java, so it may be redistributed and it behaves the same
+everywhere. It is in the image, with the Java runtime. caver.cz serves the zip behind a form rather
+than a stable URL, so the build takes it one of two ways:
+
+```bash
+docker build --build-arg CAVER_URL=https://.../caver_3.0.2.zip --build-arg CAVER_SHA256=... .
+# or put caver_*.zip in installer/vendor/ and build normally
+```
+
+Without either, the image still reads tunnel results; it just cannot compute them.
+
+**CaverDock** is not in the image and cannot easily be. It is a native binary built against Ubuntu
+20.04's libraries, and the base here is newer: its MPI daemons fail to start. Its Apptainer image
+solves that, but opening one inside Docker needs privileges no screening tool should ask for.
+
+So CaverDock runs **outside** the container — on Linux or WSL directly, where PoliScreen finds the
+`.sif` by itself or through `POLISCREEN_CAVERDOCK`. Point the Results tab at the folder afterwards.
+Finding the tunnels, which is the interactive half at seconds per structure, works in the container
+for everyone.
 
 ## 8. What you do NOT need
 

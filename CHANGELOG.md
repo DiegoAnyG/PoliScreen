@@ -21,11 +21,26 @@ Notable changes. Dates are release dates; the format follows [Keep a Changelog](
   opt-in). Both are discovered, or reported absent with the one variable that turns them on:
   `POLISCREEN_CAVER`, `POLISCREEN_CAVERDOCK`. `poliscreen info` reports both.
 
+- **CAVER in the container**, with the Java runtime. It is GPL-3 and written in Java, so it may be
+  redistributed and it behaves the same everywhere: the image finds the same six tunnels of 8HTB,
+  to every digit, as a local run and as CaverWeb's own server. caver.cz has no stable download URL,
+  so the zip arrives through `--build-arg CAVER_URL=` or from `installer/vendor/`; without either
+  the image still reads results and simply cannot compute them.
+
+CaverDock is deliberately **not** in the image. It is a native binary built against Ubuntu 20.04's
+libraries and its MPI daemons will not start on the newer base; its Apptainer image solves that,
+but opening one inside Docker needs privileges no screening tool should ask for. It runs outside
+the container, where PoliScreen finds it.
+
 Two upstream faults are worked around, because each silently changes the answer rather than
 failing: `cd-analysis` replaces the tunnel with its own two-angstrom extension and docks through
 that alone (10 discs instead of 68, finishing in seconds), and more than two MPI processes make
 CaverDock's seed meaningless. The run is therefore two processes by default, and says what it
 costs when asked for more.
+
+Also fixed before it shipped: without `save_dynamics_visualization`, CAVER writes only
+`data/clusters_timeless` and a successful run looked like it had found nothing. Found by running it
+in the container rather than by reading the manual.
 
 PoliScreen does not run CAVER or CaverDock: this is the reading half, which needs no engine, no
 licence and no gigabyte in the image. The reader is [caver-translate](https://github.com/DiegoAnyG/caver-translate),

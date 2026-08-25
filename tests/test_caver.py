@@ -74,6 +74,34 @@ def test_the_tunnel_command_keeps_the_whole_tunnel(tmp_path):
     assert "--skip-tunnel-extension" in cmd
 
 
+def test_the_config_asks_for_the_directory_everything_downstream_names(tmp_path):
+    """Without save_dynamics_visualization, CAVER writes only clusters_timeless and the run looks
+    like it found nothing. Caught by running it in the container, not by reading the manual."""
+    from poliscreen.core.docking import Box
+
+    assert "save_dynamics_visualization yes" in caver.write_config(
+        tmp_path, Box(0, 0, 0, 24, 24, 24)).read_text()
+
+
+def test_tunnels_are_found_in_either_directory(tmp_path):
+    """Which one CAVER wrote depends on a config flag, not on the run. A config that came from
+    somewhere else is not ours to assume anything about."""
+    data = tmp_path / "data"
+    (data / "clusters_timeless").mkdir(parents=True)
+    (data / "clusters_timeless" / "tun_cl_001_1.pdb").write_text("")
+    assert [p.name for p in caver.clusters(tmp_path)] == ["tun_cl_001_1.pdb"]
+
+    # When both exist, the plain one wins: it is what the run folder names are built from.
+    (data / "clusters").mkdir()
+    (data / "clusters" / "tun_cl_001.pdb").write_text("")
+    assert [p.name for p in caver.clusters(tmp_path)] == ["tun_cl_001.pdb"]
+
+
+def test_an_empty_cluster_directory_is_not_a_success(tmp_path):
+    (tmp_path / "data" / "clusters").mkdir(parents=True)
+    assert caver.clusters(tmp_path) == []
+
+
 def test_more_than_two_processes_is_reported_as_losing_the_seed():
     """CaverDock says so once, in the middle of a run log nobody reads."""
     assert caver.reproducible(2) is True

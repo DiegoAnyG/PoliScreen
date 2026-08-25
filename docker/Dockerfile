@@ -21,7 +21,7 @@ ENV POLISCREEN_HOME=/opt/poliscreen \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates git \
+ && apt-get install -y --no-install-recommends curl ca-certificates git unzip \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR ${POLISCREEN_HOME}
@@ -69,14 +69,54 @@ ENV POLISCREEN_ADME_PYTHON=/opt/conda/envs/admet/bin/python \
     POLISCREEN_ADME_ROOT=/opt/adme
 
 # Reading CAVER and CaverDock output. On by default and cheap: it is pure standard library, so
-# --no-deps is the whole story and nothing can conflict with the docking stack. The engines
-# themselves are not here -- PoliScreen reads their results, it does not run them.
+# --no-deps is the whole story and nothing can conflict with the docking stack.
 ARG WITH_TUNNELS=1
 ARG CAVER_TRANSLATE_VERSION=main
 RUN if [ "$WITH_TUNNELS" = "1" ]; then \
         pip install --no-cache-dir --no-deps \
             "git+https://github.com/DiegoAnyG/caver-translate.git@${CAVER_TRANSLATE_VERSION}"; \
     fi
+
+# CAVER itself: finding the tunnels, which is the interactive half -- seconds per structure, not
+# the minutes CaverDock takes. It is GPL-3, so unlike CaverDock it may be redistributed, and it is
+# a Java program, so it runs the same here as on any other machine. That is the whole reason it can
+# be in this image and CaverDock cannot: CaverDock is a native binary built against Ubuntu 20.04's
+# libraries, and its MPI daemons cannot be made to run on this base.
+#
+# There is no stable download URL -- caver.cz serves it behind a form -- so the zip arrives one of
+# two ways, and the build says which it used:
+#
+#   --build-arg CAVER_URL=https://.../caver_3.0.2.zip   (with CAVER_SHA256 to pin it)
+#   or drop caver_*.zip into installer/vendor/ before building
+#
+# Version 3.0.2 on purpose: it reproduces CaverWeb to every digit on 8HTB, where 3.0.3 BETA returns
+# eight tunnels for the server's six.
+ARG WITH_CAVER=1
+ARG CAVER_URL=
+ARG CAVER_SHA256=
+COPY installer/vendo[r] /tmp/caver_vendor
+RUN if [ "$WITH_CAVER" = "1" ]; then \
+        zip=""; \
+        if [ -n "$CAVER_URL" ]; then \
+            curl -fsSL "$CAVER_URL" -o /tmp/caver.zip \
+         && if [ -n "$CAVER_SHA256" ]; then echo "${CAVER_SHA256}  /tmp/caver.zip" | sha256sum -c -; fi \
+         && zip=/tmp/caver.zip; \
+        else \
+            zip="$(find /tmp/caver_vendor -maxdepth 1 -name 'caver_*.zip' -print -quit 2>/dev/null || true)"; \
+        fi; \
+        if [ -n "$zip" ]; then \
+            mkdir -p /opt/caver && unzip -q "$zip" -d /opt/caver && rm -f /tmp/caver.zip \
+         && mamba install -y -n poliscreen openjdk && mamba clean -afy \
+         && echo "CAVER installed from $zip"; \
+        else \
+            echo "WITH_CAVER=1 but no zip was given: set CAVER_URL or put caver_*.zip in installer/vendor/."; \
+            echo "The image will still read tunnel results; it just cannot compute them."; \
+        fi; \
+    fi
+
+# core/caver.py searches for caver.jar rather than trusting one path, but naming it here means the
+# search never runs and a broken unpack is noticed at build time instead of in the interface.
+ENV POLISCREEN_CAVER=/opt/caver
 
 # Optional engines, off unless asked for. Both are Linux-only, which is why the container can
 # carry them and the native Windows installer never will. They land in $HOME/poliscreen_tools,
@@ -125,6 +165,11 @@ assert e, 'gnina was requested but no executable was found'; print('gnina ready:
         python -c "from poliscreen.core import tunnels; \
 assert tunnels.available(), 'tunnel reading was requested but caver-translate is not importable'; \
 print('tunnel reading ready:', tunnels.version())"; \
+    fi \
+ && if [ -d /opt/caver ]; then \
+        python -c "from poliscreen.core import caver; \
+assert caver.caver_available(), 'a CAVER zip was unpacked but no runnable caver.jar came out of it'; \
+print('tunnel search ready:', caver.caver_jar())"; \
     fi
 
 # The base image already sets tini as its entrypoint, and `init: true` puts Docker's own tini in

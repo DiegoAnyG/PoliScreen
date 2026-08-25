@@ -45,6 +45,10 @@ DEFAULTS = {
     "clustering_threshold": 3.5,
     "max_distance": 3.0,
     "desired_radius": 5.0,
+    # Without this CAVER writes only data/clusters_timeless and no data/clusters, which is the
+    # directory everything downstream names. It costs nothing on a single structure and it is what
+    # CaverWeb sets, so a local run and a server run leave the same folders behind.
+    "save_dynamics_visualization": "yes",
 }
 
 # Version 3.0.2 reproduces CaverWeb to every digit on 8HTB; 3.0.3 BETA returns eight tunnels where
@@ -207,16 +211,28 @@ def find_tunnels(structure, box, out_dir, config=None, heap: str = CAVER_HEAP,
     cmd = [java_exe(), f"-Xmx{heap}", "-cp", str(home / "lib"), "-jar", str(jar),
            "-home", str(home), "-pdb", str(structures), "-conf", str(conf), "-out", str(result)]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    if not (result / "data" / "clusters").is_dir():
+    if not clusters(result):
         tail = (r.stderr or r.stdout or "")[-400:]
         raise CaverError(f"CAVER produced no tunnel clusters: {tail}")
     return result
 
 
 def clusters(caver_out) -> list:
-    """The tunnel cluster files CAVER wrote, in priority order -- which is their numbering."""
-    folder = Path(caver_out) / "data" / "clusters"
-    return sorted(folder.glob("tun_cl_*.pdb")) if folder.is_dir() else []
+    """The tunnel cluster files CAVER wrote, in priority order -- which is their numbering.
+
+    Two directories can hold them and which one appears depends on a config flag rather than on
+    anything about the run: without save_dynamics_visualization CAVER writes only
+    clusters_timeless, named tun_cl_003_1.pdb instead of tun_cl_003.pdb. Both are read, because a
+    config that came from somewhere else is not ours to assume anything about.
+    """
+    data = Path(caver_out) / "data"
+    for name in ("clusters", "clusters_timeless"):
+        folder = data / name
+        if folder.is_dir():
+            found = sorted(folder.glob("tun_cl_*.pdb"))
+            if found:
+                return found
+    return []
 
 
 def transport_command(image, workdir, receptor, ligand, tunnel, direction: str, bound: str,
