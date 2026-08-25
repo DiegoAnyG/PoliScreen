@@ -2427,7 +2427,7 @@ def _tunnel_table(caver_out, found):
         geometry = {g.tunnel: g for g in parse_tunnels(summary)}
 
     numbers = [_tunnel_number(c) for c in found]
-    shown = set(S.get("tun_shown") or numbers[:1])
+    shown = set(_selected_tunnels(numbers, S.get("tun_shown")))
     rows = []
     for n in numbers:
         g = geometry.get(n)
@@ -2440,13 +2440,32 @@ def _tunnel_table(caver_out, found):
             "Priority": g.priority if g else None,
         })
 
+    # No key on purpose. Given one, st.data_editor keeps the user's edits as a diff in session
+    # state and replays it over whatever frame is passed in -- and this frame is itself rebuilt
+    # from that same state. The two then fight: a click is applied, overwritten by the replay, and
+    # only lands on the second press. Without a key the frame is the single source of truth and
+    # the return value is what the user just did.
     edited = st.data_editor(
-        pd.DataFrame(rows), width="stretch", hide_index=True, key="tun_table",
+        pd.DataFrame(rows), width="stretch", hide_index=True,
         column_config={"": st.column_config.CheckboxColumn(t("Draw"), width="small")},
         disabled=["Tunnel", "Bottleneck (Å)", "Length (Å)", "Curvature", "Priority"])
     S["tun_shown"] = [n for n, on in zip(numbers, edited[""]) if on]
     st.caption(t("Priority and length are read together: a tunnel with nothing to cross costs "
                  "nothing to cross."))
+
+
+def _selected_tunnels(available, remembered):
+    """Which tunnels to draw, given what exists and what the user last chose.
+
+    The distinction that matters is between *not chosen yet* and *chosen to be none*. `None` is the
+    first, and shows the first tunnel so the panel is not blank. An empty list is the second, and
+    is obeyed: unticking every row has to leave the viewer empty, not silently bring back tunnel 1.
+    Testing `if remembered` instead of `if remembered is None` conflates the two, because an empty
+    list is falsy -- which is exactly how tunnel 1 kept reappearing and stealing the next click.
+    """
+    if remembered is None:
+        return list(available[:1])
+    return [n for n in remembered if n in available]
 
 
 def _tunnel_number(cluster) -> int:
@@ -2624,9 +2643,13 @@ def _viewer_panel(etapa: str):
             # cavities in. Both on by default: a route is read against the pockets it connects.
             picked = S.get("tun_shown")
             routes = _tunnel_groups(set(picked) if picked is not None else None)
+            # Disabled only when there are none to draw at all. Basing it on the current selection
+            # instead greys the control out the moment the last row is unticked, which reads as a
+            # fault rather than as the empty view that was asked for.
+            any_found = bool(S.get("tun_drawn") and cv.clusters(S["tun_drawn"]))
             S.setdefault("vis_show_tun", True)
-            ver_tun = c3.checkbox(t("Tunnels"), key="vis_show_tun", disabled=not routes,
-                                  help=None if routes else t("Find them in Run first."))
+            ver_tun = c3.checkbox(t("Tunnels"), key="vis_show_tun", disabled=not any_found,
+                                  help=None if any_found else t("Find them in Run first."))
             S.setdefault("vis_axes_box", True)
             axes_ = c4.checkbox(t("XYZ axes"), key="vis_axes_box")
             groups_ = list(groups_by_receptor) if (ver_cav and groups_by_receptor) else []
