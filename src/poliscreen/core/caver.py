@@ -149,20 +149,173 @@ def reproducible(cpus: int) -> bool:
     return cpus <= MPI_REPRODUCIBLE
 
 
-def write_config(out_dir, box, **overrides) -> Path:
-    """The CAVER config, with the search box centre as the starting point.
+WATER_NAMES = ("HOH", "WAT", "DOD", "H2O")
 
-    That centre is the one thing PoliScreen already knows and CAVER most needs: tunnels are
-    measured from the active site outwards, and the box was put there for the docking.
+
+def hetero_groups(pdb) -> list:
+    """The non-water hetero residues in a structure, with how many atoms each has.
+
+    They decide the answer: a cofactor sitting in a channel closes it, and removing one that is
+    genuinely there opens a route the protein does not have. Which is why this is asked rather
+    than assumed.
     """
+    counts = {}
+    for line in Path(pdb).read_text(errors="ignore").splitlines():
+        if line.startswith("HETATM"):
+            name = line[17:20].strip()
+            if name and name not in WATER_NAMES:
+                counts[name] = counts.get(name, 0) + 1
+    return sorted(counts.items())
+
+
+def prepare_for_caver(pdb, out_path, keep_hetero=(), keep_waters: bool = False) -> Path:
+    """The same structure, as CAVER needs to see it.
+
+    Docking and tunnel search want opposite things from a receptor, and feeding one the other's
+    file is the quietest way to get a wrong answer:
+
+    **Hydrogens are removed.** CAVER measures a tunnel as the space left between van der Waals
+    spheres, and a receptor prepared for docking carries thousands of added hydrogens that make
+    every atom effectively larger. Measured on 8HTB: the docking-ready file (4449 atoms, 2237 of
+    them hydrogens, GDP and Ca retained) yields **three** tunnels; the bare heavy-atom protein
+    yields **six**, and the three that disappear are the narrow ones -- bottleneck radii 0.94, 1.00
+    and 1.26 A. Nothing warns you; the run simply reports fewer routes.
+
+    **Heteroatoms are chosen, not inherited.** Waters go unless asked for, and each cofactor or
+    ligand is kept only if named. Keeping GDP is a statement that the channel is blocked in the
+    physiological state; removing it is a statement that it is not. Both are legitimate; guessing
+    is not.
+    """
+    keep = {str(h).strip().upper() for h in keep_hetero}
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    kept = []
+    for line in Path(pdb).read_text(errors="ignore").splitlines():
+        if line.startswith(("ATOM", "HETATM")):
+            # Column 77-78 is the element; the atom name is the fallback for files that omit it.
+            element = line[76:78].strip().upper() or line[12:16].strip().lstrip("0123456789")[:1]
+            if element == "H" or element == "D":
+                continue
+            if line.startswith("HETATM"):
+                name = line[17:20].strip().upper()
+                if name in WATER_NAMES:
+                    if not keep_waters:
+                        continue
+                elif name not in keep:
+                    continue
+            kept.append(line)
+        elif line.startswith(("TER", "END")):
+            continue                      # rewritten below, so a filtered file stays well formed
+    out.write_text("\n".join(kept + ["TER", "END", ""]), encoding="utf-8")
+    return out
+
+
+def centroid(points) -> tuple:
+    """The middle of a set of atoms, which is how a ligand or a set of residues becomes a point."""
+    pts = [tuple(float(v) for v in p[:3]) for p in points]
+    if not pts:
+        raise CaverError("No atoms to take a starting point from.")
+    n = len(pts)
+    return tuple(round(sum(p[i] for p in pts) / n, 3) for i in range(3))
+
+
+def atoms_of(path, residues=()) -> list:
+    """(x, y, z) of every atom, or only of the named residues.
+
+    Residues are given as CAVER and PoliScreen both write them, name plus number: ASP199, Leu209.
+    """
+    wanted = {str(r).strip().upper() for r in residues}
+    out = []
+    for line in Path(path).read_text(errors="ignore").splitlines():
+        if not line.startswith(("ATOM", "HETATM")):
+            continue
+        if wanted:
+            label = f"{line[17:20].strip()}{line[22:26].strip()}".upper()
+            if label not in wanted:
+                continue
+        try:
+            out.append((float(line[30:38]), float(line[38:46]), float(line[46:54])))
+        except ValueError:
+            continue
+    return out
+
+
+def ligand_atoms(path) -> list:
+    """(x, y, z) of a small molecule in any of the formats a control arrives as."""
+    p = Path(path)
+    if p.suffix.lower() in (".pdb", ".pdbqt", ".ent"):
+        return atoms_of(p)
+    out = []
+    for line in p.read_text(errors="ignore").splitlines():
+        fields = line.split()
+        if len(fields) >= 4:
+            try:
+                out.append((float(fields[0]), float(fields[1]), float(fields[2])))
+            except ValueError:
+                continue
+    return out
+
+
+def tunnel_spheres(cluster_pdb) -> list:
+    """(x, y, z, radius) of one tunnel, for drawing it.
+
+    A CAVER tunnel is written as a chain of spheres in a PDB, with the radius where the occupancy
+    would be. Which is the same shape fpocket's alpha spheres arrive in, so the viewer already
+    knows how to draw it.
+    """
+    out = []
+    for line in Path(cluster_pdb).read_text(errors="ignore").splitlines():
+        if not line.startswith(("ATOM", "HETATM")):
+            continue
+        try:
+            x, y, z = float(line[30:38]), float(line[38:46]), float(line[46:54])
+        except ValueError:
+            continue
+        radius = 0.0
+        for start, end in ((54, 60), (60, 66)):
+            try:
+                value = float(line[start:end])
+            except ValueError:
+                continue
+            if value > 0:
+                radius = value
+                break
+        if radius > 0:
+            out.append((x, y, z, radius))
+    return out
+
+
+def start_point(source) -> tuple:
+    """A starting point from whatever the caller has: a Box, a point, or atoms to average.
+
+    Tunnels are measured from one point outwards, and where that point sits changes the answer.
+    The search box centre is a reasonable default because it was already placed on the site, but
+    it is a cube's middle -- a ligand or a set of catalytic residues says it more precisely.
+    """
+    if source is None:
+        raise CaverError("No starting point given.")
+    if hasattr(source, "cx"):
+        return (source.cx, source.cy, source.cz)
+    seq = list(source)
+    if len(seq) == 3 and all(isinstance(v, (int, float)) for v in seq):
+        return tuple(float(v) for v in seq)
+    return centroid(seq)
+
+
+def write_config(out_dir, start, **overrides) -> Path:
+    """The CAVER config, with wherever the tunnels are to be measured from.
+
+    `start` is a Box, a point, or the atoms to take the middle of -- see start_point.
+    """
+    x, y, z = start_point(start)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     values = dict(DEFAULTS)
     values.update({k: v for k, v in overrides.items() if v is not None})
 
     lines = [
-        "# Written by PoliScreen. The starting point is the centre of the search box.",
-        f"starting_point_coordinates {box.cx} {box.cy} {box.cz}",
+        "# Written by PoliScreen.",
+        f"starting_point_coordinates {x} {y} {z}",
         "",
     ]
     lines += [f"{k} {v}" for k, v in values.items()]
@@ -180,13 +333,17 @@ def write_config(out_dir, box, **overrides) -> Path:
     return path
 
 
-def find_tunnels(structure, box, out_dir, config=None, heap: str = CAVER_HEAP,
+def find_tunnels(structures, start, out_dir, config=None, heap: str = CAVER_HEAP,
                  timeout: int = 3600) -> Path:
-    """Run CAVER on one structure and return the folder holding its output.
+    """Run CAVER on one structure, or on several, and return the folder holding its output.
 
-    CAVER reads a *folder* of PDB files: one is a static structure, many are the snapshots of a
-    trajectory and it clusters the tunnels across them. A single structure is copied into a folder
-    of its own so the caller does not have to know that.
+    CAVER reads a *folder* of PDB files. One file is a static structure. Several are the snapshots
+    of a trajectory, and CAVER clusters the tunnels across all of them -- which is what a dynamic
+    tunnel is, and the only reason to pass more than one. Either is accepted here, so the caller
+    does not have to know that a folder is what CAVER wants.
+
+    The structure should have come through prepare_for_caver: a receptor prepared for docking has
+    hydrogens on it, and they close the narrow tunnels without saying so.
     """
     jar = caver_jar()
     if jar is None:
@@ -195,17 +352,26 @@ def find_tunnels(structure, box, out_dir, config=None, heap: str = CAVER_HEAP,
     if java_exe() is None:
         raise CaverError("CAVER needs a Java runtime and there is no java on PATH.")
 
-    structure = Path(structure)
-    if not structure.exists():
-        raise CaverError(f"No such structure: {structure}")
+    paths = [Path(structures)] if isinstance(structures, (str, Path)) else [Path(p) for p in structures]
+    missing = [p for p in paths if not p.exists()]
+    if missing:
+        raise CaverError(f"No such structure: {missing[0]}")
+    if not paths:
+        raise CaverError("No structures to search.")
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    structures = out / "structures"
-    structures.mkdir(exist_ok=True)
-    shutil.copy2(structure, structures / f"{structure.stem}.pdb")
+    folder = out / "structures"
+    folder.mkdir(exist_ok=True)
+    # Numbered, because CAVER orders the snapshots by file name and a trajectory read out of order
+    # clusters tunnels across time steps that never followed one another.
+    width = len(str(len(paths)))
+    for i, p in enumerate(paths):
+        name = f"{p.stem}.pdb" if len(paths) == 1 else f"{i:0{width}d}_{p.stem}.pdb"
+        shutil.copy2(p, folder / name)
+    structures = folder
 
-    conf = Path(config) if config else write_config(out, box)
+    conf = Path(config) if config else write_config(out, start)
     home = jar.parent
     result = out / "out"
     cmd = [java_exe(), f"-Xmx{heap}", "-cp", str(home / "lib"), "-jar", str(jar),

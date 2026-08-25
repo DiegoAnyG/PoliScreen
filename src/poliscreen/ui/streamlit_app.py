@@ -1553,33 +1553,88 @@ def _run_tunnels():
     out_root = proj / lay.TUNNELS
     rec = st.selectbox(t("Receptor"), recs, format_func=_rname, key="tun_rec")
 
-    # --- 1. the routes -------------------------------------------------------------------------
-    st.markdown(t("**1 · Find the routes**"))
-    # The Screening tab leaves each box here as a dict, so the centre this reads is the one the
-    # docking will actually use -- not a second guess at where the site is.
+    # --- 1. the structure ----------------------------------------------------------------------
+    st.markdown(t("**1 · What CAVER should look at**"))
+    st.caption(t("Docking and tunnel search want opposite things from a receptor. Hydrogens make "
+                 "every atom effectively larger and close the narrow routes: on 8HTB the "
+                 "docking-ready file finds three tunnels where the bare protein finds six."))
+
+    # The original download is offered first because it is the one that reproduces a CaverWeb run:
+    # preparing a receptor for docking also drops atoms CAVER wants.
+    original = next((p for p in sorted(Path(rec).parent.glob(f"{Path(rec).stem.split('_ready')[0]}*.pdb"))
+                     if "_ready" not in p.name and "control" not in p.name), None)
+    sources = [p for p in (original, Path(rec)) if p is not None]
+    source = st.selectbox(t("Structure"), sources, format_func=lambda p: p.name, key="tun_src",
+                          help=t("The original download reproduces a CaverWeb run; the "
+                                 "docking-ready file has hydrogens on it."))
+
+    present = cv.hetero_groups(source)
+    keep = []
+    if present:
+        S.setdefault("tun_het", [])
+        keep = st.multiselect(
+            t("Heterogroups to keep"), [name for name, _n in present],
+            format_func=lambda n: f"{n} ({dict(present)[n]} atoms)", key="tun_het",
+            help=t("A cofactor sitting in a channel closes it. Keeping one says the route is "
+                   "blocked in the physiological state; removing it says it is not."))
+        st.caption(t("On 8HTB: nothing kept gives 6 tunnels, GDP and Ca kept gives 4, and with "
+                     "the ligand as well, 2. It is a decision, not a detail."))
+    S.setdefault("tun_wat", False)
+    waters = st.checkbox(t("Keep waters"), key="tun_wat")
+
+    # --- 2. where to measure from --------------------------------------------------------------
+    st.markdown(t("**2 · Where to measure from**"))
+    ctrls = [Path(p) for p in S.get("controls", []) if Path(p).exists()]
     stored = (S.get("_boxes") or {}).get(str(rec))
-    if stored is None:
-        st.warning(t("No search box for this receptor yet. Set it in the Screening tab: its centre "
-                     "is the point CAVER measures the tunnels from."))
+    options = ([t("Centre of the search box")] if stored else []) \
+        + ([t("Centre of a control")] if ctrls else []) + [t("Centre of chosen residues")]
+    how = st.radio(t("Starting point"), options, key="tun_start", horizontal=False)
+
+    start = None
+    if how == t("Centre of the search box"):
+        start = dk.Box(**stored)
+    elif how == t("Centre of a control"):
+        which = st.selectbox(t("Control"), ctrls, format_func=lambda p: p.name, key="tun_ctrl")
+        start = cv.ligand_atoms(which)
+    else:
+        labels = sorted({f"{ln[17:20].strip()}{ln[22:26].strip()}"
+                         for ln in Path(source).read_text(errors="ignore").splitlines()
+                         if ln.startswith("ATOM")},
+                        key=lambda r: (sc.resnum(r), r))
+        chosen = st.multiselect(t("Residues"), labels, key="tun_res",
+                                help=t("The catalytic or anchor residues, if you know them. The "
+                                       "starting point is the middle of the ones you pick."))
+        start = cv.atoms_of(source, chosen) if chosen else None
+
+    if start is None:
+        st.info(t("Choose the residues to measure from."))
         return
-    box = dk.Box(**stored)
-    st.caption(t("Starting point: the centre of the search box, {x}, {y}, {z}.").format(
-        x=box.cx, y=box.cy, z=box.cz))
+    try:
+        x, y, z = cv.start_point(start)
+    except cv.CaverError as e:
+        st.error(str(e))
+        return
+    st.caption(t("Starting point: {x}, {y}, {z}.").format(x=x, y=y, z=z))
 
     caver_out = out_root / f"caver_{Path(rec).stem}" / "out"
     found = cv.clusters(caver_out)
     if st.button(t("Find tunnels"), key="tun_find", disabled=not has_caver):
         with st.spinner(t("Running CAVER...")):
             try:
-                cv.find_tunnels(rec, box, caver_out.parent)
+                prepared = cv.prepare_for_caver(
+                    source, caver_out.parent / "prepared" / f"{Path(source).stem}.pdb",
+                    keep_hetero=keep, keep_waters=waters)
+                cv.find_tunnels(prepared, (x, y, z), caver_out.parent)
             except cv.CaverError as e:
                 st.error(str(e))
                 return
         found = cv.clusters(caver_out)
+        S["tun_drawn"] = str(caver_out)
         st.success(t("{n} tunnels found.").format(n=len(found)))
 
     if not found:
         return
+    S.setdefault("tun_drawn", str(caver_out))
 
     summary = caver_out / "summary.txt"
     if summary.exists() and tn.available():
@@ -1604,15 +1659,37 @@ def _run_tunnels():
         return
 
     c = st.columns(2)
-    tunnel = c[0].selectbox(t("Tunnel"), found, format_func=lambda p: p.stem, key="tun_pick")
-    ligand = c[1].selectbox(t("Compound"), ligs, format_func=lambda p: p.stem, key="tun_lig")
-    c2 = st.columns(3)
-    direction = c2[0].radio(t("Direction"), ["in", "out"], horizontal=True, key="tun_dir",
-                            help=t("Entering the site, or leaving it. They are not symmetric."))
-    bound = c2[1].radio(t("Bound"), ["lb", "ub"], horizontal=True, key="tun_bound",
-                        help=t("Lower bound is minutes. Upper bound is tens of minutes and is the "
-                               "only way to know a barrier is not an artefact."))
-    cpus = c2[2].number_input(t("MPI processes"), min_value=2, max_value=16, step=1, key="tun_cpus")
+    S.setdefault("tun_pick", found[:1])
+    S.setdefault("tun_lig", ligs[:1])
+    tunnels_pick = c[0].multiselect(t("Tunnels"), found,
+                                    format_func=lambda p: p.stem, key="tun_pick")
+    ligands_pick = c[1].multiselect(t("Compounds"), ligs,
+                                    format_func=lambda p: p.stem, key="tun_lig")
+
+    # Entering and leaving are two separate dockings of the same route and the barrier is not the
+    # same in both; lower and upper bound are two different quantities. All four are usually
+    # wanted, so all four are checkboxes rather than a choice of one.
+    c2 = st.columns(5)
+    for key_, default_ in (("tun_in", True), ("tun_out", True),
+                           ("tun_lb", True), ("tun_ub", False)):
+        S.setdefault(key_, default_)
+    want_in = c2[0].checkbox(t("Entering"), key="tun_in")
+    want_out = c2[1].checkbox(t("Leaving"), key="tun_out")
+    want_lb = c2[2].checkbox(t("Lower bound"), key="tun_lb")
+    want_ub = c2[3].checkbox(t("Upper bound"), key="tun_ub")
+    cpus = c2[4].number_input(t("MPI processes"), min_value=2, max_value=16, step=1, key="tun_cpus")
+
+    directions = [d for d, on in (("in", want_in), ("out", want_out)) if on]
+    bounds = [b for b, on in (("lb", want_lb), ("ub", want_ub)) if on]
+    jobs = [(cmp_, tun, d, b) for cmp_ in ligands_pick for tun in tunnels_pick
+            for d in directions for b in bounds]
+
+    if not jobs:
+        st.info(t("Pick at least one tunnel, one compound, one direction and one bound."))
+        return
+    # An upper bound is roughly five times a lower one, and every combination is a separate docking.
+    minutes = sum(15 if b == "ub" else 3 for _c, _t, _d, b in jobs)
+    st.caption(t("{n} calculations, roughly {m} minutes in total.").format(n=len(jobs), m=minutes))
 
     if not cv.reproducible(int(cpus)):
         # CaverDock says this once, in the middle of a log nobody reads.
@@ -1620,18 +1697,29 @@ def _run_tunnels():
                      "run repeatable. Faster, and not reproducible."))
 
     if st.button(t("Run transport"), key="tun_run", type="primary"):
+        done, failed = [], []
         with st.status(t("Running CaverDock..."), expanded=True) as status:
-            st.write(t("This takes minutes, and tens of minutes for an upper bound."))
-            try:
-                run = cv.transport(rec, ligand, tunnel, out_root, direction=direction,
-                                   bound=bound, cpus=int(cpus))
-            except cv.CaverError as e:
-                status.update(label=t("CaverDock failed"), state="error")
-                st.error(str(e))
-                return
-            status.update(label=t("Done"), state="complete")
-        st.success(t("Written to {p}").format(p=run))
-        _notify(t("Transport finished. Read it in Results, Transport tunnels."), str(run))
+            bar = st.progress(0.0)
+            for i, (cmp_, tun, d, b) in enumerate(jobs):
+                label = f"{Path(cmp_).stem} · {Path(tun).stem} · {d} · {b}"
+                st.write(t("{n} of {total}: {what}").format(n=i + 1, total=len(jobs), what=label))
+                try:
+                    run = cv.transport(rec, cmp_, tun, out_root, direction=d, bound=b,
+                                       cpus=int(cpus))
+                    done.append(run)
+                except cv.CaverError as e:
+                    # One failed combination is not a reason to lose the ones that worked.
+                    failed.append((label, str(e)))
+                    st.write(f"  {t('failed')}: {str(e)[:160]}")
+                bar.progress((i + 1) / len(jobs))
+            state = "complete" if not failed else "error"
+            status.update(label=t("{n} of {total} finished").format(n=len(done), total=len(jobs)),
+                          state=state)
+        if done:
+            st.success(t("{n} written to {p}").format(n=len(done), p=out_root))
+            _notify(t("Transport finished. Read it in Results, Transport tunnels."), str(out_root))
+        for label, message in failed:
+            st.error(f"{label}: {message}")
 
     st.caption(t("Every run goes into `{p}`. Point the Results tab at that folder and they come "
                  "out as one table, with the combinations not yet run counted as missing.").format(
@@ -2330,6 +2418,27 @@ def _results_screening():
         st.markdown("---")
         _how_to_cite()
 
+def _tunnel_groups():
+    """The tunnels found for this project, as sphere groups the viewer can draw.
+
+    A CAVER tunnel cluster is a chain of spheres in a PDB, which is the same shape fpocket's alpha
+    spheres arrive in, so nothing new has to be taught to the viewer. Coloured apart from the
+    cavities: the two answer different questions and overlaying them in one colour hides which is
+    which.
+    """
+    root = S.get("tun_drawn")
+    if not root or not Path(root).exists():
+        return []
+    palette = ["#FF8A3D", "#FFC93D", "#7CE38B", "#5AC8FA", "#B197FC", "#FF6B9D"]
+    groups_ = []
+    for i, cluster in enumerate(cv.clusters(root)):
+        spheres = cv.tunnel_spheres(cluster)
+        if spheres:
+            groups_.append({"alpha": spheres, "color": palette[i % len(palette)],
+                            "chosen": False, "name": cluster.stem})
+    return groups_
+
+
 def _viewer_height(reserve: int) -> int:
     """Height of the 3D viewer so the panel shows selectors, viewer and footer without scroll. The
     height of each stage's chrome is subtracted from the panel height (cfg_alto); the minimum keeps
@@ -2462,23 +2571,32 @@ def _viewer_panel(etapa: str):
         boxes_ = S.get("_boxes") or {}
         cav_map = S.get("_cavities") or {}
         if boxes_:
-            c1, c2, c3 = st.columns([2, 1, 1])
+            c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
             rsel = c1.selectbox(t("Receptor"), list(boxes_), format_func=_rname,
                                 key="vis_box_rec", label_visibility="collapsed")
             groups_by_receptor = cav_map.get(rsel)
             S.setdefault("vis_show_cav", bool(groups_by_receptor))
             ver_cav = c2.checkbox(t("Cavities"), key="vis_show_cav")
+            # A CAVER tunnel is a chain of spheres, which is the shape the viewer already draws
+            # cavities in. Both on by default: a route is read against the pockets it connects.
+            routes = _tunnel_groups()
+            S.setdefault("vis_show_tun", True)
+            ver_tun = c3.checkbox(t("Tunnels"), key="vis_show_tun", disabled=not routes,
+                                  help=None if routes else t("Find them in Run first."))
             S.setdefault("vis_axes_box", True)
-            axes_ = c3.checkbox(t("XYZ axes"), key="vis_axes_box")
-            groups_ = groups_by_receptor if (ver_cav and groups_by_receptor) else None
+            axes_ = c4.checkbox(t("XYZ axes"), key="vis_axes_box")
+            groups_ = list(groups_by_receptor) if (ver_cav and groups_by_receptor) else []
+            drawn = routes if (ver_tun and routes) else []
             try:
                 _h = _viewer_height(150)
-                st.iframe(vw.view_html(receptor=rsel, box_=boxes_[rsel], cavities=groups_,
-                                             show_waters=False, axes_=axes_, height_=_h), height=_h + 12)
+                st.iframe(vw.view_html(receptor=rsel, box_=boxes_[rsel],
+                                       cavities=(groups_ + drawn) or None,
+                                       show_waters=False, axes_=axes_, height_=_h), height=_h + 12)
                 b = boxes_[rsel]
                 st.caption(f"Box (mauve): center ({b['cx']}, {b['cy']}, {b['cz']}) · "
                            f"{b['sx']} × {b['sy']} × {b['sz']} Å"
-                           + (f" · {len(groups_)} cavities; the one used is highlighted." if groups_ else ""))
+                           + (f" · {len(groups_)} cavities; the one used is highlighted." if groups_ else "")
+                           + (t(" · {n} tunnels").format(n=len(drawn)) if drawn else ""))
             except Exception as e:
                 st.error(t('Could not draw: {v1}').format(v1=e))
         else:

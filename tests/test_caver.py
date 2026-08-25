@@ -102,6 +102,98 @@ def test_an_empty_cluster_directory_is_not_a_success(tmp_path):
     assert caver.clusters(tmp_path) == []
 
 
+PDB = """\
+ATOM      1  N   ASP A 199      -1.000   0.000   0.000  1.00  0.00           N
+ATOM      2  CA  ASP A 199       1.000   0.000   0.000  1.00  0.00           C
+ATOM      3  H   ASP A 199       0.000   5.000   0.000  1.00  0.00           H
+ATOM      4  CA  LEU A 209       0.000   4.000   0.000  1.00  0.00           C
+HETATM    5  PA  GDP A 401      10.000  10.000  10.000  1.00  0.00           P
+HETATM    6 CA    CA A 402      20.000  20.000  20.000  1.00  0.00          CA
+HETATM    7  O   HOH A 501      30.000  30.000  30.000  1.00  0.00           O
+END
+"""
+
+
+def test_hydrogens_go_because_they_close_the_narrow_tunnels(tmp_path):
+    """CAVER measures the space between van der Waals spheres. On 8HTB the docking-ready file,
+    carrying 2237 added hydrogens, finds three tunnels where the bare protein finds six."""
+    src = tmp_path / "in.pdb"
+    src.write_text(PDB)
+    out = caver.prepare_for_caver(src, tmp_path / "out.pdb")
+    text = out.read_text()
+    assert " H   ASP" not in text
+    assert " CA  ASP" in text                     # a calcium-named carbon alpha is not a hydrogen
+
+
+def test_heterogroups_are_chosen_and_waters_go_by_default(tmp_path):
+    src = tmp_path / "in.pdb"
+    src.write_text(PDB)
+
+    bare = caver.prepare_for_caver(src, tmp_path / "bare.pdb").read_text()
+    assert "GDP" not in bare and "HOH" not in bare and " CA A 402" not in bare
+
+    kept = caver.prepare_for_caver(src, tmp_path / "kept.pdb", keep_hetero=("GDP",)).read_text()
+    assert "GDP" in kept and " CA A 402" not in kept
+
+    wet = caver.prepare_for_caver(src, tmp_path / "wet.pdb", keep_waters=True).read_text()
+    assert "HOH" in wet
+
+
+def test_the_starting_point_can_come_from_three_places(tmp_path):
+    """The box centre is a cube's middle. A ligand or the catalytic residues say it precisely, and
+    on 8HTB the residues land within 2 A of the point CaverWeb used."""
+    from poliscreen.core.docking import Box
+
+    assert caver.start_point(Box(1, 2, 3, 24, 24, 24)) == (1, 2, 3)
+    assert caver.start_point((1.0, 2.0, 3.0)) == (1.0, 2.0, 3.0)
+    assert caver.start_point([(0, 0, 0), (2, 4, 6)]) == (1.0, 2.0, 3.0)
+
+    src = tmp_path / "in.pdb"
+    src.write_text(PDB)
+    # ASP199's two heavy atoms sit either side of the origin; the hydrogen is off at y=5.
+    assert caver.start_point(caver.atoms_of(src, ["ASP199"])) == (0.0, 1.667, 0.0)
+
+
+def test_a_starting_point_from_nothing_is_refused(tmp_path):
+    src = tmp_path / "in.pdb"
+    src.write_text(PDB)
+    with pytest.raises(caver.CaverError):
+        caver.start_point(caver.atoms_of(src, ["TRP999"]))
+
+
+def test_a_tunnel_is_read_as_spheres_the_viewer_can_draw(tmp_path):
+    """CAVER writes a tunnel as a chain of spheres with the radius where the occupancy would be,
+    which is the shape fpocket's alpha spheres already arrive in."""
+    cluster = tmp_path / "tun_cl_001.pdb"
+    cluster.write_text(
+        "MODEL        0\n"
+        "ATOM      1  H   FIL T   1     -13.771 -12.804  17.384        2.67\n"
+        "ATOM      2  H   FIL T   1     -13.709 -13.277  17.523        2.43\n")
+    spheres = caver.tunnel_spheres(cluster)
+    assert len(spheres) == 2
+    assert spheres[0] == (-13.771, -12.804, 17.384, 2.67)
+
+
+def test_several_structures_are_numbered_so_the_snapshots_keep_their_order(tmp_path, monkeypatch):
+    """A trajectory read out of order clusters tunnels across time steps that never followed one
+    another. CAVER sorts the folder by file name, so the names have to carry the order."""
+    monkeypatch.setattr(caver, "caver_jar", lambda: tmp_path / "caver.jar")
+    monkeypatch.setattr(caver, "java_exe", lambda: "/usr/bin/java")
+    (tmp_path / "caver.jar").write_bytes(b"")
+    snaps = []
+    for name in ("frame_b", "frame_a", "frame_c"):
+        p = tmp_path / f"{name}.pdb"
+        p.write_text(PDB)
+        snaps.append(p)
+
+    monkeypatch.setattr(caver.subprocess, "run",
+                        lambda *_a, **_k: type("R", (), {"stdout": "", "stderr": ""})())
+    with pytest.raises(caver.CaverError):          # no clusters, because nothing really ran
+        caver.find_tunnels(snaps, (0, 0, 0), tmp_path / "out")
+    written = sorted(p.name for p in (tmp_path / "out" / "structures").iterdir())
+    assert written == ["0_frame_b.pdb", "1_frame_a.pdb", "2_frame_c.pdb"]
+
+
 def test_more_than_two_processes_is_reported_as_losing_the_seed():
     """CaverDock says so once, in the middle of a run log nobody reads."""
     assert caver.reproducible(2) is True
