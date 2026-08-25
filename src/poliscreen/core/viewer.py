@@ -67,15 +67,24 @@ CHOSEN_EMOJI = "🟡"
 CAVITY_PALETTE = ["#4C9BE8", "#B06FD6", "#54B87A", "#E8823C", "#D65C7A", "#B4885E", "#E8E8E8"]
 CAVITY_EMOJI = ["🔵", "🟣", "🟢", "🟠", "🔴", "🟤", "⚪"]
 
+# Tunnels are told apart from cavities by being flat and saturated rather than soft: they are a
+# route to follow, not a volume to judge, and a muted translucent tube is hard to trace through a
+# ribbon. The order matches CAVER's own, so a tunnel keeps its colour between here and PyMOL.
+TUNNEL_PALETTE = ["#E03131", "#2F9E44", "#1971C2", "#F1C40F",
+                  "#E8590C", "#9C36B5", "#8D6E4A", "#DEE2E6"]
+TUNNEL_EMOJI = ["🔴", "🟢", "🔵", "🟡", "🟠", "🟣", "🟤", "⚪"]
+
 
 def emoji_for_color(color: str) -> str:
     """Colored circle equivalent to the one used in the 3D viewer."""
     if color == CHOSEN_COLOR:
         return CHOSEN_EMOJI
-    try:
-        return CAVITY_EMOJI[CAVITY_PALETTE.index(color)]
-    except ValueError:
-        return "⚫"
+    for palette, emoji in ((CAVITY_PALETTE, CAVITY_EMOJI), (TUNNEL_PALETTE, TUNNEL_EMOJI)):
+        try:
+            return emoji[palette.index(color)]
+        except ValueError:
+            continue
+    return "⚫"
 
 
 def _xyz_axes(v, receptor, largo: float = 10.0):
@@ -149,7 +158,11 @@ def view_html(receptor=None, ligand_=None, height_: int = 480, width_="100%",
         groups_.append({"alpha": pocket_spheres, "color": CHOSEN_COLOR, "chosen": True})
     for g in groups_:
         col = g.get("color", CHOSEN_COLOR)
-        op = opacity if g.get("chosen") else max(0.55, opacity * 0.70)
+        # A group may fix its own opacity: cavities are judged through, so they stay translucent,
+        # and a tunnel is followed, which a translucent tube makes harder rather than easier.
+        op = g.get("opacity")
+        if op is None:
+            op = opacity if g.get("chosen") else max(0.55, opacity * 0.70)
         for s in (g.get("alpha") or []):
             try:
                 x, y, z, r = float(s[0]), float(s[1]), float(s[2]), float(s[3])

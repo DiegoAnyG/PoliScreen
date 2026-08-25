@@ -118,6 +118,61 @@ SECTIONS = {
          "still ranks candidates rather than asserting an exact binding mode, but ADCP handles their "
          "flexibility as Vina cannot."),
     ],
+    "Transport tunnels": [
+        ("What this answers",
+         "A docking score says how well a compound sits in the site. It says nothing about whether "
+         "it can **reach** it. CAVER finds the routes through the protein and CaverDock costs one "
+         "of them.\n\n"
+         "PoliScreen does not ship either engine. CAVER is GPL-3 and travels in the container; "
+         "CaverDock is a Linux image under an academic licence and is installed separately. "
+         "Reading results needs neither: a CaverWeb download and a local run read the same way."),
+        ("Preparing the structure — it decides the answer",
+         "Docking and tunnel search want opposite things from a receptor.\n\n"
+         "**Hydrogens are removed.** CAVER measures a tunnel as the space left between van der "
+         "Waals spheres, and a receptor prepared for docking carries thousands of added hydrogens "
+         "that make every atom effectively larger. Measured on 8HTB: the docking-ready file, 4449 "
+         "atoms of which 2237 hydrogens, finds **three** tunnels. The original download stripped "
+         "to its 2367 heavy atoms finds **six** — and the three that disappear are the narrow "
+         "ones, bottleneck radii 0.94, 1.00 and 1.26 Å. Nothing warns you; the run simply reports "
+         "fewer routes.\n\n"
+         "**Heteroatoms are chosen, not inherited.** On the same structure:\n\n"
+         "| kept | tunnels |\n|---|---|\n| nothing | 6 |\n| GDP and Ca | 4 |\n"
+         "| GDP, Ca and the ligand | 2 |\n\n"
+         "Keeping a cofactor is a statement that the channel is blocked in the physiological "
+         "state; removing it is a statement that it is not. Both are legitimate. Guessing is not, "
+         "which is why nothing is kept by default and the choice is yours."),
+        ("Where to measure from",
+         "CAVER measures outwards from one point, and where it sits changes what is found.\n\n"
+         "**The search box centre** is a reasonable default: it was already placed on the site for "
+         "the docking. It is a cube's middle, so it is approximate.\n\n"
+         "**A control** is more precise — the co-crystallized ligand marks the real site.\n\n"
+         "**Catalytic residues** are the most explicit, and reproduce a published setup best. On "
+         "8HTB, Leu209 + Asn263 + Asp199 give (−16.69, −12.05, 19.66), within 2 Å of the point "
+         "CaverWeb used for the same target.\n\n"
+         "A point with no protein around it is refused before CAVER runs: from open space it "
+         "measures the outside world and reports it as one very wide tunnel."),
+        ("Reading the tunnel table",
+         "**Priority and length are read together.** A tunnel with nothing to cross costs nothing "
+         "to cross, and tops the ranking meaning nothing: 8HTB tunnel 1 has the best priority of "
+         "the six, 0.946, and is 1.0 Å long. It is the mouth of the pocket, not a route through "
+         "the protein.\n\n"
+         "**Bottleneck radius** is the narrowest point. Below roughly 1 Å nothing drug-sized "
+         "passes without the protein moving.\n\n"
+         "Tick a row to draw that tunnel. Six at once is a knot."),
+        ("Transport: what the numbers mean",
+         "CaverDock writes an energy for every disc of the tunnel:\n\n"
+         "- **Ea** = E_max − E_surface — what entering costs. This is the number that compares "
+         "tunnels, because it says which offers least resistance.\n"
+         "- **dE_BS** = E_bound − E_surface — how much better the site is than the outside.\n\n"
+         "Neither is a binding free energy. CaverDock reports approximate docking energies along "
+         "a path, with a rigid receptor. **They compare; they do not measure.**\n\n"
+         "**Entering and leaving are not symmetric** — two separate dockings of the same route. "
+         "**Lower and upper bound are different quantities**: the lower bound can pass through "
+         "discontinuities and understate a barrier, the upper bound constrains rotation too. Never "
+         "rank across them.\n\n"
+         "Two processes is the default because CaverDock warns that more than two make its seed "
+         "meaningless, and it refuses to run a tunnel with one."),
+    ],
     "Run": [
         ("The search box",
          "Most reliable when centered on the co-crystallized ligand: it marks the real site. The protein's "

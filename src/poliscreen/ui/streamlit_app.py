@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -1555,9 +1556,8 @@ def _run_tunnels():
 
     # --- 1. the structure ----------------------------------------------------------------------
     st.markdown(t("**1 · What CAVER should look at**"))
-    st.caption(t("Docking and tunnel search want opposite things from a receptor. Hydrogens make "
-                 "every atom effectively larger and close the narrow routes: on 8HTB the "
-                 "docking-ready file finds three tunnels where the bare protein finds six."))
+    st.caption(t("Hydrogens make every atom effectively larger and close the narrow routes, so "
+                 "they are removed. A receptor prepared for docking is not the right input here."))
 
     # The original download is offered first because it is the one that reproduces a CaverWeb run:
     # preparing a receptor for docking also drops atoms CAVER wants.
@@ -1565,8 +1565,7 @@ def _run_tunnels():
                      if "_ready" not in p.name and "control" not in p.name), None)
     sources = [p for p in (original, Path(rec)) if p is not None]
     source = st.selectbox(t("Structure"), sources, format_func=lambda p: p.name, key="tun_src",
-                          help=t("The original download reproduces a CaverWeb run; the "
-                                 "docking-ready file has hydrogens on it."))
+                          help=t("The original download, not the docking-ready file."))
 
     present = cv.hetero_groups(source)
     keep = []
@@ -1577,8 +1576,7 @@ def _run_tunnels():
             format_func=lambda n: f"{n} ({dict(present)[n]} atoms)", key="tun_het",
             help=t("A cofactor sitting in a channel closes it. Keeping one says the route is "
                    "blocked in the physiological state; removing it says it is not."))
-        st.caption(t("On 8HTB: nothing kept gives 6 tunnels, GDP and Ca kept gives 4, and with "
-                     "the ligand as well, 2. It is a decision, not a detail."))
+        st.caption(t("What is kept decides how many routes exist. Nothing is kept by default."))
     S.setdefault("tun_wat", False)
     waters = st.checkbox(t("Keep waters"), key="tun_wat")
 
@@ -1644,17 +1642,7 @@ def _run_tunnels():
         return
     S.setdefault("tun_drawn", str(caver_out))
 
-    summary = caver_out / "summary.txt"
-    if summary.exists() and tn.available():
-        from caver_translate.parse import parse_tunnels
-        geometry = parse_tunnels(summary)
-        if geometry:
-            st.dataframe(pd.DataFrame([{
-                "tunnel": g.tunnel, "bottleneck_A": g.bottleneck_radius, "length_A": g.length,
-                "curvature": g.curvature, "priority": g.priority} for g in geometry],
-            ), width="stretch", hide_index=True)
-            st.caption(t("Priority and length have to be read together: a tunnel with nothing to "
-                         "cross costs nothing to cross, and tops the ranking meaning nothing."))
+    _tunnel_table(caver_out, found)
 
     # --- 2. the transport ----------------------------------------------------------------------
     st.markdown(t("**2 · Push a compound through one**"))
@@ -2426,24 +2414,71 @@ def _results_screening():
         st.markdown("---")
         _how_to_cite()
 
-def _tunnel_groups():
+def _tunnel_table(caver_out, found):
+    """The tunnels, with a box to pick which ones are drawn and the colour they are drawn in.
+
+    Six routes at once is a knot. The colour circle is the same device the cavity table uses, so a
+    row is matched to what is on screen without reading a legend.
+    """
+    geometry = {}
+    summary = Path(caver_out) / "summary.txt"
+    if summary.exists() and tn.available():
+        from caver_translate.parse import parse_tunnels
+        geometry = {g.tunnel: g for g in parse_tunnels(summary)}
+
+    numbers = [_tunnel_number(c) for c in found]
+    shown = set(S.get("tun_shown") or numbers[:1])
+    rows = []
+    for n in numbers:
+        g = geometry.get(n)
+        rows.append({
+            "": n in shown,
+            "Tunnel": f"{vw.emoji_for_color(vw.TUNNEL_PALETTE[(n - 1) % len(vw.TUNNEL_PALETTE)])} {n}",
+            "Bottleneck (Å)": g.bottleneck_radius if g else None,
+            "Length (Å)": g.length if g else None,
+            "Curvature": g.curvature if g else None,
+            "Priority": g.priority if g else None,
+        })
+
+    edited = st.data_editor(
+        pd.DataFrame(rows), width="stretch", hide_index=True, key="tun_table",
+        column_config={"": st.column_config.CheckboxColumn(t("Draw"), width="small")},
+        disabled=["Tunnel", "Bottleneck (Å)", "Length (Å)", "Curvature", "Priority"])
+    S["tun_shown"] = [n for n, on in zip(numbers, edited[""]) if on]
+    st.caption(t("Priority and length are read together: a tunnel with nothing to cross costs "
+                 "nothing to cross."))
+
+
+def _tunnel_number(cluster) -> int:
+    """The cluster's own number, which is its rank: tun_cl_003 and tun_cl_003_1 are both 3."""
+    digits = re.search(r"tun_cl_0*(\d+)", Path(cluster).stem)
+    return int(digits.group(1)) if digits else 0
+
+
+def _tunnel_groups(only=None):
     """The tunnels found for this project, as sphere groups the viewer can draw.
 
     A CAVER tunnel cluster is a chain of spheres in a PDB, which is the same shape fpocket's alpha
-    spheres arrive in, so nothing new has to be taught to the viewer. Coloured apart from the
-    cavities: the two answer different questions and overlaying them in one colour hides which is
-    which.
+    spheres arrive in, so nothing new has to be taught to the viewer. Opaque and saturated, unlike
+    the cavities: a cavity is a volume to judge through, a tunnel is a route to follow, and a
+    translucent tube through a ribbon is harder to trace, not easier.
+
+    `only` is the set of tunnel numbers to draw. Six routes at once is a knot; the point of the
+    picture is one of them.
     """
     root = S.get("tun_drawn")
     if not root or not Path(root).exists():
         return []
-    palette = ["#FF8A3D", "#FFC93D", "#7CE38B", "#5AC8FA", "#B197FC", "#FF6B9D"]
     groups_ = []
-    for i, cluster in enumerate(cv.clusters(root)):
+    for cluster in cv.clusters(root):
+        n = _tunnel_number(cluster)
+        if only is not None and n not in only:
+            continue
         spheres = cv.tunnel_spheres(cluster)
         if spheres:
-            groups_.append({"alpha": spheres, "color": palette[i % len(palette)],
-                            "chosen": False, "name": cluster.stem})
+            groups_.append({"alpha": spheres, "name": cluster.stem, "number": n,
+                            "color": vw.TUNNEL_PALETTE[(n - 1) % len(vw.TUNNEL_PALETTE)],
+                            "opacity": 1.0})
     return groups_
 
 
@@ -2587,7 +2622,8 @@ def _viewer_panel(etapa: str):
             ver_cav = c2.checkbox(t("Cavities"), key="vis_show_cav")
             # A CAVER tunnel is a chain of spheres, which is the shape the viewer already draws
             # cavities in. Both on by default: a route is read against the pockets it connects.
-            routes = _tunnel_groups()
+            picked = S.get("tun_shown")
+            routes = _tunnel_groups(set(picked) if picked is not None else None)
             S.setdefault("vis_show_tun", True)
             ver_tun = c3.checkbox(t("Tunnels"), key="vis_show_tun", disabled=not routes,
                                   help=None if routes else t("Find them in Run first."))
