@@ -140,7 +140,14 @@ def fetch_approved(cache: Optional[Path] = None, max_records: int = 5000, page: 
         if payload is None:
             if rows:
                 break                      # keep what did arrive; the notice says it is partial
-            return [], f"ChEMBL did not respond ({last}). Upload a file of your own instead."
+            # A 5xx is their server, not this machine's network, and the difference decides
+            # whether the useful next step is "wait" or "check the connection".
+            theirs = "HTTPError" in last and " 5" in last
+            whose = ("ChEMBL's server is failing on every request, including the simplest one"
+                     if theirs else "ChEMBL could not be reached")
+            return [], (f"{whose} ({last}). Nothing here is broken: try again later, or upload a "
+                        "file of your own. Once the library downloads it is cached and this "
+                        "project works offline.")
         batch = _rows_from_page(payload)
         rows.extend(batch)
         offset += page

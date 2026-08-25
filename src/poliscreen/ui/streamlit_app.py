@@ -592,9 +592,14 @@ with _menu_archivo:
         S["receptors"] = (sorted(str(p) for suf in ("_ready", "_listo")
                                  for p in rec_dir.glob(f"*{suf}.pdb"))
                           if rec_dir.exists() else [])
+        # Not every .sdf here is a control: ccd_template caches the dictionary entry beside them,
+        # and its idealised coordinates sit nowhere near the crystallographic pose. Loaded as a
+        # control it becomes a second, phantom reference, and centring the box on it searches
+        # empty space -- 9 A off the real site on 8HTB, with nothing saying so.
         S["controls"] = (sorted(str(p) for p in rec_dir.iterdir()
-                                if p.suffix.lower() in (".sdf", ".mol2", ".mol")
-                                or (p.suffix.lower() == ".pdb" and p.name.startswith("control_")))
+                                if not rc.is_ccd_cache(p)
+                                and (p.suffix.lower() in (".sdf", ".mol2", ".mol")
+                                     or (p.suffix.lower() == ".pdb" and p.name.startswith("control_"))))
                          if rec_dir.exists() else [])
         S["ligands"] = (sorted(str(p) for p in lig_dir.iterdir()
                                if p.suffix.lower() in (".sdf", ".mol2", ".mol", ".smi", ".pdbqt"))

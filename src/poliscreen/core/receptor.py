@@ -152,6 +152,20 @@ def _het_lines(pdb, het: Het) -> list:
     return out
 
 
+# The chemical component dictionary is cached beside the control it describes, so a rerun needs no
+# network and the project records which definition it used. It is an .sdf sitting in the folder the
+# controls are read from, and it is NOT a control: its coordinates are the dictionary's idealised
+# conformer, nowhere near the crystallographic pose. On 8HTB the two are 9 A apart, and centring the
+# search box on the wrong one puts it outside the protein. Everything that lists controls filters
+# this suffix out, which is why it is named here and not spelled twice.
+CCD_CACHE_SUFFIX = "_ccd.sdf"
+
+
+def is_ccd_cache(path) -> bool:
+    """Whether this file is a cached dictionary entry rather than a control."""
+    return str(path).lower().endswith(CCD_CACHE_SUFFIX)
+
+
 def ccd_template(resname: str, cache: "Optional[Path]" = None, timeout: float = 15.0) -> Optional[str]:
     """SMILES of a hetero component, from the definition the PDB itself publishes.
 
@@ -170,7 +184,7 @@ def ccd_template(resname: str, cache: "Optional[Path]" = None, timeout: float = 
     code = (resname or "").strip().upper()
     if not code:
         return None
-    cached = Path(cache) / f"{code}_ccd.sdf" if cache else None
+    cached = Path(cache) / f"{code}{CCD_CACHE_SUFFIX}" if cache else None
     try:
         if cached and cached.exists() and cached.stat().st_size:
             block = cached.read_text(errors="ignore")
