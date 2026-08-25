@@ -1,67 +1,119 @@
-"""Unticking every tunnel has to mean none, not "back to the first one".
+"""Ticking a tunnel draws it, on that click and not the next.
 
-Two bugs met here, and the first hid the second.
+This started as st.data_editor with a checkbox column. The editor keeps the user's edits as a diff
+and replays it over the frame it is handed -- and that frame was rebuilt from the state the diff
+had just produced. The two disagreed for one run, which is felt as having to press twice. Removing
+its key fixed the box's own appearance and not the viewer, because the lag was in the mechanism
+rather than in the key.
 
-`S.get("tun_shown") or numbers[:1]` treats an empty list as absent, because an empty list is
-falsy. So unticking the last row put tunnel 1 back on the next redraw -- and since the frame is
-rebuilt from that same state, the click on tunnel 3 was overwritten before it was ever read. The
-user saw tunnel 1 tick itself while the row they pressed stayed empty.
+st.checkbox has no diff to replay: its value *is* session state, so what it returns is what was
+just done. It is also the only one of the two that AppTest can operate, which is why the table is
+built from checkboxes and why this file can exist at all.
 
-Underneath, st.data_editor was given a key. With one it stores the edits as a diff and replays
-them over the frame it is handed, which is the frame we rebuild from state: the two fight and a
-change only lands on the second press. The editor is now uncontrolled by key and controlled by the
-frame, which is one source of truth instead of two.
+The app is driven here rather than a helper called, because every version of this bug lived in the
+gap between what the widget returned and what the next panel read.
 """
-from poliscreen.ui.streamlit_app import _selected_tunnels
+from pathlib import Path
 
-AVAILABLE = [1, 2, 3, 4, 5, 6]
+import pytest
 
+pytest.importorskip("streamlit")
 
-def test_nothing_chosen_yet_shows_the_first():
-    """None is 'the panel has just opened', and a blank viewer would look broken."""
-    assert _selected_tunnels(AVAILABLE, None) == [1]
+from streamlit.testing.v1 import AppTest  # noqa: E402
 
+ROOT = Path(__file__).resolve().parent.parent
+APP = str(ROOT / "src" / "poliscreen" / "ui" / "streamlit_app.py")
 
-def test_unticking_everything_is_obeyed():
-    """The bug: an empty list is falsy, so tunnel 1 came back and stole the next click."""
-    assert _selected_tunnels(AVAILABLE, []) == []
-
-
-def test_a_choice_is_kept_exactly():
-    assert _selected_tunnels(AVAILABLE, [3]) == [3]
-    assert _selected_tunnels(AVAILABLE, [2, 5]) == [2, 5]
+# One sphere is enough: this is about the selection, not about the geometry.
+CLUSTER = ("MODEL        0\n"
+           "ATOM      1  H   FIL T   1      -1.000   0.000   0.000        2.00\n")
 
 
-def test_choosing_the_third_when_none_are_chosen_gives_the_third():
-    """Stated the way it was reported: pick 3 from empty and 3 is what is drawn."""
-    after_clearing = _selected_tunnels(AVAILABLE, [])
-    assert _selected_tunnels(AVAILABLE, after_clearing + [3]) == [3]
+@pytest.fixture()
+def app(tmp_path):
+    """The Run stage with three tunnels already found."""
+    clusters = tmp_path / "caver" / "out" / "data" / "clusters"
+    clusters.mkdir(parents=True)
+    for n in (1, 2, 3):
+        (clusters / f"tun_cl_00{n}.pdb").write_text(CLUSTER)
+
+    at = AppTest.from_file(APP, default_timeout=180)
+    at.session_state["stage"] = "Run"
+    at.session_state["tun_drawn"] = str(tmp_path / "caver" / "out")
+    at._tunnel_root = str(tmp_path / "caver" / "out")
+    return at
 
 
-def test_tunnels_from_a_previous_receptor_are_dropped():
-    """A different structure has different clusters; a remembered 9 must not survive into it."""
-    assert _selected_tunnels([1, 2], [2, 9]) == [2]
-    assert _selected_tunnels([1, 2], [9]) == []
+def drawn(at):
+    """What the viewer would draw, which is the thing the user is actually judging.
 
-
-def test_the_editor_is_not_given_a_key():
-    """A key makes st.data_editor keep the edits as a diff and replay them over the frame we
-    rebuild from state. That is the two-clicks-to-untick bug, and no test that does not render
-    can see it -- so the call is checked instead.
-
-    Read with the parser, not by slicing the text: the first attempt split the source on the first
-    ")" and only ever looked at `pd.DataFrame(rows)`, so putting the key back went unnoticed.
+    The root is passed explicitly: the viewer reads it from the running session, and these tests
+    run outside that session. AppTest's session_state also has no .get(), so it is read by
+    subscript.
     """
-    import ast
-    import inspect
-    import textwrap
+    from poliscreen.ui.streamlit_app import _tunnel_groups
 
-    from poliscreen.ui import streamlit_app
+    try:
+        picked = at.session_state["tun_shown"]
+    except (KeyError, AttributeError):
+        picked = []
+    return sorted(g["number"] for g in _tunnel_groups(set(picked or []), root=at._tunnel_root))
 
-    tree = ast.parse(textwrap.dedent(inspect.getsource(streamlit_app._tunnel_table)))
-    calls = [n for n in ast.walk(tree)
-             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-             and n.func.attr == "data_editor"]
-    assert calls, "the tunnel table no longer uses st.data_editor; check this still applies"
-    for call in calls:
-        assert "key" not in {k.arg for k in call.keywords}, "the tunnel editor took a key again"
+
+def boxes(at):
+    return [c for c in at.checkbox if c.key and c.key.startswith("tun_draw_")]
+
+
+def test_the_first_tunnel_is_drawn_before_anything_is_touched(app):
+    app.run()
+    assert not app.exception
+    assert app.session_state["tun_shown"] == [1]
+    assert drawn(app) == [1]
+
+
+def test_one_click_draws_it(app):
+    """The bug: it took two. The first press was overwritten before the viewer read it."""
+    app.run()
+    boxes(app)[2].check()
+    app.run()
+    assert app.session_state["tun_shown"] == [1, 3]
+    assert drawn(app) == [1, 3]
+
+
+def test_one_click_undraws_it(app):
+    app.run()
+    boxes(app)[0].uncheck()
+    app.run()
+    assert app.session_state["tun_shown"] == []
+    assert drawn(app) == []
+
+
+def test_unticking_everything_leaves_the_viewer_empty_and_it_stays_empty(app):
+    """Tunnel 1 used to come back on the redraw, because an empty list is falsy."""
+    app.run()
+    boxes(app)[0].uncheck()
+    app.run()
+    app.run()
+    assert app.session_state["tun_shown"] == []
+    assert drawn(app) == []
+
+
+def test_choosing_the_third_from_empty_gives_the_third(app):
+    """Reported exactly this way: with none ticked, pressing 3 ticked 1."""
+    app.run()
+    boxes(app)[0].uncheck()
+    app.run()
+    boxes(app)[2].check()
+    app.run()
+    assert app.session_state["tun_shown"] == [3]
+    assert drawn(app) == [3]
+
+
+def test_each_row_keeps_its_own_answer(app):
+    app.run()
+    boxes(app)[1].check()
+    app.run()
+    boxes(app)[0].uncheck()
+    app.run()
+    assert app.session_state["tun_shown"] == [2]
+    assert drawn(app) == [2]

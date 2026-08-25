@@ -2427,45 +2427,38 @@ def _tunnel_table(caver_out, found):
         geometry = {g.tunnel: g for g in parse_tunnels(summary)}
 
     numbers = [_tunnel_number(c) for c in found]
-    shown = set(_selected_tunnels(numbers, S.get("tun_shown")))
-    rows = []
-    for n in numbers:
-        g = geometry.get(n)
-        rows.append({
-            "": n in shown,
-            "Tunnel": f"{vw.emoji_for_color(vw.TUNNEL_PALETTE[(n - 1) % len(vw.TUNNEL_PALETTE)])} {n}",
-            "Bottleneck (Å)": g.bottleneck_radius if g else None,
-            "Length (Å)": g.length if g else None,
-            "Curvature": g.curvature if g else None,
-            "Priority": g.priority if g else None,
-        })
 
-    # No key on purpose. Given one, st.data_editor keeps the user's edits as a diff in session
-    # state and replays it over whatever frame is passed in -- and this frame is itself rebuilt
-    # from that same state. The two then fight: a click is applied, overwritten by the replay, and
-    # only lands on the second press. Without a key the frame is the single source of truth and
-    # the return value is what the user just did.
-    edited = st.data_editor(
-        pd.DataFrame(rows), width="stretch", hide_index=True,
-        column_config={"": st.column_config.CheckboxColumn(t("Draw"), width="small")},
-        disabled=["Tunnel", "Bottleneck (Å)", "Length (Å)", "Curvature", "Priority"])
-    S["tun_shown"] = [n for n, on in zip(numbers, edited[""]) if on]
+    # A row of real checkboxes rather than st.data_editor. The editor keeps the user's edits as a
+    # diff and replays it over the frame it is given, and that frame is rebuilt from the state the
+    # diff just produced: the two disagree for one run, which is felt as having to click twice.
+    # st.checkbox has no diff -- its value IS session state -- so what it returns is what was just
+    # done. It is also the only one of the two that AppTest can operate, so this table is testable
+    # and the other was not.
+    widths = [0.6, 1.6, 1.2, 1.2, 1.2, 1.2]
+    head = st.columns(widths, vertical_alignment="bottom")
+    for col, label in zip(head, ["", t("Tunnel"), t("Bottleneck (Å)"), t("Length (Å)"),
+                                 t("Curvature"), t("Priority")]):
+        col.caption(label)
+
+    shown = []
+    for i, n in enumerate(numbers):
+        g = geometry.get(n)
+        dot = vw.emoji_for_color(vw.TUNNEL_PALETTE[(n - 1) % len(vw.TUNNEL_PALETTE)])
+        # Only the first is on to begin with; after that every row remembers what was done to it,
+        # and unticking them all leaves the viewer empty, which is what unticking them all means.
+        S.setdefault(f"tun_draw_{n}", i == 0)
+        row = st.columns(widths, vertical_alignment="center")
+        if row[0].checkbox(t("Draw"), key=f"tun_draw_{n}", label_visibility="collapsed"):
+            shown.append(n)
+        row[1].markdown(f"{dot} **{n}**")
+        for col, value in zip(row[2:], (g.bottleneck_radius if g else None,
+                                        g.length if g else None,
+                                        g.curvature if g else None,
+                                        g.priority if g else None)):
+            col.markdown(f"{value:g}" if isinstance(value, (int, float)) else "—")
+    S["tun_shown"] = shown
     st.caption(t("Priority and length are read together: a tunnel with nothing to cross costs "
                  "nothing to cross."))
-
-
-def _selected_tunnels(available, remembered):
-    """Which tunnels to draw, given what exists and what the user last chose.
-
-    The distinction that matters is between *not chosen yet* and *chosen to be none*. `None` is the
-    first, and shows the first tunnel so the panel is not blank. An empty list is the second, and
-    is obeyed: unticking every row has to leave the viewer empty, not silently bring back tunnel 1.
-    Testing `if remembered` instead of `if remembered is None` conflates the two, because an empty
-    list is falsy -- which is exactly how tunnel 1 kept reappearing and stealing the next click.
-    """
-    if remembered is None:
-        return list(available[:1])
-    return [n for n in remembered if n in available]
 
 
 def _tunnel_number(cluster) -> int:
@@ -2474,7 +2467,7 @@ def _tunnel_number(cluster) -> int:
     return int(digits.group(1)) if digits else 0
 
 
-def _tunnel_groups(only=None):
+def _tunnel_groups(only=None, root=None):
     """The tunnels found for this project, as sphere groups the viewer can draw.
 
     A CAVER tunnel cluster is a chain of spheres in a PDB, which is the same shape fpocket's alpha
@@ -2483,9 +2476,10 @@ def _tunnel_groups(only=None):
     translucent tube through a ribbon is harder to trace, not easier.
 
     `only` is the set of tunnel numbers to draw. Six routes at once is a knot; the point of the
-    picture is one of them.
+    picture is one of them. `root` defaults to the CAVER output this session last produced, and is
+    passed in by the tests, which run outside the session this reads.
     """
-    root = S.get("tun_drawn")
+    root = root if root is not None else S.get("tun_drawn")
     if not root or not Path(root).exists():
         return []
     groups_ = []
@@ -2641,8 +2635,9 @@ def _viewer_panel(etapa: str):
             ver_cav = c2.checkbox(t("Cavities"), key="vis_show_cav")
             # A CAVER tunnel is a chain of spheres, which is the shape the viewer already draws
             # cavities in. Both on by default: a route is read against the pockets it connects.
-            picked = S.get("tun_shown")
-            routes = _tunnel_groups(set(picked) if picked is not None else None)
+            # Absent and empty both mean none: before the table has been drawn nothing has been
+            # chosen, and after every row is unticked nothing was chosen. Neither draws anything.
+            routes = _tunnel_groups(set(S.get("tun_shown") or []))
             # Disabled only when there are none to draw at all. Basing it on the current selection
             # instead greys the control out the moment the last row is unticked, which reads as a
             # fault rather than as the empty view that was asked for.
