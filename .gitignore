@@ -53,3 +53,6 @@ installer/vendor/
 
 # codebase-memory-mcp index (local, rebuildable)
 .codebase-memory/
+
+# CAVER leaves this where it was started from
+whole_clustering.csv
