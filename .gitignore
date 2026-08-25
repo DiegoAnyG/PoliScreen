@@ -50,3 +50,6 @@ Thumbs.db
 tmp_*/
 ramaprob.data
 installer/vendor/
+
+# codebase-memory-mcp index (local, rebuildable)
+.codebase-memory/

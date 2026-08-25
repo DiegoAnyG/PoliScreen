@@ -30,6 +30,7 @@ from poliscreen.core import receptor as rc
 from poliscreen.core import layout as lay
 from poliscreen.core import naming as nm
 from poliscreen.core import screening as sc
+from poliscreen.core import tunnels as tn
 from poliscreen.core import session as ss
 from poliscreen.core import validation as vl
 from poliscreen.core import viewer as vw
@@ -1781,6 +1782,104 @@ def _pleiotropic_summary(rk, targets_):
 
 
 def _stage_results():
+    """Two questions about the same target, kept apart because they are answered separately.
+
+    The screening asks how well a compound sits in the site. The tunnels ask whether it can reach
+    it -- from a calculation run outside PoliScreen, which is why it is a tab and not a step.
+    """
+    tab_screening, tab_tunnels = st.tabs([t("Screening"), t("Transport tunnels")])
+    with tab_tunnels:
+        _results_tunnels()
+    with tab_screening:
+        _results_screening()
+
+
+def _results_tunnels():
+    """CAVER and CaverDock output, read into the same kind of table as everything else.
+
+    Nothing here runs an engine. The folder is asked for rather than discovered because the
+    calculation does not live in the project: it comes back from CaverWeb, or from a local
+    caverdock-run, and the same reader handles both.
+    """
+    st.subheader(t("Transport tunnels"))
+
+    if not tn.available():
+        st.info(t("Tunnel reading needs **caver-translate**, a separate package with no "
+                  "dependencies of its own. The rest of PoliScreen works without it."))
+        st.code(tn.INSTALL_HINT, language="bash")
+        return
+
+    st.caption(t("A docking score says how well a compound sits in the site. It says nothing about "
+                 "whether it can reach it. Point this at a CaverWeb download or at a folder of "
+                 "local CaverDock runs."))
+
+    # Seeded through the key, not through a value: the folder has to survive changing stage, and a
+    # widget cannot take both without Streamlit dropping the default and carrying on.
+    S.setdefault("tun_folder", "")
+    folder_str = st.text_input(t("Folder with the results"), key="tun_folder",
+                               placeholder=t("a CaverWeb download, or the output of caverdock-run"))
+    if not folder_str.strip():
+        return
+
+    folder = Path(folder_str.strip().strip('"'))
+    if not folder.is_dir():
+        st.error(t("Not a folder: {p}").format(p=folder))
+        return
+
+    try:
+        table, cov = tn.read(folder)
+    except Exception as e:                       # a half-written run is common; do not lose the tab
+        st.error(t("Could not read that folder: {e}").format(e=e))
+        return
+
+    if table.empty:
+        st.warning(t("Nothing to read there. Expected either a CaverWeb download -- one sub-folder "
+                     "per receptor, each holding *_results.zip -- or a folder of CaverDock output, "
+                     "which has a *-lb.pdbqt trajectory or a profile .dat in it."))
+        return
+
+    c = st.columns(3)
+    c[0].metric(t("Calculations"), len(table))
+    c[1].metric(t("Combinations"), f"{cov['present']} / {cov['expected']}" if cov["expected"]
+                else str(cov["present"]))
+    c[2].metric(t("Routes"), int(table["tunnel"].nunique(dropna=True)))
+
+    if cov["missing"]:
+        # A failed combination leaves nothing behind, so the gap is the only evidence of it.
+        st.warning(t("{n} combinations were never calculated or did not come back. A table of what "
+                     "succeeded reads as a complete study.").format(n=len(cov["missing"])))
+        with st.expander(t("Which ones")):
+            st.dataframe(pd.DataFrame(cov["missing"],
+                                      columns=["receptor", "ligand", "tunnel", "direction"]),
+                         width="stretch", hide_index=True)
+    if cov["duplicated"]:
+        st.warning(t("{n} combinations are claimed by more than one calculation: at least one "
+                     "identifier was reused, and the numbers cannot both be right.").format(
+                         n=len(cov["duplicated"])))
+
+    shown = table.sort_values("Ea", na_position="last")
+    st.dataframe(shown, width="stretch", hide_index=True)
+    st.caption(t("Ea is what entering costs and is the number that compares tunnels. dE_BS is how "
+                 "much better the site is than the outside. Neither is a binding free energy: "
+                 "they compare, they do not measure."))
+    _download_table(shown, "tuneles", key="tunnels")
+
+    present = tn.flags_in(table)
+    if present:
+        with st.expander(t("Read before quoting a number ({n})").format(n=len(present)), expanded=True):
+            for flag in present:
+                st.markdown(f"**`{flag}`** — {t(tn.FLAG_TEXT.get(flag, flag))}")
+
+    if st.button(t("Write the full report"), key="tun_export"):
+        out = tn.export(folder, proj / "tuneles")
+        st.success(t("Written to {p}").format(p=out))
+        page = out / "report.html"
+        if page.exists():
+            st.download_button(t("report.html"), page.read_bytes(), file_name="report.html",
+                               mime="text/html", key="tun_html")
+
+
+def _results_screening():
     st.subheader(t("Results"))
     meta_p, inter_p, dock_p = proj / "run.json", lay.artifact(proj, lay.INTERACTIONS_CSV), lay.artifact(proj, lay.DOCKING_CSV)
     if not (meta_p.exists() and inter_p.exists()):

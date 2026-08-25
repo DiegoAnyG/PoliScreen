@@ -68,6 +68,16 @@ RUN if [ "$WITH_ADMET" = "1" ]; then \
 ENV POLISCREEN_ADME_PYTHON=/opt/conda/envs/admet/bin/python \
     POLISCREEN_ADME_ROOT=/opt/adme
 
+# Reading CAVER and CaverDock output. On by default and cheap: it is pure standard library, so
+# --no-deps is the whole story and nothing can conflict with the docking stack. The engines
+# themselves are not here -- PoliScreen reads their results, it does not run them.
+ARG WITH_TUNNELS=1
+ARG CAVER_TRANSLATE_VERSION=main
+RUN if [ "$WITH_TUNNELS" = "1" ]; then \
+        pip install --no-cache-dir --no-deps \
+            "git+https://github.com/DiegoAnyG/caver-translate.git@${CAVER_TRANSLATE_VERSION}"; \
+    fi
+
 # Optional engines, off unless asked for. Both are Linux-only, which is why the container can
 # carry them and the native Windows installer never will. They land in $HOME/poliscreen_tools,
 # where PoliScreen looks by default, so nothing else has to be configured.
@@ -110,6 +120,11 @@ print('ADMET engine ready:', b.python)"; \
  && if [ "$WITH_GNINA" = "1" ]; then \
         python -c "from poliscreen.core.docking import gnina_exe; e = gnina_exe(); \
 assert e, 'gnina was requested but no executable was found'; print('gnina ready:', e)"; \
+    fi \
+ && if [ "$WITH_TUNNELS" = "1" ]; then \
+        python -c "from poliscreen.core import tunnels; \
+assert tunnels.available(), 'tunnel reading was requested but caver-translate is not importable'; \
+print('tunnel reading ready:', tunnels.version())"; \
     fi
 
 # The base image already sets tini as its entrypoint, and `init: true` puts Docker's own tini in

@@ -106,6 +106,14 @@ with the **gnina** neural network (optional, GPU) as an independent second
 opinion that feeds the confidence metric. Cavities are detected with **fpocket**;
 interactions profiled with **PLIP**.
 
+**Transport tunnels** are read, not run. A docking score says how well a compound
+sits in the site and nothing about whether it can reach it; point the Results tab
+(or `poliscreen tunnels <folder>`) at a CaverWeb download or at a folder of local
+CaverDock runs and it reports `Ea`, `dE_BS` and the tunnel geometry, with the
+combinations that never came back counted rather than hidden. Reading needs only
+[caver-translate](https://github.com/DiegoAnyG/caver-translate); running CAVER or
+CaverDock is a separate, opt-in step.
+
 ---
 
 ## Limitations

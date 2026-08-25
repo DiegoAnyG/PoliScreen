@@ -79,9 +79,15 @@ Not software — inputs:
 | **gnina**, second scoring | ~4.5 GB | an NVIDIA GPU handed to the container |
 | **ADCP**, peptide docking | ~900 MB | accepting the Scripps academic licence |
 | **ADMET-AI** | already included | nothing |
+| **Tunnel reading** (caver-translate) | already included | nothing |
 
 Both optional engines are Linux-only builds, which is another reason the container route is the
 one that has everything.
+
+Reading tunnels is free because PoliScreen does not run the engines that produce them. **CAVER**
+(GPL-3, Java) and **CaverDock** (academic licence, Linux, ~490 MB as an Apptainer image) are
+installed separately if you want to compute the routes yourself; a folder of results reads the same
+whether it came from them or from CaverWeb.
 
 ## 8. What you do NOT need
 

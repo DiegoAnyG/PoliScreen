@@ -16,7 +16,7 @@ _TREE = ast.parse(APP.read_text(encoding="utf-8"))
 # Keys reassigned on every pass so they survive changing stage. A widget cannot take one of these
 # AND declare a default: Streamlit warns and drops the default, so the value asked for is ignored.
 PREFIXES = ("pep_", "modo_", "cat_", "sec_", "rec_", "box_", "sites_", "rx_",
-            "cx_", "cy_", "cz_", "sx_", "sy_", "sz_", "src_", "vis_", "cfg_")
+            "cx_", "cy_", "cz_", "sx_", "sy_", "sz_", "src_", "vis_", "cfg_", "tun_")
 DEFAULT_KWARGS = ("value", "index", "default")
 
 

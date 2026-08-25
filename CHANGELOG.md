@@ -2,6 +2,24 @@
 
 Notable changes. Dates are release dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [1.1.0] — 2026-08-24
+
+### Added
+
+- **Transport tunnels, in Results.** A docking score says how well a compound sits in the site and
+  nothing about whether it can reach it. Point the new tab at a CaverWeb download or at a folder of
+  local CaverDock runs and it reads both the same way: `Ea`, `dE_BS`, the tunnel geometry, and the
+  caveats attached to the rows they apply to.
+- `poliscreen tunnels <folder> [-o out/]` does the same from the command line, and `poliscreen info`
+  reports whether the reader is installed.
+- Missing and duplicated combinations are counted, not hidden. A combination that fails leaves
+  nothing behind, so a table of what succeeded reads as a complete study unless the gap is named.
+
+PoliScreen does not run CAVER or CaverDock: this is the reading half, which needs no engine, no
+licence and no gigabyte in the image. The reader is [caver-translate](https://github.com/DiegoAnyG/caver-translate),
+a separate GPL-3 package with no dependencies of its own; without it the tab says so and everything
+else works unchanged.
+
 ## [1.0.4] — 2026-08-17
 
 ### Changed

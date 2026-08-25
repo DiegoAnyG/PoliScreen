@@ -72,9 +72,61 @@ def cmd_info(args) -> int:
     else:
         print("second scoring (gnina): not installed (optional). scripts/get_gnina.sh, NVIDIA GPU.")
 
+    # Reading a tunnel calculation is pure Python, so its absence is a pip install and not an
+    # engine hunt. Running CAVER or CaverDock is a separate, opt-in step and is not reported here.
+    from .core import tunnels as tn
+    if tn.available():
+        print(f"tunnel reading (caver-translate): {tn.version()}")
+    else:
+        print("tunnel reading (caver-translate): not installed (optional)")
+        print(f"  {tn.INSTALL_HINT}")
+
     if faltan:
         print(f"\nMISSING required tools: {', '.join(faltan)}. See docs/INSTALL.md.")
         return 1
+    return 0
+
+
+def cmd_tunnels(args) -> int:
+    """Read a folder of CAVER/CaverDock output into the tables and the page.
+
+    PoliScreen runs neither engine. This is the reading half, which needs nothing installed beyond
+    caver-translate and behaves identically on a CaverWeb download and on a local run.
+    """
+    from pathlib import Path
+
+    from .core import tunnels as tn
+
+    if not tn.available():
+        print("caver-translate is not installed. It has no dependencies of its own:", file=sys.stderr)
+        print(f"  {tn.INSTALL_HINT}", file=sys.stderr)
+        return 1
+
+    folder = Path(args.folder)
+    if not folder.is_dir():
+        print(f"Not a folder: {folder}", file=sys.stderr)
+        return 1
+
+    table, cov = tn.read(folder)
+    if table.empty:
+        print(f"Nothing to read in {folder}. Expected a CaverWeb download -- one sub-folder per "
+              "receptor, each holding *_results.zip -- or CaverDock output, which has a "
+              "*-lb.pdbqt trajectory or a profile .dat in it.", file=sys.stderr)
+        return 1
+
+    print(f"{len(table)} calculations, {int(table['tunnel'].nunique(dropna=True))} tunnels")
+    print(f"  combinations present : {cov['present']} of {cov['expected']}")
+    if cov["missing"]:
+        print(f"  never came back      : {len(cov['missing'])}")
+    if cov["duplicated"]:
+        print(f"  claimed twice        : {len(cov['duplicated'])}")
+    flags = tn.flags_in(table)
+    if flags:
+        print("  read before quoting a number: " + ", ".join(flags))
+
+    if args.out:
+        out = tn.export(folder, args.out)
+        print("written:", out)
     return 0
 
 
@@ -334,6 +386,11 @@ def main(argv=None) -> int:
 
     pi = sub.add_parser("info", help="environment and engine status")
     pi.set_defaults(func=cmd_info)
+
+    ptun = sub.add_parser("tunnels", help="read CAVER/CaverDock output into a table")
+    ptun.add_argument("folder", help="a CaverWeb download, or a folder of local CaverDock runs")
+    ptun.add_argument("-o", "--out", help="also write transport.csv, tunnels.csv and report.html here")
+    ptun.set_defaults(func=cmd_tunnels)
 
     pdsg = sub.add_parser("design", help="generate analogues of a lead molecule with ADME and toxicity")
     pdsg.add_argument("lead", help="SMILES of the lead molecule")
