@@ -1543,8 +1543,13 @@ def _run_tunnels():
     has_dock = cv.caverdock_available()
     if not (has_caver and has_dock):
         _engine_status()
-        if not has_caver:
-            return
+
+    # Tunnels already found stay readable and drawable whatever is installed now. Computing them
+    # needs CAVER; looking at what was computed does not, and an engine uninstalled later is no
+    # reason to hide a result that is already on disk.
+    existing = S.get("tun_drawn")
+    if existing and cv.clusters(existing):
+        _tunnel_table(existing, cv.clusters(existing))
 
     recs = [Path(p) for p in S.get("receptors", []) if Path(p).exists()]
     if not recs:
@@ -1640,14 +1645,19 @@ def _run_tunnels():
 
     if not found:
         return
-    S.setdefault("tun_drawn", str(caver_out))
-
-    _tunnel_table(caver_out, found)
+    # The table itself was drawn at the top, so it is there whether or not the engines are.
+    S["tun_drawn"] = str(caver_out)
 
     # --- 2. the transport ----------------------------------------------------------------------
     st.markdown(t("**2 · Push a compound through one**"))
     if not has_dock:
         return
+    # The two engines want different files and get different files, which is easy to miss and
+    # changes what the numbers mean. CAVER measured the route on the stripped structure; CaverDock
+    # docks with Vina's scoring, which needs the hydrogens and charges of the docking receptor.
+    st.caption(t("Route measured on `{caver}`. Docking against `{dock}`, which is the "
+                 "docking-ready receptor: the energies need its hydrogens and charges.").format(
+                     caver=Path(source).name, dock=Path(rec).name))
 
     ligs = [Path(p) for p in S.get("ligands", []) if Path(p).exists()]
     if not ligs:
@@ -1676,15 +1686,24 @@ def _run_tunnels():
     cpus = c2[4].number_input(t("MPI processes"), min_value=2, max_value=16, step=1, key="tun_cpus")
 
     directions = [d for d, on in (("in", want_in), ("out", want_out)) if on]
-    bounds = [b for b, on in (("lb", want_lb), ("ub", want_ub)) if on]
+
+    # Asking for both bounds is one job, not two. CaverDock computes the lower bound on its way to
+    # the upper one and writes both profiles into the same folder -- measured on this project, the
+    # separate lower-bound run took 7 min 33 s per compound and produced nothing the upper-bound
+    # run had not already produced. Running it as well also puts two rows in the table for one
+    # calculation, one of them marked as having no upper bound.
+    bounds = ["ub"] if want_ub else (["lb"] if want_lb else [])
     jobs = [(cmp_, tun, d, b) for cmp_ in ligands_pick for tun in tunnels_pick
             for d in directions for b in bounds]
 
     if not jobs:
         st.info(t("Pick at least one tunnel, one compound, one direction and one bound."))
         return
+    if want_ub and want_lb:
+        st.caption(t("Both bounds is one calculation: the upper bound produces the lower one on "
+                     "its way."))
     # An upper bound is roughly five times a lower one, and every combination is a separate docking.
-    minutes = sum(15 if b == "ub" else 3 for _c, _t, _d, b in jobs)
+    minutes = sum(28 if b == "ub" else 8 for _c, _t, _d, b in jobs)
     st.caption(t("{n} calculations, roughly {m} minutes in total.").format(n=len(jobs), m=minutes))
 
     if not cv.reproducible(int(cpus)):
@@ -2023,6 +2042,91 @@ def _stage_results():
         _results_screening()
 
 
+def _with_tunnel_geometry(table, folder):
+    """Join CAVER's own numbers for each tunnel onto the transport rows.
+
+    Ea says what entering costs. Whether that means anything depends on the tunnel: one with
+    nothing to cross costs nothing to cross. The geometry was computed when the routes were found,
+    and it lives in the CAVER output beside the runs rather than inside them, so it is looked up
+    here instead of arriving with the profile.
+    """
+    if not tn.available() or table.empty:
+        return table
+    from caver_translate.parse import parse_tunnels
+
+    geometry = {}
+    for summary in sorted(Path(folder).rglob("summary.txt")):
+        for g in parse_tunnels(summary):
+            geometry.setdefault(g.tunnel, g)
+    if not geometry:
+        return table
+
+    out = table.copy()
+    for column, attribute in (("tunnel_length_A", "length"),
+                              ("bottleneck_radius_A", "bottleneck_radius"),
+                              ("curvature", "curvature"), ("priority", "priority")):
+        filled = [getattr(geometry[n], attribute) if n in geometry else existing
+                  for n, existing in zip(out["tunnel"], out.get(column, [None] * len(out)))]
+        out[column] = filled
+    return out
+
+
+# What each column is called on screen. The CSV keeps the machine names, which is what a script
+# reading it expects; the table is for a person.
+TRANSPORT_LABELS = {
+    "receptor": "Receptor", "ligand": "Compound", "tunnel": "Tunnel", "direction": "Direction",
+    "E_surface": "E_surface", "E_bound": "E_bound", "E_max": "E_max", "Ea": "Ea", "dE_BS": "dE_BS",
+    "n_discs": "Discs", "span_A": "Span (Å)", "tunnel_length_A": "Length (Å)",
+    "bottleneck_radius_A": "Bottleneck (Å)", "curvature": "Curvature", "priority": "Priority",
+}
+
+
+STATUS_TEXT = {
+    "failed": "did not finish",
+    "upper_bound_failed": "upper bound did not pass",
+    "lower_bound_only": "lower bound only",
+}
+
+
+def _one_row_per_route(table):
+    """One row per receptor, compound, tunnel and direction: the richest calculation of each.
+
+    Asking for both bounds used to run two jobs, and CaverDock computes the lower bound on its way
+    to the upper one, so the pair appears as two rows of the same numbers -- one of them marked as
+    having no upper bound. New runs do not produce that, but the folders already on disk do, and
+    two rows for one calculation is not something to leave for the reader to reconcile.
+    """
+    if table.empty or "flags" not in table:
+        return table
+    keys = [c for c in ("receptor", "ligand", "tunnel", "direction") if c in table]
+    if not keys:
+        return table
+    # A row with an upper bound outranks one without; a refusal outranks silence about it.
+    rank = table["flags"].fillna("").map(
+        lambda f: 0 if "failed" in f.split() else 1 if "lower_bound_only" in f else 2)
+    ordered = table.assign(_rank=rank).sort_values("_rank", ascending=False)
+    return ordered.drop_duplicates(subset=keys, keep="first").drop(columns="_rank")
+
+
+def _readable_transport(table):
+    """The same rows, named for reading, with what happened said in words.
+
+    A run that did not finish used to appear as a row of blanks, which reads as a result of zero
+    rather than as an absence.
+    """
+    out = table.copy()
+
+    def status(flags):
+        for flag in str(flags or "").split():
+            if flag in STATUS_TEXT:
+                return t(STATUS_TEXT[flag])
+        return ""
+
+    out.insert(0, "Status", [status(f) for f in out["flags"]])
+    out = out.drop(columns=[c for c in ("flags", "source") if c in out])
+    return out.rename(columns={k: t(v) for k, v in TRANSPORT_LABELS.items()})
+
+
 def _results_tunnels():
     """CAVER and CaverDock output, read into the same kind of table as everything else.
 
@@ -2038,16 +2142,15 @@ def _results_tunnels():
         st.code(tn.INSTALL_HINT, language="bash")
         return
 
-    st.caption(t("A docking score says how well a compound sits in the site. It says nothing about "
-                 "whether it can reach it. Point this at a CaverWeb download or at a folder of "
-                 "local CaverDock runs."))
-
-    # Seeded through the key, not through a value: the folder has to survive changing stage, and a
-    # widget cannot take both without Streamlit dropping the default and carrying on.
-    S.setdefault("tun_folder", "")
-    folder_str = st.text_input(t("Folder with the results"), key="tun_folder",
-                               placeholder=t("a CaverWeb download, or the output of caverdock-run"))
+    # This project's own runs, without being asked for: PoliScreen wrote them and knows where.
+    # The box is for the other case -- a CaverWeb download, which lives wherever it was unzipped.
+    here = proj / lay.TUNNELS
+    S.setdefault("tun_folder", str(here) if here.is_dir() else "")
+    folder_str = st.text_input(t("Results folder"), key="tun_folder",
+                               help=t("This project's runs by default. Point it elsewhere to read "
+                                      "a CaverWeb download."))
     if not folder_str.strip():
+        st.info(t("No transport calculated yet. Run one in step 3."))
         return
 
     folder = Path(folder_str.strip().strip('"'))
@@ -2056,48 +2159,28 @@ def _results_tunnels():
         return
 
     try:
-        table, cov = tn.read(folder)
+        table, _cov = tn.read(folder)
     except Exception as e:                       # a half-written run is common; do not lose the tab
         st.error(t("Could not read that folder: {e}").format(e=e))
         return
 
     if table.empty:
-        st.warning(t("Nothing to read there. Expected either a CaverWeb download -- one sub-folder "
-                     "per receptor, each holding *_results.zip -- or a folder of CaverDock output, "
-                     "which has a *-lb.pdbqt trajectory or a profile .dat in it."))
+        st.info(t("Nothing to read there yet."))
         return
+
+    table = _one_row_per_route(_with_tunnel_geometry(table, folder))
+    failed = int(table["flags"].fillna("").str.contains("failed").sum())
 
     c = st.columns(3)
     c[0].metric(t("Calculations"), len(table))
-    c[1].metric(t("Combinations"), f"{cov['present']} / {cov['expected']}" if cov["expected"]
-                else str(cov["present"]))
-    c[2].metric(t("Routes"), int(table["tunnel"].nunique(dropna=True)))
-
-    if cov["missing"]:
-        # A failed combination leaves nothing behind, so the gap is the only evidence of it.
-        st.warning(t("{n} combinations were never calculated or did not come back. A table of what "
-                     "succeeded reads as a complete study.").format(n=len(cov["missing"])))
-        with st.expander(t("Which ones")):
-            st.dataframe(pd.DataFrame(cov["missing"],
-                                      columns=["receptor", "ligand", "tunnel", "direction"]),
-                         width="stretch", hide_index=True)
-    if cov["duplicated"]:
-        st.warning(t("{n} combinations are claimed by more than one calculation: at least one "
-                     "identifier was reused, and the numbers cannot both be right.").format(
-                         n=len(cov["duplicated"])))
+    c[1].metric(t("Routes"), int(table["tunnel"].nunique(dropna=True)))
+    c[2].metric(t("Did not finish"), failed)
 
     shown = table.sort_values("Ea", na_position="last")
-    st.dataframe(shown, width="stretch", hide_index=True)
-    st.caption(t("Ea is what entering costs and is the number that compares tunnels. dE_BS is how "
-                 "much better the site is than the outside. Neither is a binding free energy: "
-                 "they compare, they do not measure."))
+    st.dataframe(_readable_transport(shown), width="stretch", hide_index=True)
+    st.caption(t("Ea is what entering costs and compares tunnels. dE_BS is how much better the "
+                 "site is than the outside. Detail in Help › Transport tunnels."))
     _download_table(shown, "tuneles", key="tunnels")
-
-    present = tn.flags_in(table)
-    if present:
-        with st.expander(t("Read before quoting a number ({n})").format(n=len(present)), expanded=True):
-            for flag in present:
-                st.markdown(f"**`{flag}`** — {t(tn.FLAG_TEXT.get(flag, flag))}")
 
     if st.button(t("Write the full report"), key="tun_export"):
         out = tn.export(folder, proj / lay.TUNNELS / "report")

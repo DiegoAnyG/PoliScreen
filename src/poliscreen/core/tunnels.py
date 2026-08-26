@@ -43,6 +43,9 @@ FLAG_TEXT = {
                              "file name rather than from the geometry.",
     "lower_bound_only": "No upper-bound trajectory. The lower bound can pass through "
                         "discontinuities and understate a barrier.",
+    "upper_bound_failed": "The upper bound was calculated and did not converge: with its rotation "
+                          "constrained the ligand does not get past one of the discs. That is a "
+                          "result, not a gap.",
     "failed": "No profile in this calculation. A combination that fails leaves no log behind.",
 }
 
