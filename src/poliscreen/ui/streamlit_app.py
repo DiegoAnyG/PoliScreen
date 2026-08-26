@@ -2748,12 +2748,90 @@ def _viewer_panel(etapa: str):
             _empty_state("Define the search box and it will be drawn here over the receptor.")
 
     else:
-        view_ = st.radio(t("View"), ["Summary", "3D complex"], horizontal=True,
+        views = ["Summary", "3D complex"]
+        if tn.available() and tn.runs_in(proj / lay.TUNNELS):
+            views.append("Transport")
+        view_ = st.radio(t("View"), views, horizontal=True,
                          format_func=t, key="vis_res_view", label_visibility="collapsed")
         if view_ == "3D complex":
             _complex_viewer()
+        elif view_ == "Transport":
+            _transport_viewer()
         else:
             _visual_summary()
+
+
+def _transport_viewer():
+    """One compound through one tunnel: the poses that matter, and the profile they came from.
+
+    A trajectory is one pose per disc -- eighty of them here. Three are worth showing, and which
+    three is a question about the energy, not about spacing: where it starts, where it is hardest,
+    and where it ends. The plot beside them says where the reported numbers came from, so Ea and
+    dE_BS do not have to be taken on trust.
+    """
+    runs = tn.runs_in(proj / lay.TUNNELS)
+    if not runs:
+        _empty_state("Run a transport and its poses will appear here.")
+        return
+
+    c = st.columns([3, 1])
+    run = c[0].selectbox(t("Calculation"), runs, format_func=lambda p: p.name,
+                         key="vis_tun_run", label_visibility="collapsed")
+
+    profile = tn.profile_of(run)
+    if not profile:
+        st.warning(t("That calculation produced no profile."))
+        return
+
+    bound = tn.orientation_of(run)
+    S.setdefault("vis_tun_extra", tn.suggested_extra(profile))
+    extra = c[1].number_input(t("Extra poses"), min_value=0, max_value=6, step=1,
+                              key="vis_tun_extra",
+                              help=t("Three are always drawn: the mouth, the barrier and the "
+                                     "site. These are context poses spaced between them."))
+    poses = tn.chosen_poses(profile, bound=bound, extra=int(extra))
+
+    trajectory = next(iter(sorted(Path(run).glob("*-lb.pdbqt"))), None)
+    receptor = next(iter(sorted(Path(run).glob("*_ready.pdb"))), None) \
+        or next(iter(sorted(Path(run).glob("*.pdb"))), None)
+    tunnel = next(iter(sorted(Path(run).glob("tun_cl_*.pdb"))), None)
+
+    tab_scene, tab_plot = st.tabs([t("Poses"), t("Energy profile")])
+
+    with tab_scene:
+        try:
+            blocks = tn.pose_blocks(trajectory, [s for s, _t, _l, _r in poses]) if trajectory else []
+            spheres = [{"alpha": cv.tunnel_spheres(tunnel), "color": "#DEE2E6",
+                        "opacity": 0.35}] if tunnel else None
+            _h = _viewer_height(230)
+            st.iframe(vw.view_html(receptor=receptor, ligand_=None, cavities=spheres,
+                                   show_waters=False, height_=_h,
+                                   extra_models=[(b, "pdb") for b in blocks if b]),
+                      height=_h + 12)
+        except Exception as e:
+            st.error(t('Could not draw: {v1}').format(v1=e))
+        st.caption(" · ".join(f"{tag or 'step'}" for _s, tag, _l, _r in poses))
+
+    with tab_plot:
+        marks = tn.landmarks(profile, bound=bound)
+        fig = tn.draw_profile(profile, bound=bound, title=Path(run).name)
+        st.pyplot(fig, width="content")
+        if marks:
+            e_surface = marks["surface"][1]
+            cols = st.columns(4)
+            cols[0].metric("E_surface", f"{e_surface:.1f}")
+            cols[1].metric("E_max", f"{marks['barrier'][1]:.1f}")
+            cols[2].metric("E_bound", f"{marks['site'][1]:.1f}")
+            cols[3].metric("Ea", f"{marks['barrier'][1] - e_surface:.1f}",
+                           delta=f"dE_BS {marks['site'][1] - e_surface:.1f}", delta_color="off")
+
+    if st.button(t("Download as a PyMOL script"), key="vis_tun_pml"):
+        out = Path(run) / "figure.pml"
+        tn.pymol_script(run, receptor, tunnel, poses, out)
+        st.download_button(t("figure.pml"), out.read_bytes(), file_name="figure.pml",
+                           mime="text/plain", key="vis_tun_dl")
+        st.caption(t("Written beside the calculation. It loads the receptor, the tunnel and these "
+                     "poses on its own: `pymol figure.pml`."))
 
 
 def _complex_viewer():

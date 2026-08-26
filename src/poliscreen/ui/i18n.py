@@ -823,4 +823,17 @@ _ES = {
     'Both bounds is one calculation: the upper bound produces the lower one on its way.': 'Ambas cotas son un solo cálculo: la superior produce la inferior en el camino.',
     'Route measured on `{caver}`. Docking against `{dock}`, which is the docking-ready receptor: the energies need its hydrogens and charges.': 'Ruta medida sobre `{caver}`. Acoplamiento contra `{dock}`, que es el receptor listo para acoplar: las energías necesitan sus hidrógenos y cargas.',
     'The upper bound was calculated and did not converge: with its rotation constrained the ligand does not get past one of the discs. That is a result, not a gap.': 'La cota superior se calculó y no convergió: con su rotación restringida el ligando no pasa de uno de los discos. Eso es un resultado, no un hueco.',
+
+    # The transport view: poses along a route, and the profile they came from.
+    'Transport': 'Transporte',
+    'Run a transport and its poses will appear here.': 'Corre un transporte y sus poses aparecerán aquí.',
+    'Calculation': 'Cálculo',
+    'That calculation produced no profile.': 'Ese cálculo no produjo un perfil.',
+    'Extra poses': 'Poses extra',
+    'Three are always drawn: the mouth, the barrier and the site. These are context poses spaced between them.': 'Siempre se dibujan tres: la boca, la barrera y el sitio. Estas son poses de contexto espaciadas entre ellas.',
+    'Poses': 'Poses',
+    'Energy profile': 'Perfil de energía',
+    'Download as a PyMOL script': 'Descargar como script de PyMOL',
+    'figure.pml': 'figure.pml',
+    'Written beside the calculation. It loads the receptor, the tunnel and these poses on its own: `pymol figure.pml`.': 'Escrito junto al cálculo. Carga el receptor, el túnel y estas poses por su cuenta: `pymol figure.pml`.',
 }

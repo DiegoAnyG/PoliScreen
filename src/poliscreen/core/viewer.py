@@ -74,6 +74,11 @@ TUNNEL_PALETTE = ["#E03131", "#2F9E44", "#1971C2", "#F1C40F",
                   "#E8590C", "#9C36B5", "#8D6E4A", "#DEE2E6"]
 TUNNEL_EMOJI = ["🔴", "🟢", "🔵", "🟡", "🟠", "🟣", "🟤", "⚪"]
 
+# Poses along a route, in the order they are passed. The same order as the .pml PoliScreen writes,
+# so what is on screen and what a figure renders are the same scene.
+POSE_PALETTE = ["#4C6EF5", "#22B8CF", "#51CF66", "#FCC419",
+                "#FF922B", "#F06595", "#FA5252", "#845EF7"]
+
 
 def emoji_for_color(color: str) -> str:
     """Colored circle equivalent to the one used in the 3D viewer."""
@@ -123,13 +128,16 @@ def view_html(receptor=None, ligand_=None, height_: int = 480, width_="100%",
               protein_style: str = "cartoon", show_waters: bool = True,
               show_hetero: bool = True, box_=None, pocket_spheres=None,
               cavities=None, opacity: float = 0.95, axes_: bool = False,
-              surface: bool = False) -> str:
+              surface: bool = False, extra_models=None) -> str:
     """HTML of a viewer with receptor, ligand or both. Any of them can be omitted.
 
     box_: Box or dict cx..sz, drawn as a wireframe.
     pocket_spheres: [(x,y,z,radius)] alpha spheres (fpocket), drawn as the cavity volume.
     surface: molecular surface. The ribbon alone does not show whether a ligand sits inside the
     cavity or rests outside it.
+    extra_models: [(text, format)] drawn as sticks, each in its own colour. Several copies of one
+    molecule at different points of a route -- a transport through a tunnel is read as the sequence
+    of them, so they are separate models rather than states of one.
     """
     import py3Dmol
     v = py3Dmol.view(width=width_, height=height_)
@@ -148,6 +156,14 @@ def view_html(receptor=None, ligand_=None, height_: int = 480, width_="100%",
         v.addModel(text_, fmt)
         v.setStyle({"model": -1}, {"stick": {"radius": 0.22, "colorscheme": "yellowCarbon"},
                                    "sphere": {"radius": 0.42, "colorscheme": "yellowCarbon"}})
+    # Each in its own colour and in the order given, so the sequence reads as a route: the first
+    # is where it starts, the last where it ends, and the one in between is usually the obstacle.
+    for i, (text_, fmt) in enumerate(extra_models or []):
+        if not text_:
+            continue
+        v.addModel(text_, fmt)
+        v.setStyle({"model": -1},
+                   {"stick": {"radius": 0.20, "color": POSE_PALETTE[i % len(POSE_PALETTE)]}})
     dims = _box_dims(box_)
     if dims:
         # Edges only: a filled box, however faint, hides the alpha spheres of the cavities it is
