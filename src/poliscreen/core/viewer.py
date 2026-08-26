@@ -92,6 +92,29 @@ def emoji_for_color(color: str) -> str:
     return "⚫"
 
 
+def label_positions(points, reach: float = 9.0, spread: float = 0.25) -> list:
+    """Where to put a label for each point so the labels do not land on each other.
+
+    Offsetting them all the same way stacks them wherever two points are close, and at the end of
+    a tunnel they always are: on the reference route the deepest point and the active site sit
+    1.3 A apart, and their labels read as one word. Each is pushed out around a circle instead,
+    and away from the middle of the group so they sit outside it rather than across it.
+    """
+    import math
+
+    pts = [(float(p[0]), float(p[1]), float(p[2])) for p in points]
+    if not pts:
+        return []
+    middle = [sum(p[i] for p in pts) / len(pts) for i in range(3)]
+    out = []
+    for i, (x, y, z) in enumerate(pts):
+        angle = 2 * math.pi * i / len(pts)
+        out.append((x + math.cos(angle) * reach + (x - middle[0]) * spread,
+                    y + math.sin(angle) * reach + (y - middle[1]) * spread,
+                    z + (z - middle[2]) * spread))
+    return out
+
+
 def _xyz_axes(v, receptor, largo: float = 10.0):
     """Draws the X, Y, Z axes in a corner. Without them you cannot tell what moving cx, cy or cz means;
     with them the box is adjusted by looking, not guessing."""
@@ -171,17 +194,21 @@ def view_html(receptor=None, ligand_=None, height_: int = 480, width_="100%",
 
     # A label offset from each pose with a line back to it. Several copies of one molecule along a
     # route are otherwise told apart only by colour, which means holding a legend in mind.
-    for i, (position, text_) in enumerate(callouts or []):
-        if not text_:
-            continue
+    #
+    # Each is pushed out in a different direction. Offsetting them all the same way stacks them
+    # wherever two poses are close, and at the end of a tunnel they always are: the labels for the
+    # site, the deepest point and the barrier landed on top of one another and read as one word.
+    calls = [c for c in (callouts or []) if c[1]]
+    for i, ((position, text_), away) in enumerate(
+            zip(calls, label_positions([c[0] for c in calls]))):
         x, y, z = (float(position[0]), float(position[1]), float(position[2]))
         colour = (model_colors[i] if model_colors and i < len(model_colors) else "#333333")
-        away = {"x": x + 5.0, "y": y + 5.0, "z": z}
-        v.addLabel(text_, {"position": away, "fontSize": 11, "fontColor": "white",
-                           "backgroundColor": colour, "backgroundOpacity": 0.85,
-                           "borderThickness": 0, "inFront": True})
-        v.addArrow({"start": away, "end": {"x": x, "y": y, "z": z},
-                    "radius": 0.10, "radiusRatio": 2.2, "mid": 0.85, "color": colour})
+        v.addLabel(text_, {"position": {"x": away[0], "y": away[1], "z": away[2]},
+                           "fontSize": 11, "fontColor": "white", "backgroundColor": colour,
+                           "backgroundOpacity": 0.85, "borderThickness": 0, "inFront": True})
+        v.addArrow({"start": {"x": away[0], "y": away[1], "z": away[2]},
+                    "end": {"x": x, "y": y, "z": z},
+                    "radius": 0.08, "radiusRatio": 2.5, "mid": 0.88, "color": colour})
     dims = _box_dims(box_)
     if dims:
         # Edges only: a filled box, however faint, hides the alpha spheres of the cavities it is

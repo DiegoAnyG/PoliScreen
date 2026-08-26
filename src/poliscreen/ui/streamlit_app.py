@@ -2630,6 +2630,17 @@ def _viewer_height(reserve: int) -> int:
     return max(190, int(S.get("cfg_height", 580)) - reserve)
 
 
+def _scene_height() -> int:
+    """Height for a panel whose 3D scene is the point and whose other parts can be scrolled to.
+
+    Subtracting the chrome works when everything has to fit at once. The transport panel also
+    carries a plot, four numbers and a button, and subtracting all of that left the molecules in a
+    letterbox. The container scrolls, so the scene takes most of the panel and the rest is below
+    it -- which is also the order it gets read in.
+    """
+    return max(380, int(int(S.get("cfg_height", 580)) * 0.86))
+
+
 def _viewer_panel(etapa: str):
     """Output of the active stage. Drawn after the tools panel, so it can read what the latter has
     just left in session_state (for example the search box)."""
@@ -2865,7 +2876,7 @@ def _transport_viewer():
         # barrier is where it is, and an unexplained wall reads as a fault in the calculation.
         spheres = [{"alpha": cv.tunnel_spheres(tunnel), "color": "#CED4DA",
                     "opacity": 0.55}] if tunnel else None
-        _h = _viewer_height(320)
+        _h = _scene_height()
         st.iframe(vw.view_html(receptor=receptor, ligand_=None, cavities=spheres,
                                show_waters=False, show_hetero=True, height_=_h,
                                extra_models=[(b, "pdb") for b in blocks if b],
