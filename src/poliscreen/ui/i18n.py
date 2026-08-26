@@ -836,4 +836,13 @@ _ES = {
     'Download as a PyMOL script': 'Descargar como script de PyMOL',
     'figure.pml': 'figure.pml',
     'Written beside the calculation. It loads the receptor, the tunnel and these poses on its own: `pymol figure.pml`.': 'Escrito junto al cálculo. Carga el receptor, el túnel y estas poses por su cuenta: `pymol figure.pml`.',
+
+    # The transport panel, reworked.
+    'Three are always there: the mouth, the barrier and the site. The rest are context, spaced between them.': 'Siempre hay tres: la boca, la barrera y el sitio. Las demás son contexto, espaciadas entre ellas.',
+    'The four numbers are lower-bound quantities, which is why they are marked on that line.': 'Los cuatro números son cantidades de cota inferior, por eso están marcados sobre esa línea.',
+    'The receptor, the tunnel and exactly these poses. It loads them itself: `pymol figure.pml`.': 'El receptor, el túnel y exactamente estas poses. Las carga por su cuenta: `pymol figure.pml`.',
+    'Which route each compound takes': 'Qué ruta toma cada compuesto',
+    'Beats the next by': 'Le gana a la siguiente por',
+    'Routes tried': 'Rutas probadas',
+    "Lowest Ea per compound. A margin under about 0.5 kcal/mol is a tie, not a preference: that is the order of CaverDock's own repeatability.": 'Menor Ea por compuesto. Un margen menor a ~0.5 kcal/mol es un empate, no una preferencia: ese es el orden de la repetibilidad del propio CaverDock.',
 }

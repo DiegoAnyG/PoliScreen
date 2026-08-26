@@ -11,6 +11,7 @@ Three things were wrong at once on a real run, and each was reported as somethin
   announced that combinations "were never calculated" when the user had simply not asked for them.
 """
 import pandas as pd
+import pytest
 
 from poliscreen.ui.streamlit_app import _one_row_per_route, _readable_transport
 
@@ -63,6 +64,31 @@ def test_what_happened_is_said_in_words():
     assert status[0] == ""
     assert "upper bound" in status[1]
     assert "did not finish" in status[2]
+
+
+def test_each_compound_gets_its_own_answer():
+    """The ranking says what is easiest anywhere. The question is usually "this compound, which
+    way", and that is a different row."""
+    from poliscreen.ui.streamlit_app import route_preference
+
+    table = pd.DataFrame([
+        ("8HTB", "benzo", 3, "in", 2.6, "", "a"),
+        ("8HTB", "benzo", 4, "in", 1.1, "", "b"),
+        ("8HTB", "etanol", 3, "in", 3.1, "", "c"),
+        ("8HTB", "etanol", 4, "in", 3.2, "", "d"),
+    ], columns=COLUMNS)
+    out = route_preference(table).set_index("ligand")
+    assert out.loc["benzo", "tunnel"] == 4       # 1.1 beats 2.6
+    assert out.loc["etanol", "tunnel"] == 3
+    assert out.loc["benzo", "margin"] == 1.5
+    assert out.loc["etanol", "margin"] == pytest.approx(0.1), "a tie, and the margin says so"
+
+
+def test_a_compound_that_never_finished_is_not_given_a_preference():
+    from poliscreen.ui.streamlit_app import route_preference
+
+    table = pd.DataFrame([("8HTB", "x", 3, "in", None, "failed", "a")], columns=COLUMNS)
+    assert route_preference(table).empty
 
 
 def test_the_machine_names_do_not_reach_the_reader():

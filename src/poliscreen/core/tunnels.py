@@ -25,6 +25,7 @@ Neither is a binding free energy. They compare; they do not measure.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -104,16 +105,29 @@ def export(folder, out_dir) -> Path:
     return out
 
 
-def runs_in(folder) -> list:
-    """The finished transport runs under a folder, newest naming first.
+def runs_in(folder, one_per_route: bool = True) -> list:
+    """The finished transport runs under a folder.
 
     A run is a folder with a lower-bound trajectory in it; that is what everything downstream
     needs, and it is present whether or not the upper bound was asked for or succeeded.
+
+    Asking for both bounds used to write two folders for one route, and the upper-bound one holds
+    both profiles. One entry per route is what a person is choosing between, so the richer folder
+    is the one kept.
     """
     root = Path(folder)
     if not root.is_dir():
         return []
-    return sorted({p.parent for p in root.rglob("*-lb.pdbqt")})
+    found = sorted({p.parent for p in root.rglob("*-lb.pdbqt")})
+    if not one_per_route:
+        return found
+    best = {}
+    for run in found:
+        key = route_key(run)
+        richer = bool(next(iter(run.glob("*-ub.dat")), None))
+        if key not in best or (richer and not best[key][0]):
+            best[key] = (richer, run)
+    return [run for _richer, run in best.values()]
 
 
 def profile_of(run_folder):
@@ -147,6 +161,33 @@ def chosen_poses(profile, bound: str = "last", extra: int = 0) -> list:
     from caver_translate.figures import choose_states
 
     return choose_states(profile, bound=bound, extra=extra)
+
+
+def most_extra(profile, per_angstrom: float = 5.0) -> int:
+    """The most context poses this tunnel can carry before they start overlapping.
+
+    A short route says everything with three. Room for more is room in angstroms, so the ceiling
+    comes from the tunnel rather than from one number applied to every route.
+    """
+    if not profile:
+        return 0
+    span = abs(profile[-1].distance - profile[0].distance)
+    return max(0, min(6, int(span // per_angstrom) - 2))
+
+
+def centroid_of(pdb_block: str) -> tuple:
+    """The middle of a pose, which is where a label pointing at it belongs."""
+    points = []
+    for line in (pdb_block or "").splitlines():
+        if line.startswith(("ATOM", "HETATM")):
+            try:
+                points.append((float(line[30:38]), float(line[38:46]), float(line[46:54])))
+            except ValueError:
+                continue
+    if not points:
+        return (0.0, 0.0, 0.0)
+    n = len(points)
+    return tuple(sum(p[i] for p in points) / n for i in range(3))
 
 
 def suggested_extra(profile, per_angstrom: float = 5.0) -> int:
@@ -186,8 +227,49 @@ def pose_blocks(trajectory_pdbqt, states) -> list:
 # The order poses appear in, matching the viewer so a figure and the screen agree.
 POSE_COLORS = ["marine", "cyan", "green", "yellow", "orange", "magenta", "salmon", "purple"]
 
-# The three points the profile is read for, and the colour each is marked with.
+# The three points the profile is read for, and the colour each is marked with. The poses in the
+# 3D view take the same colours, so a dot on the plot and a molecule on screen are the same thing
+# said twice rather than two things to match up by reading.
 LANDMARKS = {"surface": "#1971C2", "barrier": "#E03131", "site": "#2F9E44"}
+
+# choose_states' tag for each of those three, and the colours for everything else it may add.
+TAG_COLOR = {"start": LANDMARKS["surface"], "barrier": LANDMARKS["barrier"],
+             "end": LANDMARKS["site"], "lowest": "#9C36B5"}
+CONTEXT_COLORS = ["#E8A33D", "#00A5A5", "#C25E8C", "#7A8B3D", "#B5651D", "#5C7CBA"]
+
+
+def pose_color(tag: str, index: int = 0) -> str:
+    """The colour a pose is drawn in: its landmark's, or one that is nobody else's."""
+    if tag in TAG_COLOR:
+        return TAG_COLOR[tag]
+    return CONTEXT_COLORS[index % len(CONTEXT_COLORS)]
+
+
+def short_name(run_folder) -> str:
+    """A run named for reading: `Benzofuroxan - Tunnel 3 - 8HTB`.
+
+    The folder is named r<receptor>-l<ligand>-t<tunnel>-d<direction>-<bound>, which is what makes
+    it machine-readable and what makes it unreadable on a chart title or in a menu.
+    """
+    name = Path(run_folder).name
+    m = re.match(r"^r(?P<receptor>.*?)-l(?P<ligand>.*?)-t(?P<tunnel>.*?)"
+                 r"-d(?P<direction>in|out)-(?P<bound>lowerbound|upperbound)$", name)
+    if not m:
+        return name
+    receptor = re.sub(r"[_-]?(ready|listo|prepared)$", "", m.group("receptor"), flags=re.I)
+    digits = re.search(r"\d+", m.group("tunnel"))
+    tunnel = f"Tunnel {int(digits.group())}" if digits else m.group("tunnel")
+    arrow = "in" if m.group("direction") == "in" else "out"
+    return f"{m.group('ligand')} · {tunnel} · {receptor} ({arrow})"
+
+
+def route_key(run_folder) -> tuple:
+    """What makes two runs the same route: everything but which bound was asked for."""
+    name = Path(run_folder).name
+    m = re.match(r"^r(?P<receptor>.*?)-l(?P<ligand>.*?)-t(?P<tunnel>.*?)"
+                 r"-d(?P<direction>in|out)-(?P<bound>lowerbound|upperbound)$", name)
+    return (m.group("receptor"), m.group("ligand"), m.group("tunnel"),
+            m.group("direction")) if m else (name,)
 
 
 def landmarks(profile, bound: str = "last") -> dict:
@@ -229,20 +311,34 @@ def draw_profile(profile, bound: str = "last", title: str = "", figsize=(5.6, 3.
     order = sorted(range(n), key=lambda i: x[i])
     ax.plot([x[i] for i in order], [y[i] for i in order], color="#495057", lw=1.6, zorder=2)
 
-    # The upper bound, where it exists, drawn behind: it is the same route with rotation
+    # The upper bound, where there is one, on the same axes. It is the same route with rotation
     # constrained, and the gap between the two is what "the lower bound can understate" means.
-    if any(p.energy_ub_min is not None for p in profile):
-        ub = [(x[i], profile[i].energy_ub_min) for i in order
-              if profile[i].energy_ub_min is not None]
-        if ub:
-            ax.plot([a for a, _b in ub], [b for _a, b in ub], color="#adb5bd", lw=1.2,
-                    ls="--", zorder=1, label="upper bound")
-            ax.legend(frameon=False, fontsize=7, loc="lower right")
+    #
+    # Only the points that have a value: an upper bound that did not converge stops partway, and
+    # the discs past that point carry None. Plotting the pair without filtering draws a line to
+    # nowhere, or raises, depending on the version.
+    ub = [(x[i], profile[i].energy_ub_min) for i in order
+          if profile[i].energy_ub_min is not None]
+    if ub:
+        ax.plot([a for a, _b in ub], [b for _a, b in ub], color="#ADB5BD", lw=1.4,
+                ls="--", zorder=1, label="upper bound")
+        ax.plot([], [], color="#495057", lw=1.6, label="lower bound")
+        ax.legend(frameon=False, fontsize=7, loc="best")
+        if len(ub) < len(profile):
+            # Said on the plot, because a line that simply stops looks like the end of the tunnel.
+            stopped = max(a for a, _b in ub)
+            ax.axvline(stopped, color="#ADB5BD", lw=0.8, ls=":", zorder=1)
+            ax.annotate("upper bound stops here", (stopped, max(y)), fontsize=7,
+                        color="#868E96", ha="right", va="top",
+                        textcoords="offset points", xytext=(-4, -2))
 
+    # The three points the reported numbers come from. They are lower-bound quantities, which is
+    # why they sit on the lower-bound line and not between the two.
     for name, (at, energy) in landmarks(profile, bound).items():
-        ax.scatter([at], [energy], s=46, color=LANDMARKS[name], zorder=3)
-        ax.annotate(name, (at, energy), textcoords="offset points", xytext=(0, 8),
-                    ha="center", fontsize=8, color=LANDMARKS[name])
+        ax.scatter([at], [energy], s=52, color=LANDMARKS[name], zorder=3,
+                   edgecolors="white", linewidths=0.8)
+        ax.annotate(name, (at, energy), textcoords="offset points", xytext=(0, 9),
+                    ha="center", fontsize=8, color=LANDMARKS[name], weight="bold")
 
     ax.set_xlabel("distance from the active site (A)", fontsize=8)
     ax.set_ylabel("energy (kcal/mol)", fontsize=8)

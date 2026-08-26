@@ -2127,6 +2127,49 @@ def _readable_transport(table):
     return out.rename(columns={k: t(v) for k, v in TRANSPORT_LABELS.items()})
 
 
+def route_preference(table):
+    """Which route each compound takes, and by how much it beats its next one.
+
+    A table sorted by Ea answers "what is easiest anywhere in this dataset". The question usually
+    being asked is narrower: *this* compound, which way does it go. The margin matters as much as
+    the winner -- two routes within a few tenths of a kcal/mol is not a preference, it is a tie,
+    and CaverDock's own repeatability is of that order.
+    """
+    if table.empty or "Ea" not in table:
+        return pd.DataFrame()
+    usable = table.dropna(subset=["Ea"])
+    rows = []
+    for ligand, group in usable.groupby("ligand", dropna=False):
+        ranked = group.sort_values("Ea")
+        best = ranked.iloc[0]
+        margin = (ranked.iloc[1]["Ea"] - best["Ea"]) if len(ranked) > 1 else None
+        rows.append({
+            "ligand": ligand,
+            "tunnel": best.get("tunnel"),
+            "direction": best.get("direction"),
+            "Ea": best["Ea"],
+            "dE_BS": best.get("dE_BS"),
+            "margin": None if margin is None else round(float(margin), 2),
+            "routes": len(ranked),
+        })
+    # Every calculation may have failed, and an empty frame has no column to sort on.
+    return pd.DataFrame(rows).sort_values("Ea") if rows else pd.DataFrame()
+
+
+def _route_preferences(table):
+    """The per-compound answer, above the full table."""
+    preference = route_preference(table)
+    if preference.empty or preference["routes"].max() < 2:
+        return                       # with one route each there is no preference to report
+    with st.expander(t("Which route each compound takes"), expanded=True):
+        shown = preference.rename(columns={
+            "ligand": t("Compound"), "tunnel": t("Tunnel"), "direction": t("Direction"),
+            "margin": t("Beats the next by"), "routes": t("Routes tried")})
+        st.dataframe(shown, width="stretch", hide_index=True)
+        st.caption(t("Lowest Ea per compound. A margin under about 0.5 kcal/mol is a tie, not a "
+                     "preference: that is the order of CaverDock's own repeatability."))
+
+
 def _results_tunnels():
     """CAVER and CaverDock output, read into the same kind of table as everything else.
 
@@ -2175,6 +2218,8 @@ def _results_tunnels():
     c[0].metric(t("Calculations"), len(table))
     c[1].metric(t("Routes"), int(table["tunnel"].nunique(dropna=True)))
     c[2].metric(t("Did not finish"), failed)
+
+    _route_preferences(table)
 
     shown = table.sort_values("Ea", na_position="last")
     st.dataframe(_readable_transport(shown), width="stretch", hide_index=True)
@@ -2774,9 +2819,8 @@ def _transport_viewer():
         _empty_state("Run a transport and its poses will appear here.")
         return
 
-    c = st.columns([3, 1])
-    run = c[0].selectbox(t("Calculation"), runs, format_func=lambda p: p.name,
-                         key="vis_tun_run", label_visibility="collapsed")
+    run = st.selectbox(t("Calculation"), runs, format_func=tn.short_name,
+                       key="vis_tun_run", label_visibility="collapsed")
 
     profile = tn.profile_of(run)
     if not profile:
@@ -2784,11 +2828,20 @@ def _transport_viewer():
         return
 
     bound = tn.orientation_of(run)
-    S.setdefault("vis_tun_extra", tn.suggested_extra(profile))
-    extra = c[1].number_input(t("Extra poses"), min_value=0, max_value=6, step=1,
-                              key="vis_tun_extra",
-                              help=t("Three are always drawn: the mouth, the barrier and the "
-                                     "site. These are context poses spaced between them."))
+    # How many context poses fit is a property of the tunnel, so the range comes from its length
+    # rather than from a number picked once and applied to every route.
+    most = tn.most_extra(profile)
+    if most:
+        S.setdefault("vis_tun_poses", 3 + tn.suggested_extra(profile))
+        # Clamped before the slider is drawn, not passed to it: this key is reassigned every pass
+        # to survive changing stage, and a widget cannot take both. Another route's answer can sit
+        # outside this one's range, and a slider handed a value past its maximum raises.
+        S["vis_tun_poses"] = max(3, min(int(S["vis_tun_poses"]), 3 + most))
+        extra = st.slider(t("Poses"), min_value=3, max_value=3 + most, key="vis_tun_poses",
+                          help=t("Three are always there: the mouth, the barrier and the site. "
+                                 "The rest are context, spaced between them.")) - 3
+    else:
+        extra = 0
     poses = tn.chosen_poses(profile, bound=bound, extra=int(extra))
 
     trajectory = next(iter(sorted(Path(run).glob("*-lb.pdbqt"))), None)
@@ -2796,42 +2849,52 @@ def _transport_viewer():
         or next(iter(sorted(Path(run).glob("*.pdb"))), None)
     tunnel = next(iter(sorted(Path(run).glob("tun_cl_*.pdb"))), None)
 
-    tab_scene, tab_plot = st.tabs([t("Poses"), t("Energy profile")])
+    # Scene and profile together: the poses are the route and the plot says why those poses. Split
+    # across tabs, matching a molecule to its point on the curve costs a click each time.
+    try:
+        blocks = tn.pose_blocks(trajectory, [s for s, _t, _l, _r in poses]) if trajectory else []
+        colours, marks_3d, context = [], [], 0
+        for (_s, tag, label, _r), block in zip(poses, blocks):
+            if tag in tn.TAG_COLOR:
+                colours.append(tn.pose_color(tag))
+            else:
+                colours.append(tn.pose_color(tag, context))
+                context += 1
+            marks_3d.append((tn.centroid_of(block), label.split("  ")[0].strip() or tag))
+        # Cofactors kept in the receptor are drawn: one sitting in the route is the reason a
+        # barrier is where it is, and an unexplained wall reads as a fault in the calculation.
+        spheres = [{"alpha": cv.tunnel_spheres(tunnel), "color": "#CED4DA",
+                    "opacity": 0.55}] if tunnel else None
+        _h = _viewer_height(320)
+        st.iframe(vw.view_html(receptor=receptor, ligand_=None, cavities=spheres,
+                               show_waters=False, show_hetero=True, height_=_h,
+                               extra_models=[(b, "pdb") for b in blocks if b],
+                               model_colors=colours, callouts=marks_3d),
+                  height=_h + 12)
+    except Exception as e:
+        st.error(t('Could not draw: {v1}').format(v1=e))
 
-    with tab_scene:
-        try:
-            blocks = tn.pose_blocks(trajectory, [s for s, _t, _l, _r in poses]) if trajectory else []
-            spheres = [{"alpha": cv.tunnel_spheres(tunnel), "color": "#DEE2E6",
-                        "opacity": 0.35}] if tunnel else None
-            _h = _viewer_height(230)
-            st.iframe(vw.view_html(receptor=receptor, ligand_=None, cavities=spheres,
-                                   show_waters=False, height_=_h,
-                                   extra_models=[(b, "pdb") for b in blocks if b]),
-                      height=_h + 12)
-        except Exception as e:
-            st.error(t('Could not draw: {v1}').format(v1=e))
-        st.caption(" · ".join(f"{tag or 'step'}" for _s, tag, _l, _r in poses))
+    marks = tn.landmarks(profile, bound=bound)
+    fig = tn.draw_profile(profile, bound=bound, title=tn.short_name(run))
+    st.pyplot(fig, width="stretch")
+    if marks:
+        e_surface = marks["surface"][1]
+        cols = st.columns(4)
+        cols[0].metric("E_surface", f"{e_surface:.1f}")
+        cols[1].metric("E_max", f"{marks['barrier'][1]:.1f}")
+        cols[2].metric("E_bound", f"{marks['site'][1]:.1f}")
+        cols[3].metric("Ea", f"{marks['barrier'][1] - e_surface:.1f}",
+                       delta=f"dE_BS {marks['site'][1] - e_surface:.1f}", delta_color="off")
+        st.caption(t("The four numbers are lower-bound quantities, which is why they are marked "
+                     "on that line."))
 
-    with tab_plot:
-        marks = tn.landmarks(profile, bound=bound)
-        fig = tn.draw_profile(profile, bound=bound, title=Path(run).name)
-        st.pyplot(fig, width="content")
-        if marks:
-            e_surface = marks["surface"][1]
-            cols = st.columns(4)
-            cols[0].metric("E_surface", f"{e_surface:.1f}")
-            cols[1].metric("E_max", f"{marks['barrier'][1]:.1f}")
-            cols[2].metric("E_bound", f"{marks['site'][1]:.1f}")
-            cols[3].metric("Ea", f"{marks['barrier'][1] - e_surface:.1f}",
-                           delta=f"dE_BS {marks['site'][1] - e_surface:.1f}", delta_color="off")
-
-    if st.button(t("Download as a PyMOL script"), key="vis_tun_pml"):
-        out = Path(run) / "figure.pml"
-        tn.pymol_script(run, receptor, tunnel, poses, out)
-        st.download_button(t("figure.pml"), out.read_bytes(), file_name="figure.pml",
-                           mime="text/plain", key="vis_tun_dl")
-        st.caption(t("Written beside the calculation. It loads the receptor, the tunnel and these "
-                     "poses on its own: `pymol figure.pml`."))
+    out = Path(run) / "figure.pml"
+    tn.pymol_script(run, receptor, tunnel, poses, out)
+    st.download_button(t("Download as a PyMOL script"), out.read_bytes(),
+                       file_name=f"{tn.short_name(run).replace(' · ', '_')}.pml",
+                       mime="text/plain", key="pml_download",
+                       help=t("The receptor, the tunnel and exactly these poses. It loads them "
+                              "itself: `pymol figure.pml`."))
 
 
 def _complex_viewer():

@@ -133,3 +133,76 @@ def test_an_empty_profile_still_returns_a_figure():
     """The panel asks before it knows there is anything to draw."""
     fig = tn.draw_profile([], bound="last")
     assert fig.axes
+
+
+def points(with_ub_until=None):
+    from caver_translate.parse import Point
+
+    out = []
+    for i, (_d, e, r) in enumerate(DISCS):
+        ub = e + 0.5 if (with_ub_until is None or i < with_ub_until) else None
+        out.append(Point(distance=float(i), disc=i, radius=r, energy_lb=e,
+                         energy_ub_min=ub, energy_ub_max=ub))
+    return out
+
+
+def test_an_upper_bound_that_stops_partway_does_not_break_the_plot():
+    """The case that prompted this: a refused upper bound leaves the later discs empty, and
+    plotting the pair without filtering draws a line to nowhere or raises."""
+    fig = tn.draw_profile(points(with_ub_until=2), bound="last")
+    ax = fig.axes[0]
+    assert sum(len(c.get_offsets()) for c in ax.collections) == 3
+    drawn = [ln for ln in ax.lines if len(ln.get_xdata())]
+    assert any(len(ln.get_xdata()) == 2 for ln in drawn), "the partial upper bound is not drawn"
+
+
+def test_a_profile_with_no_upper_bound_at_all_draws_one_line():
+    fig = tn.draw_profile(points(with_ub_until=0), bound="last")
+    assert len([ln for ln in fig.axes[0].lines if len(ln.get_xdata())]) == 1
+
+
+def test_both_bounds_share_one_plot():
+    """Two charts for one route is two things to line up by eye."""
+    fig = tn.draw_profile(points(), bound="last")
+    labels = [ln.get_label() for ln in fig.axes[0].lines]
+    assert "upper bound" in labels and "lower bound" in labels
+
+
+def test_a_pose_is_coloured_like_its_point_on_the_curve():
+    """A dot on the plot and a molecule on screen should be one thing said twice."""
+    assert tn.pose_color("start") == tn.LANDMARKS["surface"]
+    assert tn.pose_color("barrier") == tn.LANDMARKS["barrier"]
+    assert tn.pose_color("end") == tn.LANDMARKS["site"]
+    # Anything else takes a colour that is none of theirs.
+    others = {tn.pose_color("step", i) for i in range(6)} | {tn.pose_color("lowest")}
+    assert not others & set(tn.LANDMARKS.values())
+
+
+def test_a_run_is_named_for_reading():
+    """`r8HTB_ready-lBenzofuroxan-ttun_cl_003-din-lowerbound` is not a chart title."""
+    assert tn.short_name(
+        "r8HTB_ready-lBenzofuroxan-ttun_cl_003-din-lowerbound"
+    ) == "Benzofuroxan · Tunnel 3 · 8HTB (in)"
+    assert tn.short_name("something_else") == "something_else"
+
+
+def test_the_two_bounds_of_one_route_are_one_entry(tmp_path):
+    """Six folders for three routes is a menu nobody can read."""
+    for bound in ("lowerbound", "upperbound"):
+        f = tmp_path / f"r8HTB-lbenzo-ttun_cl_003-din-{bound}"
+        f.mkdir()
+        (f / "analysis-lb.pdbqt").write_text(model(0, -1.0, 1.5) + "\n")
+        if bound == "upperbound":
+            (f / "analysis-ub.dat").write_text("0.0 0 -1.0 -1.0 1.5 -1.0\n")
+    runs = tn.runs_in(tmp_path)
+    assert len(runs) == 1
+    assert runs[0].name.endswith("upperbound"), "the folder with both profiles is the one to keep"
+
+
+def test_how_many_poses_fit_comes_from_the_tunnel():
+    from caver_translate.parse import Point
+
+    short = [Point(distance=float(i), disc=i, radius=1.5, energy_lb=-1.0) for i in range(11)]
+    long_ = [Point(distance=float(i) * 2, disc=i, radius=1.5, energy_lb=-1.0) for i in range(21)]
+    assert tn.most_extra(short) == 0
+    assert tn.most_extra(long_) >= 4

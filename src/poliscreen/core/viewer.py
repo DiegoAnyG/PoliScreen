@@ -128,7 +128,8 @@ def view_html(receptor=None, ligand_=None, height_: int = 480, width_="100%",
               protein_style: str = "cartoon", show_waters: bool = True,
               show_hetero: bool = True, box_=None, pocket_spheres=None,
               cavities=None, opacity: float = 0.95, axes_: bool = False,
-              surface: bool = False, extra_models=None) -> str:
+              surface: bool = False, extra_models=None, model_colors=None,
+              callouts=None) -> str:
     """HTML of a viewer with receptor, ligand or both. Any of them can be omitted.
 
     box_: Box or dict cx..sz, drawn as a wireframe.
@@ -158,12 +159,29 @@ def view_html(receptor=None, ligand_=None, height_: int = 480, width_="100%",
                                    "sphere": {"radius": 0.42, "colorscheme": "yellowCarbon"}})
     # Each in its own colour and in the order given, so the sequence reads as a route: the first
     # is where it starts, the last where it ends, and the one in between is usually the obstacle.
+    # model_colors lets the caller match them to something else on screen -- the points of an
+    # energy profile, so a molecule and its dot on the curve are one thing said twice.
     for i, (text_, fmt) in enumerate(extra_models or []):
         if not text_:
             continue
+        colour = (model_colors[i] if model_colors and i < len(model_colors)
+                  else POSE_PALETTE[i % len(POSE_PALETTE)])
         v.addModel(text_, fmt)
-        v.setStyle({"model": -1},
-                   {"stick": {"radius": 0.20, "color": POSE_PALETTE[i % len(POSE_PALETTE)]}})
+        v.setStyle({"model": -1}, {"stick": {"radius": 0.22, "color": colour}})
+
+    # A label offset from each pose with a line back to it. Several copies of one molecule along a
+    # route are otherwise told apart only by colour, which means holding a legend in mind.
+    for i, (position, text_) in enumerate(callouts or []):
+        if not text_:
+            continue
+        x, y, z = (float(position[0]), float(position[1]), float(position[2]))
+        colour = (model_colors[i] if model_colors and i < len(model_colors) else "#333333")
+        away = {"x": x + 5.0, "y": y + 5.0, "z": z}
+        v.addLabel(text_, {"position": away, "fontSize": 11, "fontColor": "white",
+                           "backgroundColor": colour, "backgroundOpacity": 0.85,
+                           "borderThickness": 0, "inFront": True})
+        v.addArrow({"start": away, "end": {"x": x, "y": y, "z": z},
+                    "radius": 0.10, "radiusRatio": 2.2, "mid": 0.85, "color": colour})
     dims = _box_dims(box_)
     if dims:
         # Edges only: a filled box, however faint, hides the alpha spheres of the cavities it is
