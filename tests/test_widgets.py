@@ -39,19 +39,25 @@ def _persistent_prefixes():
 DEFAULT_KWARGS = ("value", "index", "default")
 
 
+UI_DIR = APP.parent
+UI_FILES = [APP, UI_DIR / "common.py"] + sorted((UI_DIR / "views").glob("*.py")) + sorted((UI_DIR / "components").glob("*.py"))
+_TREES = [(f, ast.parse(f.read_text(encoding="utf-8"))) for f in UI_FILES]
+
+
 def test_no_persistent_widget_declares_a_default():
     offenders = []
-    for call in ast.walk(_TREE):
-        if not isinstance(call, ast.Call):
-            continue
-        fn = call.func
-        name = fn.attr if isinstance(fn, ast.Attribute) else ""
-        key = next((k.value.value for k in call.keywords
-                    if k.arg == "key" and isinstance(k.value, ast.Constant)), None)
-        if not (isinstance(key, str) and key.startswith(PREFIXES)):
-            continue
-        if any(k.arg in DEFAULT_KWARGS for k in call.keywords):
-            offenders.append(f"line {call.lineno}: st.{name}(key={key!r})")
+    for f, tree in _TREES:
+        for call in ast.walk(tree):
+            if not isinstance(call, ast.Call):
+                continue
+            fn = call.func
+            name = fn.attr if isinstance(fn, ast.Attribute) else ""
+            key = next((k.value.value for k in call.keywords
+                        if k.arg == "key" and isinstance(k.value, ast.Constant)), None)
+            if not (isinstance(key, str) and key.startswith(PREFIXES)):
+                continue
+            if any(k.arg in DEFAULT_KWARGS for k in call.keywords):
+                offenders.append(f"{f.name}:line {call.lineno}: st.{name}(key={key!r})")
     assert not offenders, f"seed these with S.setdefault instead: {offenders}"
 
 
@@ -60,15 +66,17 @@ def test_no_button_takes_a_persistent_key():
     prefixes. A button cannot be assigned to, so one named that way crashes the panel it is on --
     which is how `vis_tun_pml` took down the transport view."""
     offenders = []
-    for call in ast.walk(_TREE):
-        if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Attribute):
-            continue
-        if call.func.attr not in PRESSED_NOT_STORED:
-            continue
-        key = next((k.value.value for k in call.keywords
-                    if k.arg == "key" and isinstance(k.value, ast.Constant)), None)
-        if isinstance(key, str) and key.startswith(_persistent_prefixes()):
-            offenders.append(f"line {call.lineno}: st.{call.func.attr}(key={key!r})")
+    persistent_pfx = _persistent_prefixes()
+    for f, tree in _TREES:
+        for call in ast.walk(tree):
+            if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Attribute):
+                continue
+            if call.func.attr not in PRESSED_NOT_STORED:
+                continue
+            key = next((k.value.value for k in call.keywords
+                        if k.arg == "key" and isinstance(k.value, ast.Constant)), None)
+            if isinstance(key, str) and key.startswith(persistent_pfx):
+                offenders.append(f"{f.name}:line {call.lineno}: st.{call.func.attr}(key={key!r})")
     assert not offenders, (
         "a button cannot hold a value, so its key must not start with a persistent prefix: "
         f"{offenders}")
