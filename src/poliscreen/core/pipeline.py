@@ -13,6 +13,7 @@ from pathlib import Path
 from . import layout as lay
 from typing import Callable, Optional, Sequence
 
+import numpy as np
 import pandas as pd
 
 from . import adcp
@@ -142,6 +143,31 @@ def _add_applicability(analogs, cfg, step) -> None:
                           f"on every endpoint")
 
 
+_COORDS_CACHE: dict[tuple[str, float], np.ndarray] = {}
+
+
+def _get_coords_arr(path: str | Path, loader: Callable) -> Optional[np.ndarray]:
+    """Retrieves cached atom coordinates as a float32 ndarray of shape (N, 3)."""
+    p = Path(path)
+    try:
+        mtime = p.stat().st_mtime
+    except Exception:
+        return None
+    key = (str(p.resolve()), mtime)
+    if key in _COORDS_CACHE:
+        return _COORDS_CACHE[key]
+    try:
+        pts = loader(p)
+        if not pts:
+            arr = np.empty((0, 3), dtype=np.float32)
+        else:
+            arr = np.asarray(pts, dtype=np.float32)
+    except Exception:
+        arr = np.empty((0, 3), dtype=np.float32)
+    _COORDS_CACHE[key] = arr
+    return arr
+
+
 def _receptor_by_geometry(control, receptors) -> Optional[str]:
     """Receptor in whose space the control falls, or None.
 
@@ -151,11 +177,8 @@ def _receptor_by_geometry(control, receptors) -> Optional[str]:
        Evaluates contact quality (atoms within 4.0 A) with severe penalties for steric clashes (< 1.0 A).
     3. Distance fallback (up to 20 A to account for stripped partner chain in a multimer).
     """
-    try:
-        cc = dk.coords_from_file(control)
-    except Exception:
-        cc = []
-    if not cc:
+    cc = _get_coords_arr(control, dk.coords_from_file)
+    if cc is None or len(cc) == 0:
         return None
 
     # 1. Exact coordinate match with original PDB if present beside ready structure
@@ -165,30 +188,30 @@ def _receptor_by_geometry(control, receptors) -> Optional[str]:
         for orig_name in (f"{stem_base}.pdb", rp.stem.replace("_ready", "").replace("_listo", "") + ".pdb"):
             orig_p = rp.parent / orig_name
             if orig_p.exists():
-                try:
-                    opts = dk._coords(orig_p)
-                except Exception:
+                opts = _get_coords_arr(orig_p, dk._coords)
+                if opts is None or len(opts) == 0:
                     continue
-                matches = sum(1 for l in cc if any((l[0]-p[0])**2 + (l[1]-p[1])**2 + (l[2]-p[2])**2 < 0.0025 for p in opts))
+                # Vectorized distance squared check
+                diff = cc[:, None, :] - opts[None, :, :]
+                min_sq = np.min(np.sum(diff * diff, axis=-1), axis=1)
+                matches = int(np.sum(min_sq < 0.0025))
                 if matches >= 3:
                     return rp.stem
 
     # 2. Pocket contact and clash scoring vs ready structures
-    n = len(cc)
-    centro = [sum(p[i] for p in cc) / n for i in range(3)]
+    centro = np.mean(cc, axis=0)
     best_, best_score = None, -1e9
     for r in receptors:
-        try:
-            pts = dk._coords(r)
-        except Exception:
+        pts = _get_coords_arr(r, dk._coords)
+        if pts is None or len(pts) == 0:
             continue
-        if not pts:
-            continue
-        min_ds = [min(((l[0]-p[0])**2 + (l[1]-p[1])**2 + (l[2]-p[2])**2)**0.5 for p in pts) for l in cc]
-        contacts = sum(1 for d in min_ds if d <= 4.0)
-        clashes = sum(1 for d in min_ds if d < 1.0)
-        mean_d = sum(min_ds) / len(min_ds)
-        d_centroid = min((centro[0]-p[0])**2 + (centro[1]-p[1])**2 + (centro[2]-p[2])**2 for p in pts)**0.5
+        diff = cc[:, None, :] - pts[None, :, :]
+        min_sq = np.min(np.sum(diff * diff, axis=-1), axis=1)
+        min_ds = np.sqrt(min_sq)
+        contacts = int(np.sum(min_ds <= 4.0))
+        clashes = int(np.sum(min_ds < 1.0))
+        mean_d = float(np.mean(min_ds))
+        d_centroid = float(np.sqrt(np.min(np.sum((centro - pts) ** 2, axis=1))))
 
         if mean_d > 25.0 and d_centroid > 20.0:
             continue

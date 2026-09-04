@@ -191,24 +191,29 @@ def render_receptors_tools(proj: Path):
                       help=t("Deletes every prepared receptor and control from the project folder.")):
             _forget_all_receptors()
             st.rerun()
+        rec_dir = lay.artifact(proj, lay.RECEPTORS)
+        cmap = _load_control_map(rec_dir)
+        assign = pl._assign_controls([Path(c) for c in S["controls"]],
+                                     [Path(r) for r in S["receptors"]], cmap)
         for _p in list(S["receptors"]):
             _c1, _c2 = st.columns([5, 1], vertical_alignment="center")
-            _ctrl_p = _controls_of(Path(_p), S["receptors"], S["controls"])
+            _p_stem = Path(_p).stem
+            _p_norm = sc.normalize_key(_p_stem)
+            _ctrl_p = [c for c in S["controls"]
+                       if assign.get(sc.normalize_key(Path(c).stem)) in (_p_stem, _p_norm)]
             _c1.write(_rname(_p) + (f" · {', '.join(_rname(c) for c in _ctrl_p)}" if _ctrl_p else ""))
             if _c2.button("🗑", key=f"drop_receptor_{sc.normalize_key(_rname(_p))}", width="stretch",
                           help=t("Removes this receptor and the controls extracted from it.")):
                 _forget_receptor(_p)
                 st.rerun()
+        assigned_ctrl_keys = {k for k, v in assign.items() if v}
         _huerfanos = [c for c in S["controls"]
-                      if not any(c in _controls_of(Path(r), S["receptors"], S["controls"])
-                                 for r in S["receptors"])]
+                      if sc.normalize_key(Path(c).stem) not in assigned_ctrl_keys]
         if _huerfanos:
             st.caption(t("Controls with no receptor: {v1}").format(
                 v1=", ".join(_rname(c) for c in _huerfanos)))
             if S["receptors"]:
                 with st.expander(t("Assign orphaned controls to a receptor"), expanded=True):
-                    rec_dir = lay.artifact(proj, lay.RECEPTORS)
-                    cmap = _load_control_map(rec_dir)
                     rec_stems = [Path(r).stem for r in S["receptors"]]
                     changed = False
                     for hc in _huerfanos:
