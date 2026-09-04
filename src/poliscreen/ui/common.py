@@ -131,12 +131,38 @@ def _mark_done(key_: str, firma):
     st.session_state["_signature_" + key_] = firma
 
 
+def _load_control_map(rec_dir: Path) -> dict:
+    cmap = dict(st.session_state.get("_control_map") or {})
+    if rec_dir.is_dir():
+        mf = rec_dir / "control_map.json"
+        if mf.exists():
+            try:
+                import json
+                for k, v in json.loads(mf.read_text(encoding="utf-8")).items():
+                    cmap.setdefault(sc.normalize_key(k), v)
+            except Exception:
+                pass
+    return cmap
+
+
+def _save_control_map(rec_dir: Path, cmap: dict) -> None:
+    if rec_dir.is_dir():
+        mf = rec_dir / "control_map.json"
+        try:
+            import json
+            mf.write_text(json.dumps(cmap, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+
 def _controls_of(rec: Path, receptors: list, controls: list) -> list:
-    """Controls belonging to a receptor, by geometry."""
+    """Controls belonging to a receptor, prioritizing manual/saved mapping then geometry."""
+    cmap = _load_control_map(Path(rec).parent)
     assign = pl._assign_controls([Path(c) for c in controls],
-                                 [Path(r) for r in receptors], {})
+                                 [Path(r) for r in receptors], cmap)
+    target_keys = {rec.stem, sc.normalize_key(rec.stem)}
     return [c for c in controls
-            if assign.get(sc.normalize_key(Path(c).stem)) == rec.stem]
+            if assign.get(sc.normalize_key(Path(c).stem)) in target_keys]
 
 
 def _forget_receptor(path_str: str) -> None:
@@ -149,6 +175,11 @@ def _forget_receptor(path_str: str) -> None:
     S["receptors"] = [p for p in S["receptors"] if p != path_str]
     S["controls"] = [p for p in S["controls"] if p not in doomed]
     S.setdefault("_forget_prep", []).append(sc.normalize_key(_rname(rec)))
+    if S.get("_control_map"):
+        for doomed_f in doomed:
+            k = sc.normalize_key(Path(doomed_f).stem)
+            S["_control_map"].pop(k, None)
+        _save_control_map(rec.parent, S["_control_map"])
     if S.get("last_prepared") == path_str:
         S.pop("last_prepared", None)
         S.pop("last_original", None)
@@ -157,10 +188,14 @@ def _forget_receptor(path_str: str) -> None:
 def _forget_all_receptors() -> None:
     """Empties the project's receptor folder: prepared structures and controls alike."""
     S = st.session_state
+    first_p = Path(S["receptors"][0]) if S["receptors"] else (Path(S["controls"][0]) if S["controls"] else None)
+    if first_p and first_p.parent.exists():
+        (first_p.parent / "control_map.json").unlink(missing_ok=True)
     for f in list(S["receptors"]) + list(S["controls"]):
         Path(f).unlink(missing_ok=True)
     S["_forget_prep"] = [sc.normalize_key(_rname(p)) for p in S["receptors"]]
     S["receptors"], S["controls"] = [], []
+    S.pop("_control_map", None)
     S.pop("last_prepared", None)
     S.pop("last_original", None)
 

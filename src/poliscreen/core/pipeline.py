@@ -89,7 +89,7 @@ def _assign_controls(controls: Sequence[Path], receptors: Sequence[Path], given:
     not help, because the control is usually named after its ligand (control_ZI9) and the receptor
     after its PDB (8HTB), with no word in common.
     """
-    out = dict(given)
+    out = {sc.normalize_key(k): v for k, v in (given or {}).items()}
     stems = [Path(r).stem for r in receptors]
     for c in controls:
         ck = sc.normalize_key(Path(c).stem)
@@ -143,18 +143,40 @@ def _add_applicability(analogs, cfg, step) -> None:
 
 
 def _receptor_by_geometry(control, receptors) -> Optional[str]:
-    """Receptor in whose space the control falls, or None. Compares the control centroid with each
-    receptor's atoms: it belongs to the nearest, and only if it is inside (below a threshold), so as
-    not to force the assignment of a loose control."""
+    """Receptor in whose space the control falls, or None.
+
+    1. Exact atom overlap with unstripped original PDB (if present beside ready receptor):
+       Co-crystallized ligands coincide at 0.00 A with their parent structure.
+    2. Multi-atom pocket contacts vs. ready structures:
+       Evaluates contact quality (atoms within 4.0 A) with severe penalties for steric clashes (< 1.0 A).
+    3. Distance fallback (up to 20 A to account for stripped partner chain in a multimer).
+    """
     try:
         cc = dk.coords_from_file(control)
     except Exception:
         cc = []
     if not cc:
         return None
+
+    # 1. Exact coordinate match with original PDB if present beside ready structure
+    for r in receptors:
+        rp = Path(r)
+        stem_base = sc.display_name(rp)
+        for orig_name in (f"{stem_base}.pdb", rp.stem.replace("_ready", "").replace("_listo", "") + ".pdb"):
+            orig_p = rp.parent / orig_name
+            if orig_p.exists():
+                try:
+                    opts = dk._coords(orig_p)
+                except Exception:
+                    continue
+                matches = sum(1 for l in cc if any((l[0]-p[0])**2 + (l[1]-p[1])**2 + (l[2]-p[2])**2 < 0.0025 for p in opts))
+                if matches >= 3:
+                    return rp.stem
+
+    # 2. Pocket contact and clash scoring vs ready structures
     n = len(cc)
     centro = [sum(p[i] for p in cc) / n for i in range(3)]
-    best_, best_d = None, 1e18
+    best_, best_score = None, -1e9
     for r in receptors:
         try:
             pts = dk._coords(r)
@@ -162,11 +184,19 @@ def _receptor_by_geometry(control, receptors) -> Optional[str]:
             continue
         if not pts:
             continue
-        d = min((centro[0] - p[0]) ** 2 + (centro[1] - p[1]) ** 2 + (centro[2] - p[2]) ** 2
-                for p in pts)
-        if d < best_d:
-            best_, best_d = Path(r).stem, d
-    return best_ if best_d <= 64.0 else None
+        min_ds = [min(((l[0]-p[0])**2 + (l[1]-p[1])**2 + (l[2]-p[2])**2)**0.5 for p in pts) for l in cc]
+        contacts = sum(1 for d in min_ds if d <= 4.0)
+        clashes = sum(1 for d in min_ds if d < 1.0)
+        mean_d = sum(min_ds) / len(min_ds)
+        d_centroid = min((centro[0]-p[0])**2 + (centro[1]-p[1])**2 + (centro[2]-p[2])**2 for p in pts)**0.5
+
+        if mean_d > 25.0 and d_centroid > 20.0:
+            continue
+        score = contacts * 10 - clashes * 50 - mean_d
+        if score > best_score:
+            best_, best_score = Path(r).stem, score
+
+    return best_
 
 
 def _split_peptides(proj, ligands_) -> tuple:

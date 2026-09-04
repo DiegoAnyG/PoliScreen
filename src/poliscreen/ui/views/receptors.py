@@ -19,8 +19,10 @@ from poliscreen.ui.common import (
     _empty_state,
     _forget_all_receptors,
     _forget_receptor,
+    _load_control_map,
     _mark_done,
     _rname,
+    _save_control_map,
     _viewer_height,
 )
 from poliscreen.ui.i18n import t
@@ -32,22 +34,37 @@ def render_receptors_tools(proj: Path):
     st.subheader(t("Prepare a receptor"))
     st.caption(t("Type a PDB identifier or upload your own file. Waters are removed, hydrogens added, and the original residue numbering is kept."))
     c1, c2 = st.columns([1, 2])
-    pdb_id = c1.text_input(t("PDB identifier"), placeholder=t("4D44"))
+
+    def _fetch_pdb_action():
+        pcode = st.session_state.get("pdb_code_in", "").strip().upper()
+        if pcode:
+            try:
+                fetched = rc.fetch_pdb(pcode, lay.artifact(proj, lay.RECEPTORS))
+                st.session_state["src_pdb"] = str(fetched)
+                st.session_state.pop("_fetch_error", None)
+            except rc.ReceptorError as err:
+                st.session_state["_fetch_error"] = str(err)
+
+    pdb_id = c1.text_input(t("PDB identifier"), placeholder=t("4D44"), key="pdb_code_in",
+                           on_change=_fetch_pdb_action)
     up = c2.file_uploader(t("...or upload a .pdb file"), type=["pdb"])
+
+    if S.get("_fetch_error"):
+        c1.error(S.pop("_fetch_error"))
 
     src = None
     if up is not None:
         src = lay.artifact(proj, lay.RECEPTORS) / up.name
         src.parent.mkdir(parents=True, exist_ok=True)
         src.write_bytes(up.getvalue())
-    elif pdb_id.strip() and st.button(t("Download from the PDB")):
-        try:
-            src = rc.fetch_pdb(pdb_id, lay.artifact(proj, lay.RECEPTORS))
-            S["src_pdb"] = str(src)
-        except rc.ReceptorError as e:
-            st.error(str(e))
-    if src is None and S.get("src_pdb"):
-        src = Path(S["src_pdb"])
+        S["src_pdb"] = str(src)
+    else:
+        if c1.button(t("Download from the PDB")):
+            _fetch_pdb_action()
+            if S.get("_fetch_error"):
+                c1.error(S.pop("_fetch_error"))
+        if S.get("src_pdb"):
+            src = Path(S["src_pdb"])
 
     if src and src.exists():
         st.success(t('Structure loaded: {v1}').format(v1=src.name))
@@ -113,17 +130,20 @@ def render_receptors_tools(proj: Path):
                     S["receptors"].append(str(dest))
                 S["last_prepared"] = str(dest)
                 S["last_original"] = str(src)
+                extracted_controls = []
                 for k in extract:
                     het = info.find(k)
                     p = rc.extract_ligand(src, het, lay.artifact(proj, lay.RECEPTORS) / f"control_{het.resname}.sdf",
                                           smiles=smiles or None, on_notice=st.info)
                     if str(p) not in S["controls"]:
                         S["controls"].append(str(p))
+                    extracted_controls.append(p)
                 for c in control_chain:
                     p = rc.extract_chain(src, c, lay.artifact(proj, lay.RECEPTORS) / f"control_Chain{c}.pdb",
                                          on_notice=st.warning)
                     if str(p) not in S["controls"]:
                         S["controls"].append(str(p))
+                    extracted_controls.append(p)
                     _seq = pp.sequence_from_structure(p)
                     if _seq:
                         st.info(f"Chain {c} extracted as control: `{_seq[0]}` "
@@ -131,6 +151,13 @@ def render_receptors_tools(proj: Path):
                                 + (", it will be docked with ADCP." if adcp.available()
                                    and adcp.MIN_RESIDUES <= len(_seq[0]) <= adcp.MAX_RESIDUES
                                    else "."))
+                if extracted_controls:
+                    rec_dir = lay.artifact(proj, lay.RECEPTORS)
+                    cmap = _load_control_map(rec_dir)
+                    for cp in extracted_controls:
+                        cmap[sc.normalize_key(cp.stem)] = dest.stem
+                    S["_control_map"] = cmap
+                    _save_control_map(rec_dir, cmap)
             _mark_done("prep_" + kb, firma_prep)
             st.success(f"Done: {dest.name}")
             st.rerun()
@@ -178,6 +205,27 @@ def render_receptors_tools(proj: Path):
         if _huerfanos:
             st.caption(t("Controls with no receptor: {v1}").format(
                 v1=", ".join(_rname(c) for c in _huerfanos)))
+            if S["receptors"]:
+                with st.expander(t("Assign orphaned controls to a receptor"), expanded=True):
+                    rec_dir = lay.artifact(proj, lay.RECEPTORS)
+                    cmap = _load_control_map(rec_dir)
+                    rec_stems = [Path(r).stem for r in S["receptors"]]
+                    changed = False
+                    for hc in _huerfanos:
+                        hc_path = Path(hc)
+                        sel_r = st.selectbox(
+                            f"{_rname(hc)} →",
+                            ["(unassigned)"] + rec_stems,
+                            format_func=lambda s: _rname(s) if s != "(unassigned)" else s,
+                            key=f"orph_map_{sc.normalize_key(hc_path.stem)}"
+                        )
+                        if sel_r != "(unassigned)":
+                            cmap[sc.normalize_key(hc_path.stem)] = sel_r
+                            changed = True
+                    if changed:
+                        S["_control_map"] = cmap
+                        _save_control_map(rec_dir, cmap)
+                        st.rerun()
 
 
 def render_receptors_viewer(proj: Path):
