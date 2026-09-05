@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from poliscreen.core import caver as cv
 from poliscreen.core import layout as lay
@@ -474,9 +475,9 @@ def _results_screening(proj: Path):
         label_visibility="collapsed"
     )
     if plot_mode == t("Interactive Explorer (Zoom & Tooltips)"):
-        alt_chart = _interactive_pareto_chart(sub_display, smap=smap)
-        if alt_chart:
-            st.altair_chart(alt_chart, use_container_width=True)
+        html_chart = _interactive_pareto_chart(sub_display, smap=smap)
+        if html_chart:
+            components.html(html_chart, height=460)
     else:
         fig = _scatter_dock_inter(sub_display)
         if fig:
@@ -489,25 +490,6 @@ def _results_screening(proj: Path):
                                    key=f"dl_fig_{R}")
             except Exception:
                 pass
-
-    with st.expander(t("Inspect compound structure & properties"), expanded=False):
-        cmps_avail = sorted(sub_display["compound"].unique())
-        if cmps_avail:
-            sel_cmp = st.selectbox(t("Compound"), cmps_avail, key=f"inspect_cmp_{R}")
-            hit = sub_display[sub_display["compound"] == sel_cmp]
-            if not hit.empty:
-                h0 = hit.iloc[0]
-                ic1, ic2 = st.columns([1, 2])
-                smi = smap.get(sc.normalize_key(sel_cmp))
-                if smi:
-                    png = vw.molecule_png(smi, size=180)
-                    if png:
-                        ic1.image(png)
-                    ic2.code(smi, language="text")
-                ic2.write(f"**{t('Effectiveness')}**: {h0.get('effectiveness_pct', 0):.1f}% · "
-                          f"**{t('Docking')}**: {h0.get('best_dock', 0):.2f} kcal/mol · "
-                          f"**{t('Quality')}**: {h0.get('best_inter', 0):.3f} · "
-                          f"**{t('Confidence')}**: {h0.get('confidence', 0):.2f}")
 
     items_all = [(c, smap[sc.normalize_key(c)]) for c in rk["compound"].unique()
                  if sc.normalize_key(c) in smap and pd.notna(smap.get(sc.normalize_key(c)))]
