@@ -24,6 +24,14 @@ def t(text: str) -> str:
 
 
 _ES = {
+    'Filter Pareto frontier only': 'Filtrar solo frontera de Pareto',
+    'Pareto leaders': 'Líderes de Pareto',
+    'Pareto frontier': 'Frontera de Pareto',
+    'Pareto optimal': 'Óptimo de Pareto',
+    'optimal': 'óptimo',
+    'Candidate': 'Candidato',
+    'Control': 'Control',
+    'Docking vs. quality · Pareto frontier · ideal: top-right': 'Docking vs. calidad · Frontera de Pareto · ideal: sup. der.',
     'Opens on the control, which is the reference the other diagrams are judged against.': 'Se abre en el control, que es la referencia contra la que se juzgan los demás diagramas.',
     'IUPAC naming is off in this build: verifying a name means rebuilding the structure from it and comparing, which needs OPSIN and a Java runtime — together larger than the rest of PoliScreen, for a label that never changes a result. Products are identified by their SMILES, which is what is docked. To turn it on, point `POLISCREEN_OPSIN` at opsin.jar with Java on `PATH`; a future build may carry both.': 'El nombrado IUPAC está desactivado en esta versión: verificar un nombre significa reconstruir la estructura a partir de él y compararla, lo que requiere OPSIN y un entorno de Java —juntos más grandes que el resto de PoliScreen— para una etiqueta que nunca cambia un resultado. Los productos se identifican por su SMILES, que es lo que se acopla. Para activarlo, apunta `POLISCREEN_OPSIN` a opsin.jar con Java en el `PATH`; una versión futura podría incluir ambos.',
 

@@ -312,7 +312,7 @@ def _results_screening(proj: Path):
     chosen_items = [c for c in ("compound", "IUPAC", "engine", "pose", "best_dock", "pKi", "LE",
                             "best_inter", "cat_coverage", "effectiveness_pct", "percentile",
                             "confidence", "consensus", "key_interaction", "sa_score", "pains",
-                            "type")
+                            "pareto_rank", "type")
                 if c in rk.columns]
 
     meta_lig = proj / "ligands_meta.csv"
@@ -346,8 +346,9 @@ def _results_screening(proj: Path):
         _refsrc = meta.get("site_reference", {}).get(R) or ref_info.get(R, {}).get("src", "?")
         st.markdown(t('{v0} · interaction reference: `{v2}`').format(v0=_et, v2=_refsrc))
         noc = sub[sub["is_control"] != 1]
+        n_pareto = int((noc.get("is_pareto") == True).sum()) if "is_pareto" in noc.columns else 0
         if not noc.empty:
-            m1, m2, m3, m4 = st.columns(4)
+            m1, m2, m3, m4, m5 = st.columns(5)
             try:
                 bd = noc.loc[pd.to_numeric(noc["best_dock"], errors="coerce").idxmin()]
                 m1.metric(t("Best docking"), str(bd["compound"])[:18], f"{bd['best_dock']:.2f} kcal/mol",
@@ -369,9 +370,18 @@ def _results_screening(proj: Path):
                 m4.metric(t("Highest confidence"), str(bc["compound"])[:18], f"{bc['confidence']:.2f}")
             except Exception:
                 pass
-        view_ = sub[chosen_items]
-        st.dataframe(_shade(view_.assign(source=sub.get("source", "")), "source") if tuyos else view_,
-                     width="stretch", height=min(400, 60 + 34 * len(sub)))
+            if n_pareto > 0:
+                m5.metric(t("Pareto leaders"), f"{n_pareto} / {len(noc)}", delta=t("optimal"), delta_color="normal")
+
+        if "is_pareto" in sub.columns and n_pareto > 0:
+            pareto_only = st.checkbox(t("Filter Pareto frontier only"), key=f"pareto_only_{R}")
+            sub_display = sub[sub["is_pareto"] | (sub["is_control"] == 1)].copy() if pareto_only else sub.copy()
+        else:
+            sub_display = sub.copy()
+
+        view_ = sub_display[chosen_items]
+        st.dataframe(_shade(view_.assign(source=sub_display.get("source", "")), "source") if tuyos else view_,
+                     width="stretch", height=min(400, 60 + 34 * len(sub_display)))
         _download_table(view_, f"ranking_{R}", key=f"rk_{R}")
         g1, g2 = st.columns(2)
         ch = sub.dropna(subset=["effectiveness_pct"]).set_index("compound")["effectiveness_pct"]

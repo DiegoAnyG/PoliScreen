@@ -61,6 +61,7 @@ LEGACY_COLUMNS = {
     "viabilidad": "feasibility", "secuencia": "sequence", "longitud": "length",
     "carga_neta": "net_charge", "momento_hidrofobico": "hydrophobic_moment",
     "fraccion_hidrofobica": "hydrophobic_fraction", "indice_boman": "boman_index",
+    "rango_pareto": "pareto_rank", "es_pareto": "is_pareto",
 }
 LEGACY_VALUES = {"source": {"péptido": "peptide", "peptido": "peptide", "núcleo": "core",
                             "nucleo": "core", "tuyo": "yours", "interno": "internal"}}
@@ -232,6 +233,96 @@ def fp_recovery(ref_feats, pose_feats) -> dict:
     return dict(recovery=round(len(shared) / len(ref), 3),
                 tanimoto=round(len(shared) / len(union), 3) if union else np.nan,
                 shared=len(shared), ref_n=len(ref), extra=len(pose - ref))
+
+
+def compute_pareto_ranks(df: pd.DataFrame, objectives: list[str], minimize_cols: set[str] | None = None) -> tuple[pd.Series, pd.Series]:
+    """Compute multi-objective Pareto dominance ranks and frontier indicator.
+
+    A candidate A dominates B (A > B) if A is >= B in all objectives and strictly > B in at least one.
+    Rank 1 = non-dominated frontier (no other compound in the set is simultaneously better or equal).
+    Rank 2 = non-dominated frontier when Rank 1 points are removed, etc.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe containing compounds and objective columns.
+    objectives : list[str]
+        List of column names representing optimization objectives.
+    minimize_cols : set[str], optional
+        Columns where lower values are better (e.g. binding affinity 'best_dock').
+        All other columns are assumed to be maximized.
+
+    Returns
+    -------
+    pareto_rank : pd.Series
+        Integer series (1, 2, ...) with Pareto rank per row (Rank 1 = optimal frontier).
+    is_pareto : pd.Series
+        Boolean series, True for Rank 1 non-dominated solutions.
+    """
+    if df is None or df.empty:
+        return pd.Series(dtype=int, index=getattr(df, "index", None)), pd.Series(dtype=bool, index=getattr(df, "index", None))
+
+    min_set = set(minimize_cols or [])
+    valid_cols = [c for c in objectives if c in df.columns]
+    if not valid_cols:
+        return pd.Series(1, index=df.index, dtype=int), pd.Series(True, index=df.index, dtype=bool)
+
+    n = len(df)
+    vals = np.zeros((n, len(valid_cols)), dtype=float)
+    for idx, c in enumerate(valid_cols):
+        s = pd.to_numeric(df[c], errors="coerce").to_numpy(dtype=float)
+        vals[:, idx] = -s if c in min_set else s
+
+    # Candidates with all-finite objectives are eligible for standard dominance checks
+    valid_mask = np.isfinite(vals).all(axis=1)
+
+    # Ineligible candidates get a large negative value so they cannot falsely dominate valid solutions
+    vals_calc = vals.copy()
+    vals_calc[~valid_mask] = -1e9
+
+    # Pairwise dominance: diff[i, j, k] = vals[i, k] - vals[j, k]
+    diff = vals_calc[:, None, :] - vals_calc[None, :, :]
+    ge = (diff >= 0).all(axis=-1)
+    gt = (diff > 0).any(axis=-1)
+    dominates = ge & gt
+
+    # Ineligible rows do not dominate anyone
+    dominates[~valid_mask, :] = False
+    np.fill_diagonal(dominates, False)
+
+    # Non-dominated sorting (NSGA-II multi-tier ranking)
+    domination_counts = dominates.sum(axis=0).astype(int)
+    ranks = np.zeros(n, dtype=int)
+
+    current_rank = 1
+    remaining = set(np.where(valid_mask)[0])
+
+    while remaining:
+        front = [i for i in remaining if domination_counts[i] == 0]
+        if not front:
+            for i in remaining:
+                ranks[i] = current_rank
+            break
+
+        for i in front:
+            ranks[i] = current_rank
+            remaining.remove(i)
+
+        for i in front:
+            dominated_by_i = np.where(dominates[i])[0]
+            domination_counts[dominated_by_i] -= 1
+
+        current_rank += 1
+
+    # Unranked / invalid candidates receive the trailing rank
+    for i in range(n):
+        if ranks[i] == 0:
+            ranks[i] = current_rank
+
+    rank_series = pd.Series(ranks, index=df.index, dtype=int)
+    is_pareto_series = (rank_series == 1) & pd.Series(valid_mask, index=df.index)
+    return rank_series, is_pareto_series
+
 
 def build_ref_info(inter, dc, control_keys, control_assign, crystal_feats=None):
     """Per receptor: REFERENCE fingerprint. If crystal_feats[R] is passed (PLIP fingerprint of the
@@ -412,6 +503,10 @@ def compute_ranking(inter, dc, control_keys, control_assign, ref_info, icols, ds
         if reliable_map and not reliable_map.get(R, True):
             mR["confidence"] = (pd.to_numeric(mR["confidence"], errors="coerce") * 0.5).round(3)
         mR = mR[(mR["is_control"] == 0) | (mR["is_target_control"])].copy()
+        pranks, is_p = compute_pareto_ranks(mR, objectives=["best_dock", "inter_quality", "confidence"],
+                                            minimize_cols={"best_dock"})
+        mR["pareto_rank"] = pranks
+        mR["is_pareto"] = is_p
         blocks.append(mR)
     rk = pd.concat(blocks, ignore_index=True)
     rk["type"] = np.where(rk["is_control"] == 1, "Control",
