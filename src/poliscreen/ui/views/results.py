@@ -13,6 +13,7 @@ import streamlit.components.v1 as components
 from poliscreen.core import caver as cv
 from poliscreen.core import layout as lay
 from poliscreen.core import pipeline as pl
+from poliscreen.core import polygon_interaction as poly
 from poliscreen.core import reagents as rg
 from poliscreen.core import report as rp
 from poliscreen.core import screening as sc
@@ -133,6 +134,204 @@ def _results_tunnels(proj: Path):
         if page.exists():
             st.download_button(t("report.html"), page.read_bytes(), file_name="report.html",
                                mime="text/html", key="tun_html")
+
+
+def _render_top_interaction_leaderboard(
+    R: str,
+    sub: pd.DataFrame,
+    inter: pd.DataFrame,
+    ref_info: dict,
+    meta: dict,
+):
+    """Renders a ranked TOP interaction leaderboard with embedded geometric footprint polygons."""
+    if inter is None or inter.empty:
+        st.info(t("No interactions recorded for this target."))
+        return
+
+    sr = inter[inter["receptor"] == R] if "receptor" in inter.columns else inter
+    if sr.empty:
+        st.info(t("No interactions recorded for this target."))
+        return
+
+    extra_res = (meta.get("catalytic", {}).get(R, []) or []) + (meta.get("secondary", {}).get(R, []) or [])
+    pocket_residues = poly.extract_pocket_residues(sr, R, extra_residues=extra_res)
+    if not pocket_residues:
+        st.info(t("No interactions recorded for this target."))
+        return
+
+    catalytic = meta.get("catalytic", {}).get(R, []) or []
+    secondary = meta.get("secondary", {}).get(R, []) or []
+    ref_features = ref_info.get(R, {}).get("feats", []) or []
+    control_contacts = poly.parse_contacts_from_features(ref_features)
+
+    with st.expander(t("TOP Interaction Footprints (Geometric Polygons)"), expanded=False):
+        st.markdown(t("##### Ranked Geometric Interaction Leaderboard"))
+        st.caption(t("Reference control contour (dashed red) compared against candidate polygon (blue) with color-coded chemical edges."))
+
+        c_sc1, _ = st.columns([3, 2])
+        scope_opts = [t("Top 3"), t("Top 5"), t("Top 10"), t("All Pareto Leaders")]
+        sel_scope = c_sc1.radio(t("Scope"), scope_opts, horizontal=True, key=f"int_scope_{R}", index=1)
+
+        ctrl_df = sub[sub["is_control"] == 1].copy() if "is_control" in sub.columns else pd.DataFrame()
+        cand_df = sub[sub["is_control"] != 1].copy() if "is_control" in sub.columns else sub.copy()
+
+        cand_df["_eff_val"] = pd.to_numeric(cand_df.get("effectiveness_pct"), errors="coerce").fillna(0)
+        cand_df["_pareto_val"] = cand_df.get("is_pareto", False).map({True: 0, False: 1})
+        cand_sorted = cand_df.sort_values(["_pareto_val", "_eff_val"], ascending=[True, False])
+
+        if sel_scope == t("Top 3"):
+            active_cands = cand_sorted.head(3)
+        elif sel_scope == t("Top 5"):
+            active_cands = cand_sorted.head(5)
+        elif sel_scope == t("Top 10"):
+            active_cands = cand_sorted.head(10)
+        else:
+            pareto_cands = cand_sorted[cand_sorted.get("is_pareto") == True]
+            active_cands = pareto_cands if not pareto_cands.empty else cand_sorted.head(5)
+
+        ranked_list: list[dict[str, Any]] = []
+        rank_counter = 1
+
+        if not ctrl_df.empty:
+            c_row = ctrl_df.iloc[0]
+            c_name = str(c_row["compound"])
+            ranked_list.append({
+                "rank": "REF",
+                "name": c_name,
+                "is_control": True,
+                "is_pareto": False,
+                "eff": float(c_row.get("effectiveness_pct") or 100.0),
+                "dock": float(c_row.get("best_dock") or 0.0),
+                "quality": float(c_row.get("best_inter") or 0.0),
+                "cat_cov": float(c_row.get("cat_coverage") or 0.0),
+            })
+
+        for _, c_row in active_cands.iterrows():
+            c_name = str(c_row["compound"])
+            ranked_list.append({
+                "rank": str(rank_counter),
+                "name": c_name,
+                "is_control": False,
+                "is_pareto": bool(c_row.get("is_pareto", False)),
+                "eff": float(c_row.get("effectiveness_pct") or 0.0),
+                "dock": float(c_row.get("best_dock") or 0.0),
+                "quality": float(c_row.get("best_inter") or 0.0),
+                "cat_cov": float(c_row.get("cat_coverage") or 0.0),
+            })
+            rank_counter += 1
+
+        for item in ranked_list:
+            c_name = item["name"]
+            scmp = sr[sr["compound"] == c_name]
+            if scmp.empty:
+                scmp = sr[sr["compound"].map(sc.normalize_key) == sc.normalize_key(c_name)]
+            if not scmp.empty:
+                mod1 = scmp[scmp["name"].apply(lambda n: sc.model_of(n) == "1")]
+                row_p = mod1.iloc[0] if not mod1.empty else scmp.iloc[0]
+                item["contacts"] = poly.parse_contacts_from_row(row_p)
+            else:
+                item["contacts"] = {}
+
+        c_dl1, c_dl2 = st.columns(2)
+        try:
+            pdf_bytes = poly.generate_top_interactions_report(
+                compounds_data=ranked_list,
+                all_pocket_residues=pocket_residues,
+                control_contacts=control_contacts,
+                catalytic_residues=catalytic,
+                secondary_residues=secondary,
+                target_name=_rname(R),
+                format="pdf",
+            )
+            c_dl1.download_button(
+                t("Download TOP Report (PDF)"),
+                pdf_bytes,
+                file_name=f"TOP_Interactions_{_rname(R)}.pdf",
+                mime="application/pdf",
+                key=f"dl_top_pdf_{R}",
+            )
+        except Exception:
+            pass
+
+        try:
+            png_rep_bytes = poly.generate_top_interactions_report(
+                compounds_data=ranked_list,
+                all_pocket_residues=pocket_residues,
+                control_contacts=control_contacts,
+                catalytic_residues=catalytic,
+                secondary_residues=secondary,
+                target_name=_rname(R),
+                format="png",
+                dpi=300,
+            )
+            c_dl2.download_button(
+                t("Download TOP Report (PNG 300 DPI)"),
+                png_rep_bytes,
+                file_name=f"TOP_Interactions_{_rname(R)}.png",
+                mime="image/png",
+                key=f"dl_top_png_{R}",
+            )
+        except Exception:
+            pass
+
+        st.markdown("---")
+
+        for item in ranked_list:
+            card_col1, card_col2 = st.columns([1.1, 1.4])
+            with card_col1:
+                rank_str = item["rank"]
+                tag_label = (
+                    t("Crystallographic Control")
+                    if item["is_control"]
+                    else (t("Pareto Leader") if item["is_pareto"] else t("Candidate"))
+                )
+                tag_color = "#ef4444" if item["is_control"] else ("#3b82f6" if item["is_pareto"] else "#10b981")
+
+                st.markdown(
+                    f"<div style='margin-bottom: 6px;'>"
+                    f"<span style='font-size: 1.12rem; font-weight: 700; color: #f8fafc;'>#{rank_str} · {item['name']}</span> "
+                    f"<span style='font-size: 0.72rem; font-weight: 600; padding: 2px 7px; border-radius: 4px; background: {tag_color}22; color: {tag_color}; border: 1px solid {tag_color};'>{tag_label}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+                st.markdown(
+                    f"- **{t('Effectiveness')}**: `{item['eff']:.1f}%`\n"
+                    f"- **{t('Docking')}**: `{item['dock']:.2f} kcal/mol`\n"
+                    f"- **{t('Quality')}**: `{item['quality']:.3f}`\n"
+                    f"- **{t('Cat. coverage')}**: `{item['cat_cov']*100:.0f}%`"
+                )
+
+            title_text = (
+                f"{item['name']} ({t('Crystallographic Control')})"
+                if item["is_control"]
+                else f"#{rank_str} · {item['name']} ({item['eff']:.1f}% eff)"
+            )
+            c_ctrl_overlay = None if item["is_control"] else control_contacts
+            img_bytes = poly.draw_interaction_polygon_bytes(
+                all_pocket_residues=pocket_residues,
+                compound_contacts=item["contacts"],
+                control_contacts=c_ctrl_overlay,
+                catalytic_residues=catalytic,
+                secondary_residues=secondary,
+                title=title_text,
+                dpi=160,
+            )
+
+            with card_col2:
+                st.image(img_bytes, use_container_width=True)
+
+            safe_name = re.sub(r"[^a-zA-Z0-9_\-]+", "_", item["name"])
+            with card_col1:
+                st.download_button(
+                    t("Download Diagram (PNG)"),
+                    img_bytes,
+                    file_name=f"footprint_{safe_name}_{_rname(R)}.png",
+                    mime="image/png",
+                    key=f"dl_poly_{R}_{safe_name}_{rank_str}",
+                )
+
+            st.markdown("<hr style='margin: 12px 0; border: none; border-top: 1px solid #334155;' />", unsafe_allow_html=True)
 
 
 def _results_screening(proj: Path):
@@ -506,34 +705,13 @@ def _results_screening(proj: Path):
             if S.get("admet") and items:
                 _render_adme(S["admet"], items, keyp="res")
 
-    with st.expander(t("2D Interaction Diagram (Pose Details)"), expanded=False):
-        st.markdown(t("**Interaction diagram** of a specific pose."))
-        d1, d2, d3 = st.columns(3)
-        R_diag = d1.selectbox(t("Receptor"), sorted(inter["receptor"].unique()), key="diag_rec")
-        sr = inter[inter["receptor"] == R_diag]
-        compounds = sorted(sr["compound"].unique())
-        first = 0
-        if "is_control" in sr.columns:
-            controls = [c for c in compounds if bool(sr[sr["compound"] == c]["is_control"].any())]
-            if controls:
-                first = compounds.index(controls[0])
-        cmp_ = d2.selectbox(t("Compound"), compounds, index=first, key="diag_cmp",
-                            help=t("Opens on the control, which is the reference the other "
-                                   "diagrams are judged against."))
-        scmp = sr[sr["compound"] == cmp_]
-        mods = sorted({sc.model_of(n) for n in scmp["name"]})
-        mod = d3.selectbox(t("Pose"), mods, key="diag_pose")
-        row = scmp[scmp["name"].apply(lambda n: sc.model_of(n) == mod)]
-        if not row.empty:
-            reference_ = ref_info.get(R_diag, {}).get("feats", [])
-            fig_int = sc.draw_2d(row.iloc[0], f"{R_diag} · {cmp_} · pose {mod}", reference=reference_)
-            st.pyplot(fig_int, width="content")
-            try:
-                _b = io.BytesIO(); fig_int.savefig(_b, format="png", dpi=160, bbox_inches="tight")
-                _download_image(_b.getvalue(), f"interaccion_{cmp_}_pose{mod}", key=f"int_{R_diag}_{cmp_}_{mod}")
-            except Exception:
-                pass
-            st.caption(t("Green = reproduces a control interaction (same residue and same bond). Gray = extra contact or the same residue with a different bond type."))
+    _render_top_interaction_leaderboard(
+        R=R,
+        sub=sub,
+        inter=inter,
+        ref_info=ref_info,
+        meta=meta,
+    )
 
     st.markdown("---")
     _how_to_cite()
