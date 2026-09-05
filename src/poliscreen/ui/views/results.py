@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -232,11 +233,48 @@ def _render_top_interaction_leaderboard(
             else:
                 item["contacts"] = {}
 
+        # 1. Summary Classification Table
+        table_rows = []
+        for it in ranked_list:
+            tag_lbl = (
+                t("Crystallographic Control")
+                if it["is_control"]
+                else (t("Pareto Leader") if it["is_pareto"] else t("Candidate"))
+            )
+            c_res_list = list(it.get("contacts", {}).keys())
+            c_res_str = ", ".join(c_res_list) if c_res_list else t("None")
+            table_rows.append({
+                t("Rank"): f"#{it['rank']}",
+                t("Compound"): it["name"],
+                t("Status"): tag_lbl,
+                t("Effectiveness (%)"): it["eff"],
+                t("Docking (kcal/mol)"): it["dock"],
+                t("Quality"): it["quality"],
+                t("Cat. coverage"): it["cat_cov"],
+                t("Contacted residues"): c_res_str,
+            })
+
+        df_top = pd.DataFrame(table_rows)
+        cfg_top = {
+            t("Effectiveness (%)"): st.column_config.ProgressColumn(format="%.1f%%", min_value=0.0, max_value=125.0),
+            t("Cat. coverage"): st.column_config.ProgressColumn(format="%.0f%%", min_value=0.0, max_value=1.0),
+            t("Docking (kcal/mol)"): st.column_config.NumberColumn(format="%.2f"),
+            t("Quality"): st.column_config.NumberColumn(format="%.3f"),
+        }
+        st.dataframe(df_top, width="stretch", hide_index=True, column_config=cfg_top)
+
+        # 2. Global Report Downloads
+        composite_residues = poly.get_composite_pocket_residues(
+            compounds_data=ranked_list,
+            control_contacts=control_contacts,
+            catalytic_residues=catalytic,
+            secondary_residues=secondary,
+        )
         c_dl1, c_dl2 = st.columns(2)
         try:
             pdf_bytes = poly.generate_top_interactions_report(
                 compounds_data=ranked_list,
-                all_pocket_residues=pocket_residues,
+                all_pocket_residues=composite_residues,
                 control_contacts=control_contacts,
                 catalytic_residues=catalytic,
                 secondary_residues=secondary,
@@ -256,7 +294,7 @@ def _render_top_interaction_leaderboard(
         try:
             png_rep_bytes = poly.generate_top_interactions_report(
                 compounds_data=ranked_list,
-                all_pocket_residues=pocket_residues,
+                all_pocket_residues=composite_residues,
                 control_contacts=control_contacts,
                 catalytic_residues=catalytic,
                 secondary_residues=secondary,
@@ -275,6 +313,7 @@ def _render_top_interaction_leaderboard(
             pass
 
         st.markdown("---")
+        st.markdown(t("##### Geometric Interaction Footprints (Individual Diagrams)"))
 
         for item in ranked_list:
             card_col1, card_col2 = st.columns([1.1, 1.4])
@@ -308,8 +347,14 @@ def _render_top_interaction_leaderboard(
                 else f"#{rank_str} · {item['name']} ({item['eff']:.1f}% eff)"
             )
             c_ctrl_overlay = None if item["is_control"] else control_contacts
+            clean_residues = poly.get_compound_pocket_residues(
+                compound_contacts=item["contacts"],
+                control_contacts=c_ctrl_overlay,
+                catalytic_residues=catalytic,
+                secondary_residues=secondary,
+            )
             img_bytes = poly.draw_interaction_polygon_bytes(
-                all_pocket_residues=pocket_residues,
+                all_pocket_residues=clean_residues,
                 compound_contacts=item["contacts"],
                 control_contacts=c_ctrl_overlay,
                 catalytic_residues=catalytic,

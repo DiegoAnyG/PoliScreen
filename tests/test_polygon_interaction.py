@@ -125,3 +125,23 @@ def test_generate_top_interactions_report():
     assert isinstance(pdf_bytes, bytes)
     assert pdf_bytes.startswith(b"%PDF")
 
+
+def test_get_compound_pocket_residues():
+    from poliscreen.core.polygon_interaction import get_compound_pocket_residues
+
+    cmp_contacts = {"Leu91": [("hydrophobic", 1)], "Ile377": [("hbond", 1)]}
+    ctrl_contacts = {"Tyr126": [("pistack", 1)], "Phe230": [("hydrophobic", 1)]}
+    cat = ["Tyr126"]
+    sec = ["Leu125"]
+
+    res = get_compound_pocket_residues(
+        compound_contacts=cmp_contacts,
+        control_contacts=ctrl_contacts,
+        catalytic_residues=cat,
+        secondary_residues=sec,
+    )
+    # Total residues is strictly the union of these key anchors and contacts
+    assert res == ["Leu91", "Leu125", "Tyr126", "Phe230", "Ile377"]
+    assert len(res) == 5
+
+

@@ -106,8 +106,57 @@ def parse_contacts_from_features(features: Sequence[str]) -> dict[str, list[tupl
     return contacts
 
 
+def get_compound_pocket_residues(
+    compound_contacts: dict[str, list[tuple[str, int]]],
+    control_contacts: dict[str, list[tuple[str, int]]] | None = None,
+    catalytic_residues: Sequence[str] | None = None,
+    secondary_residues: Sequence[str] | None = None,
+) -> list[str]:
+    """Collect only the scientifically relevant residues for this compound's footprint.
+
+    Includes:
+    - Primary catalytic anchors (user-defined)
+    - Secondary residues (user-defined)
+    - Reference control contacts (docking reference)
+    - Compound contacts (docking pose hits + extra contacts)
+    """
+    res_set: set[str] = set()
+    if catalytic_residues:
+        res_set.update(str(r).strip() for r in catalytic_residues if str(r).strip())
+    if secondary_residues:
+        res_set.update(str(r).strip() for r in secondary_residues if str(r).strip())
+    if control_contacts:
+        res_set.update(str(r).strip() for r in control_contacts.keys() if str(r).strip())
+    if compound_contacts:
+        res_set.update(str(r).strip() for r in compound_contacts.keys() if str(r).strip())
+
+    return sorted(list(res_set), key=residue_sort_key)
+
+
+def get_composite_pocket_residues(
+    compounds_data: list[dict[str, Any]],
+    control_contacts: dict[str, list[tuple[str, int]]] | None = None,
+    catalytic_residues: Sequence[str] | None = None,
+    secondary_residues: Sequence[str] | None = None,
+) -> list[str]:
+    """Collect relevant residues across a set of top compounds."""
+    res_set: set[str] = set()
+    if catalytic_residues:
+        res_set.update(str(r).strip() for r in catalytic_residues if str(r).strip())
+    if secondary_residues:
+        res_set.update(str(r).strip() for r in secondary_residues if str(r).strip())
+    if control_contacts:
+        res_set.update(str(r).strip() for r in control_contacts.keys() if str(r).strip())
+    for item in compounds_data:
+        contacts = item.get("contacts", {})
+        if contacts:
+            res_set.update(str(r).strip() for r in contacts.keys() if str(r).strip())
+
+    return sorted(list(res_set), key=residue_sort_key)
+
+
 def draw_interaction_polygon(
-    all_pocket_residues: Sequence[str],
+    all_pocket_residues: Sequence[str] | None,
     compound_contacts: dict[str, list[tuple[str, int]]],
     control_contacts: dict[str, list[tuple[str, int]]] | None = None,
     catalytic_residues: Sequence[str] | None = None,
@@ -119,7 +168,16 @@ def draw_interaction_polygon(
     show_legend: bool = True,
 ) -> plt.Figure:
     """Render a single geometric interaction footprint polygon."""
-    sorted_res = sorted(list(set(all_pocket_residues)), key=residue_sort_key)
+    if not all_pocket_residues or len(all_pocket_residues) > 16:
+        sorted_res = get_compound_pocket_residues(
+            compound_contacts=compound_contacts,
+            control_contacts=control_contacts,
+            catalytic_residues=catalytic_residues,
+            secondary_residues=secondary_residues,
+        )
+    else:
+        sorted_res = sorted(list(set(all_pocket_residues)), key=residue_sort_key)
+
     m = len(sorted_res)
 
     standalone = ax is None
@@ -354,6 +412,14 @@ def generate_top_interactions_report(
         Each dict has: 'rank', 'name', 'eff', 'dock', 'quality', 'cat_cov', 'contacts'
     """
     n = len(compounds_data)
+    if not all_pocket_residues or len(all_pocket_residues) > 16:
+        all_pocket_residues = get_composite_pocket_residues(
+            compounds_data=compounds_data,
+            control_contacts=control_contacts,
+            catalytic_residues=catalytic_residues,
+            secondary_residues=secondary_residues,
+        )
+
     if n == 0:
         fig, ax = plt.subplots(figsize=(6, 4), facecolor="#0f172a")
         ax.text(0.5, 0.5, "No compounds to display", ha="center", va="center", color="#f8fafc")

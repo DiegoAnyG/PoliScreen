@@ -59,6 +59,8 @@ _ES = {
     'Candidate': 'Candidato',
     'No interactions recorded for this target.': 'No hay interacciones registradas para esta diana.',
     'Ranked Geometric Interaction Leaderboard': 'Clasificación TOP de huellas geométricas de interacción',
+    'Geometric Interaction Footprints (Individual Diagrams)': 'Huellas geométricas de interacción (Diagramas individuales)',
+    'Contacted residues': 'Residuos contactados',
     'Reference control contour (dashed red) compared against candidate polygon (blue) with color-coded chemical edges.': 'Contorno de referencia del control (rojo punteado) comparado con el polígono del candidato (azul) y aristas químicas codificadas por color.',
     'Best pose (Model 1)': 'Mejor pose (Modelo 1)',
     'Primary Catalytic Anchors': 'Anclajes catalíticos primarios',
