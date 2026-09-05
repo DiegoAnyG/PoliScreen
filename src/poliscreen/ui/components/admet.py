@@ -6,6 +6,7 @@ import streamlit as st
 
 from poliscreen.core import reagents as rg
 from poliscreen.core import report as rp
+from poliscreen.core import screening as sc
 from poliscreen.ui.i18n import t
 
 
@@ -63,32 +64,34 @@ def _scatter_dock_inter(sub):
         es_pareto = bool(r.get("_is_pareto_2d", False))
         bd_val = float(r["bd"])
         bi_val = float(r["bi"])
-        name = str(r["compound"])[:15]
+        eff_val = pd.to_numeric(pd.Series([r.get("effectiveness_pct")]), errors="coerce").iloc[0]
+        eff_str = f" ({eff_val:.0f}%)" if pd.notna(eff_val) else ""
+        name = f"{str(r['compound'])[:16]}{eff_str}"
 
         if es_ctrl:
             lbl = t("Control")
-            sc = ax.scatter(bd_val, bi_val, s=130, marker="D", c="#dc2626",
-                            edgecolors="#7f1d1d", linewidths=1.2, zorder=6)
+            sc_pt = ax.scatter(bd_val, bi_val, s=130, marker="D", c="#dc2626",
+                               edgecolors="#7f1d1d", linewidths=1.2, zorder=6)
             if lbl not in legend_handles:
-                legend_handles[lbl] = sc
+                legend_handles[lbl] = sc_pt
             pts_to_annotate.append({"x": bd_val, "y": bi_val, "text": name, "color": "#991b1b",
                                     "fontsize": 8.0, "fontweight": "bold", "priority": 1,
                                     "badge_bg": "#fee2e2", "badge_ec": "#ef4444"})
         elif es_pareto:
             lbl = t("Pareto optimal")
-            sc = ax.scatter(bd_val, bi_val, s=110, marker="o", c="#2563eb",
-                            edgecolors="#f59e0b", linewidths=2.2, zorder=5)
+            sc_pt = ax.scatter(bd_val, bi_val, s=110, marker="o", c="#2563eb",
+                               edgecolors="#f59e0b", linewidths=2.2, zorder=5)
             if lbl not in legend_handles:
-                legend_handles[lbl] = sc
+                legend_handles[lbl] = sc_pt
             pts_to_annotate.append({"x": bd_val, "y": bi_val, "text": name, "color": "#1e3a8a",
                                     "fontsize": 8.0, "fontweight": "bold", "priority": 2,
                                     "badge_bg": "#dbeafe", "badge_ec": "#3b82f6"})
         else:
             lbl = t("Candidate")
-            sc = ax.scatter(bd_val, bi_val, s=55, marker="o", c="#10b981",
-                            edgecolors="#0f766e", linewidths=0.6, alpha=0.85, zorder=4)
+            sc_pt = ax.scatter(bd_val, bi_val, s=55, marker="o", c="#10b981",
+                               edgecolors="#0f766e", linewidths=0.6, alpha=0.85, zorder=4)
             if lbl not in legend_handles:
-                legend_handles[lbl] = sc
+                legend_handles[lbl] = sc_pt
             pts_to_annotate.append({"x": bd_val, "y": bi_val, "text": name, "color": "#334155",
                                     "fontsize": 7.0, "fontweight": "normal", "priority": 3,
                                     "badge_bg": "#ffffff", "badge_ec": "#cbd5e1"})
@@ -172,6 +175,104 @@ def _scatter_dock_inter(sub):
     ax.set_title(t("Docking vs. quality · Pareto frontier · ideal: top-right"), fontsize=9.6, fontweight="bold", pad=10)
     fig.tight_layout()
     return fig
+
+
+def _interactive_pareto_chart(sub, smap=None):
+    """Interactive Altair scatter plot with zoom, pan, and rich hover tooltips."""
+    import altair as alt
+    from poliscreen.core.screening import compute_pareto_ranks
+    d = sub.copy()
+    d["best_dock"] = pd.to_numeric(d.get("best_dock"), errors="coerce")
+    d["best_inter"] = pd.to_numeric(d.get("best_inter"), errors="coerce")
+    d = d.dropna(subset=["best_dock", "best_inter"])
+    if d.empty:
+        return None
+
+    # Compute 2D Pareto frontier on (best_dock, best_inter)
+    _, is_pareto_2d = compute_pareto_ranks(d, objectives=["best_dock", "best_inter"], minimize_cols={"best_dock"})
+    d["_is_pareto_2d"] = is_pareto_2d
+
+    smap = smap or {}
+    d["smiles"] = d["compound"].map(lambda c: smap.get(sc.normalize_key(c), "-"))
+
+    d["category"] = d.apply(
+        lambda r: t("Control") if r.get("is_control") == 1
+        else (t("Pareto optimal") if r.get("_is_pareto_2d") else t("Candidate")),
+        axis=1
+    )
+    d["label"] = d.apply(
+        lambda r: f"{r['compound']} ({r['effectiveness_pct']:.0f}%)" if pd.notna(r.get("effectiveness_pct"))
+        else str(r["compound"]), axis=1
+    )
+
+    color_scale = alt.Scale(
+        domain=[t("Control"), t("Pareto optimal"), t("Candidate")],
+        range=["#dc2626", "#2563eb", "#10b981"]
+    )
+    shape_scale = alt.Scale(
+        domain=[t("Control"), t("Pareto optimal"), t("Candidate")],
+        range=["diamond", "diamond", "circle"]
+    )
+
+    tooltips = [
+        alt.Tooltip("compound:N", title=t("Compound")),
+        alt.Tooltip("category:N", title=t("Status")),
+        alt.Tooltip("effectiveness_pct:Q", format=".1f", title=t("Effectiveness (%)")),
+        alt.Tooltip("best_dock:Q", format=".2f", title=t("Docking (kcal/mol)")),
+        alt.Tooltip("best_inter:Q", format=".3f", title=t("Interaction quality")),
+        alt.Tooltip("confidence:Q", format=".2f", title=t("Confidence")),
+    ]
+    if "pareto_rank" in d.columns:
+        tooltips.append(alt.Tooltip("pareto_rank:Q", title=t("Pareto rank")))
+    if (d["smiles"] != "-").any():
+        tooltips.append(alt.Tooltip("smiles:N", title="SMILES"))
+
+    points = alt.Chart(d).mark_point(size=130, filled=True, opacity=0.9).encode(
+        x=alt.X("best_dock:Q", title=t("Docking (kcal/mol; more negative = better)"),
+                scale=alt.Scale(reverse=True)),
+        y=alt.Y("best_inter:Q", title=t("Interaction quality (0-1 vs. control)"),
+                scale=alt.Scale(zero=False)),
+        color=alt.Color("category:N", scale=color_scale, legend=alt.Legend(title=None, orient="bottom")),
+        shape=alt.Shape("category:N", scale=shape_scale, legend=None),
+        tooltip=tooltips
+    )
+
+    layers = [points]
+
+    pareto_data = d[d["category"].isin([t("Control"), t("Pareto optimal")])].sort_values("best_dock")
+    if len(pareto_data) > 1:
+        line = alt.Chart(pareto_data).mark_line(strokeDash=[5, 4], color="#2563eb", strokeWidth=2.0).encode(
+            x=alt.X("best_dock:Q", scale=alt.Scale(reverse=True)),
+            y=alt.Y("best_inter:Q", scale=alt.Scale(zero=False))
+        )
+        layers.insert(0, line)
+
+    ctrl_rows = d[d["is_control"] == 1]
+    if not ctrl_rows.empty:
+        c_dock = float(ctrl_rows["best_dock"].iloc[0])
+        c_inter = float(ctrl_rows["best_inter"].iloc[0])
+        rule_h = alt.Chart(pd.DataFrame([{"y": c_inter}])).mark_rule(
+            strokeDash=[3, 3], color="#ef4444", opacity=0.5
+        ).encode(y="y:Q")
+        rule_v = alt.Chart(pd.DataFrame([{"x": c_dock}])).mark_rule(
+            strokeDash=[3, 3], color="#ef4444", opacity=0.5
+        ).encode(x="x:Q")
+        layers.insert(0, rule_h)
+        layers.insert(0, rule_v)
+
+    text = alt.Chart(d).mark_text(align="left", baseline="middle", dx=8, fontSize=11).encode(
+        x=alt.X("best_dock:Q", scale=alt.Scale(reverse=True)),
+        y=alt.Y("best_inter:Q", scale=alt.Scale(zero=False)),
+        text="label:N",
+        color=alt.value("#475569")
+    )
+    layers.append(text)
+
+    chart = alt.layer(*layers).properties(
+        title=t("Docking vs. quality · Pareto frontier · ideal: top-right"),
+        height=380
+    ).interactive()
+    return chart
 
 
 def _render_adme(admet, items, keyp):

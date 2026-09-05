@@ -29,7 +29,12 @@ from poliscreen.ui.common import (
     _scene_height,
     _viewer_height,
 )
-from poliscreen.ui.components.admet import _render_adme, _scatter_dock_inter, _shade
+from poliscreen.ui.components.admet import (
+    _interactive_pareto_chart,
+    _render_adme,
+    _scatter_dock_inter,
+    _shade,
+)
 from poliscreen.ui.components.transport import (
     _one_row_per_route,
     _readable_transport,
@@ -152,102 +157,138 @@ def _results_screening(proj: Path):
     ref_info, icols, dscore = sc.build_ref_info(inter, dc, ckeys, cassign,
                                                 crystal_feats=meta.get("crystal_feats"))
 
-    st.markdown(t("**Catalytic / anchor residues**. The score also rewards the quality of the pocket's other interactions."))
-    st.caption(t("Auto-suggested from the directional interactions of the crystallographic ligand. Edit them if you know your target's real catalytic site."))
     cat, sec = {}, {}
-    cols = st.columns(max(1, len(ref_info)))
-    for i, R in enumerate(sorted(ref_info)):
-        options = sorted(set(ref_info[R].get("residues", [])) | set(pocket_res_map.get(R, [])),
-                          key=lambda r: (sc.resnum(r), r))
-        suggested = ref_info[R].get("autocat", [])
-        prev = ([x for x in meta.get("catalytic", {}).get(R, []) if x in options]
-                or [x for x in suggested if x in options])
-        cat[R] = cols[i].multiselect(f"{R}  ·  ref: {ref_info[R].get('src', '?')}", options,
-                                     default=prev, key=f"cat_{R}")
-        free_slots = [x for x in options if x not in cat[R]]
-        k_sec = f"sec_{R}"
-        if k_sec in S:
-            S[k_sec] = [x for x in S[k_sec] if x in free_slots]
-        prev_s = [x for x in meta.get("secondary", {}).get(R, []) if x in free_slots]
-        sec[R] = cols[i].multiselect(t('{v0} · secondary (bonus, not required)').format(v0=R), free_slots,
-                                     default=prev_s, key=f"sec_{R}")
+    with st.expander(t("Scoring Configuration, Residues & Validation"), expanded=False):
+        tab_res, tab_w, tab_val = st.tabs([
+            t("Active Site Residues"),
+            t("Scoring Weights"),
+            t("Validation Diagnostics"),
+        ])
+        with tab_res:
+            st.caption(t("Auto-suggested from the directional interactions of the crystallographic ligand. Edit them if you know your target's real catalytic site."))
+            res_targets = sorted(ref_info)
+            if len(res_targets) > 1:
+                res_tabs = st.tabs([_rname(R) for R in res_targets])
+                for i, R in enumerate(res_targets):
+                    with res_tabs[i]:
+                        options = sorted(set(ref_info[R].get("residues", [])) | set(pocket_res_map.get(R, [])),
+                                          key=lambda r: (sc.resnum(r), r))
+                        suggested = ref_info[R].get("autocat", [])
+                        prev = ([x for x in meta.get("catalytic", {}).get(R, []) if x in options]
+                                or [x for x in suggested if x in options])
+                        c1, c2 = st.columns(2)
+                        cat[R] = c1.multiselect(
+                            f"{_rname(R)} · " + t("Primary Catalytic Anchors") + f" (ref: {ref_info[R].get('src', '?')})",
+                            options, default=prev, key=f"cat_{R}"
+                        )
+                        free_slots = [x for x in options if x not in cat[R]]
+                        k_sec = f"sec_{R}"
+                        if k_sec in S:
+                            S[k_sec] = [x for x in S[k_sec] if x in free_slots]
+                        prev_s = [x for x in meta.get("secondary", {}).get(R, []) if x in free_slots]
+                        sec[R] = c2.multiselect(
+                            f"{_rname(R)} · " + t("Secondary Residues (bonus)"),
+                            free_slots, default=prev_s, key=f"sec_{R}"
+                        )
+            elif res_targets:
+                R = res_targets[0]
+                options = sorted(set(ref_info[R].get("residues", [])) | set(pocket_res_map.get(R, [])),
+                                  key=lambda r: (sc.resnum(r), r))
+                suggested = ref_info[R].get("autocat", [])
+                prev = ([x for x in meta.get("catalytic", {}).get(R, []) if x in options]
+                        or [x for x in suggested if x in options])
+                c1, c2 = st.columns(2)
+                cat[R] = c1.multiselect(
+                    f"{_rname(R)} · " + t("Primary Catalytic Anchors") + f" (ref: {ref_info[R].get('src', '?')})",
+                    options, default=prev, key=f"cat_{R}"
+                )
+                free_slots = [x for x in options if x not in cat[R]]
+                k_sec = f"sec_{R}"
+                if k_sec in S:
+                    S[k_sec] = [x for x in S[k_sec] if x in free_slots]
+                prev_s = [x for x in meta.get("secondary", {}).get(R, []) if x in free_slots]
+                sec[R] = c2.multiselect(
+                    f"{_rname(R)} · " + t("Secondary Residues (bonus)"),
+                    free_slots, default=prev_s, key=f"sec_{R}"
+                )
 
-    val_p = lay.artifact(proj, lay.VALIDATION_CSV)
-    if val_p.exists():
-        val = vl.normalize(pd.read_csv(val_p))
-        _v = vl.summary(val)
-        if _v["ok"] is None:
-            msg = t("No controls: the setup cannot be validated.")
-        elif _v["ok"]:
-            msg = t("The control recovers the crystallographic pose: the setup is reliable.") \
-                if _v["n"] == 1 else \
-                t("The {n} controls recover the crystallographic pose: the setup is reliable.").format(n=_v["n"])
-        else:
-            _who = (t("The control does not recover") if _v["n"] == 1
-                    else t("{m} of {n} controls do NOT recover").format(m=_v["n_failing"], n=_v["n"]))
-            msg = t("WARNING: {who} the pose ({targets}). Check the box or the preparation of "
-                    "that target before trusting the ranking.").format(
-                        who=_who, targets=", ".join(_v["targets"]))
-        (st.success if _v["ok"] is not False else st.error)(msg)
-        with st.expander(t("Redocking validation detail")):
-            st.dataframe(val.assign(target=val["target"].map(_rname)),
-                         width="stretch", hide_index=True)
-            st.caption(t("RMSD against the co-crystallized ligand. Valid below 2 Å."))
+        with tab_w:
+            mw = meta.get("weights", {})
+            metric_afin = st.radio(
+                t("Affinity-axis metric"), ["dock", "le"], horizontal=True,
+                index=1 if str(mw.get("dock_metric", "dock")).lower() == "le" else 0,
+                format_func=lambda m: t("Raw score (kcal/mol)") if m == "dock" else t("Ligand efficiency (LE)"),
+                help=t("Vina's raw score favors large molecules (size bias). LE = -ΔG/heavy atoms corrects it. Recommended if your library varies widely in size; both columns are reported."))
+            c1, c2, c3, c4 = st.columns(4)
+            w_dock = c1.slider(t("Docking weight"), 0.0, 1.0, float(mw.get("dock", 0.5)), 0.05)
+            w_inter = c2.slider(t("Interactions weight"), 0.0, 1.0, float(mw.get("inter", 0.5)), 0.05)
+            w_adme = c3.slider(t("ADME weight"), 0.0, 1.0, float(mw.get("adme", 0.0)), 0.05,
+                               help=t("Physicochemical (drug-likeness) quality of the compound. Guards against rewarding only large/greasy molecules."))
+            w_tox = c4.slider(t("Toxicity weight"), 0.0, 1.0, float(mw.get("tox", 0.0)), 0.05,
+                              help=t("Requires ADMET predicted (Ligands tab); otherwise this axis is ignored."))
+            c5, c6, c7 = st.columns(3)
+            w_cat = c5.slider(t("Catalytic-residue weight"), 1.0, 6.0, float(mw.get("w_cat", 3.0)), 0.5,
+                              help=t("How much an interaction with a catalytic (gate) residue is worth vs. an ordinary pocket one."))
+            w_sec = c6.slider(t("Secondary-residue weight"), 1.0, 3.0, float(mw.get("w_sec", 1.5)), 0.25,
+                              help=t("How much an interaction with a SECONDARY anchor is worth vs. an ordinary pocket contact (×1)."))
+            cat_gate = c7.slider(t("Catalytic strictness"), 0.0, 1.0, float(mw.get("cat_gate", 0.5)), 0.05,
+                                 help=t("0 = missing a catalytic residue is not penalized; 1 = missing all nullifies the score."))
+            _axw = {"docking": w_dock, "interaction": w_inter, "ADME": w_adme, "tox": w_tox}
+            _tot = sum(_axw.values())
+            if _tot > 0:
+                st.caption("Real contribution of each axis: "
+                           + " · ".join(f"{k} {v / _tot * 100:.0f}%" for k, v in _axw.items() if v > 0))
+            else:
+                st.warning(t("All axis weights are 0: there will be no score. Raise at least one."))
+            with st.expander(t("Weights by interaction type (advanced)"), expanded=False):
+                st.caption(t("Merit value per type (0-1). Default: salt bridge > H-bond > π > halogen > hydrophobic. Literature-guided; adjust to your judgment."))
+                st.caption(t("`water` (water-mediated bridges) only matters if you keep water molecules when preparing the receptor. In the usual flow they are removed, so this weight has no effect."))
+                tw = {}; tcols = st.columns(4)
+                for j, (tk, tv) in enumerate(sc.TYPE_WEIGHTS.items()):
+                    tw[tk] = tcols[j % 4].number_input(
+                        tk, 0.0, 1.0, float((mw.get("type_weights") or {}).get(tk, tv)), 0.05, key=f"tw_{tk}")
 
-    crystal = meta.get("crystal_feats", {})
-    if crystal:
-        rows_ = []
-        for R in sorted(crystal):
-            cks = {ck for ck, rc in cassign.items() if rc == R} or ckeys
-            sub = inter[(inter["receptor"] == R) & (inter["ckey"].isin(cks))]
-            if sub.empty:
-                continue
-            s = sub["name"].map(lambda n: dscore.get(sc.pose_key(n), float("nan")))
-            best = sub.loc[s.idxmin()] if s.notna().any() else sub.iloc[0]
-            pose_feats = [c for c in icols if best[c] > 0]
-            rec = sc.fp_recovery(crystal[R], pose_feats)
-            rows_.append({"receptor": R, "recovery": rec["recovery"], "Tanimoto": rec["tanimoto"],
-                          "reproduced": f"{rec['shared']}/{rec['ref_n']}", "extra (non-crystal)": rec["extra"]})
-        if rows_:
-            st.markdown(t("**Interaction validation** — docked control vs. crystallographic ligand."))
-            st.dataframe(pd.DataFrame(rows_), width="stretch", hide_index=True)
-            st.caption(t("`recovery` = fraction of the crystallographic interactions reproduced by the control's docked pose; `Tanimoto` also includes the extra contacts docking adds. "))
+        with tab_val:
+            val_p = lay.artifact(proj, lay.VALIDATION_CSV)
+            if val_p.exists():
+                val = vl.normalize(pd.read_csv(val_p))
+                _v = vl.summary(val)
+                if _v["ok"] is None:
+                    msg = t("No controls: the setup cannot be validated.")
+                elif _v["ok"]:
+                    msg = t("The control recovers the crystallographic pose: the setup is reliable.") \
+                        if _v["n"] == 1 else \
+                        t("The {n} controls recover the crystallographic pose: the setup is reliable.").format(n=_v["n"])
+                else:
+                    _who = (t("The control does not recover") if _v["n"] == 1
+                            else t("{m} of {n} controls do NOT recover").format(m=_v["n_failing"], n=_v["n"]))
+                    msg = t("WARNING: {who} the pose ({targets}). Check the box or the preparation of "
+                            "that target before trusting the ranking.").format(
+                                who=_who, targets=", ".join(_v["targets"]))
+                (st.success if _v["ok"] is not False else st.warning)(msg)
+                st.dataframe(val.assign(target=val["target"].map(_rname)),
+                             width="stretch", hide_index=True)
+                st.caption(t("RMSD against the co-crystallized ligand. Valid below 2 Å."))
 
-    st.markdown(t("**Weighting**"))
-    mw = meta.get("weights", {})
-    metric_afin = st.radio(
-        t("Affinity-axis metric"), ["dock", "le"], horizontal=True,
-        index=1 if str(mw.get("dock_metric", "dock")).lower() == "le" else 0,
-        format_func=lambda m: t("Raw score (kcal/mol)") if m == "dock" else t("Ligand efficiency (LE)"),
-        help=t("Vina's raw score favors large molecules (size bias). LE = -ΔG/heavy atoms corrects it. Recommended if your library varies widely in size; both columns are reported."))
-    c1, c2, c3, c4 = st.columns(4)
-    w_dock = c1.slider(t("Docking weight"), 0.0, 1.0, float(mw.get("dock", 0.5)), 0.05)
-    w_inter = c2.slider(t("Interactions weight"), 0.0, 1.0, float(mw.get("inter", 0.5)), 0.05)
-    w_adme = c3.slider(t("ADME weight"), 0.0, 1.0, float(mw.get("adme", 0.0)), 0.05,
-                       help=t("Physicochemical (drug-likeness) quality of the compound. Guards against rewarding only large/greasy molecules."))
-    w_tox = c4.slider(t("Toxicity weight"), 0.0, 1.0, float(mw.get("tox", 0.0)), 0.05,
-                      help=t("Requires ADMET predicted (Ligands tab); otherwise this axis is ignored."))
-    c5, c6, c7 = st.columns(3)
-    w_cat = c5.slider(t("Catalytic-residue weight"), 1.0, 6.0, float(mw.get("w_cat", 3.0)), 0.5,
-                      help=t("How much an interaction with a catalytic (gate) residue is worth vs. an ordinary pocket one."))
-    w_sec = c6.slider(t("Secondary-residue weight"), 1.0, 3.0, float(mw.get("w_sec", 1.5)), 0.25,
-                      help=t("How much an interaction with a SECONDARY anchor is worth vs. an ordinary pocket contact (×1)."))
-    cat_gate = c7.slider(t("Catalytic strictness"), 0.0, 1.0, float(mw.get("cat_gate", 0.5)), 0.05,
-                         help=t("0 = missing a catalytic residue is not penalized; 1 = missing all nullifies the score."))
-    _axw = {"docking": w_dock, "interaction": w_inter, "ADME": w_adme, "tox": w_tox}
-    _tot = sum(_axw.values())
-    if _tot > 0:
-        st.caption("Real contribution of each axis: "
-                   + " · ".join(f"{k} {v / _tot * 100:.0f}%" for k, v in _axw.items() if v > 0))
-    else:
-        st.warning(t("All axis weights are 0: there will be no score. Raise at least one."))
-    with st.expander(t("Weights by interaction type (advanced)")):
-        st.caption(t("Merit value per type (0-1). Default: salt bridge > H-bond > π > halogen > hydrophobic. Literature-guided; adjust to your judgment."))
-        st.caption(t("`water` (water-mediated bridges) only matters if you keep water molecules when preparing the receptor. In the usual flow they are removed, so this weight has no effect."))
-        tw = {}; tcols = st.columns(4)
-        for j, (tk, tv) in enumerate(sc.TYPE_WEIGHTS.items()):
-            tw[tk] = tcols[j % 4].number_input(
-                tk, 0.0, 1.0, float((mw.get("type_weights") or {}).get(tk, tv)), 0.05, key=f"tw_{tk}")
+            crystal = meta.get("crystal_feats", {})
+            if crystal:
+                rows_ = []
+                for R in sorted(crystal):
+                    cks = {ck for ck, rc in cassign.items() if rc == R} or ckeys
+                    sub = inter[(inter["receptor"] == R) & (inter["ckey"].isin(cks))]
+                    if sub.empty:
+                        continue
+                    s = sub["name"].map(lambda n: dscore.get(sc.pose_key(n), float("nan")))
+                    best = sub.loc[s.idxmin()] if s.notna().any() else sub.iloc[0]
+                    pose_feats = [c for c in icols if best[c] > 0]
+                    rec = sc.fp_recovery(crystal[R], pose_feats)
+                    rows_.append({"receptor": R, "recovery": rec["recovery"], "Tanimoto": rec["tanimoto"],
+                                  "reproduced": f"{rec['shared']}/{rec['ref_n']}", "extra (non-crystal)": rec["extra"]})
+                if rows_:
+                    st.markdown(t("**Interaction validation** — docked control vs. crystallographic ligand."))
+                    st.dataframe(pd.DataFrame(rows_), width="stretch", hide_index=True)
+                    st.caption(t("`recovery` = fraction of the crystallographic interactions reproduced by the control's docked pose; `Tanimoto` also includes the extra contacts docking adds. "))
+
     w = dict(pl.DEFAULT_WEIGHTS)
     w.update(dock=w_dock, inter=w_inter, adme=w_adme, tox=w_tox, dock_metric=metric_afin,
              w_cat=w_cat, w_sec=w_sec, cat_gate=cat_gate, type_weights=tw)
@@ -338,64 +379,140 @@ def _results_screening(proj: Path):
     _dianas = sorted({sc.display_name(sc.base_of(x)) for x in rk["receptor"].unique()})
     if len(_dianas) > 1:
         _pleiotropic_summary(rk, _dianas)
-    for R in sorted(rk["receptor"].unique()):
-        sub = rk[rk["receptor"] == R].copy()
-        _rn = _rname(R)
-        _et = (f"{_rn.split('~')[0]} · " + t("site") + f" **{_rn.split('~', 1)[1]}**"
-               if "~" in _rn else f"**{_rn}**")
-        _refsrc = meta.get("site_reference", {}).get(R) or ref_info.get(R, {}).get("src", "?")
-        st.markdown(t('{v0} · interaction reference: `{v2}`').format(v0=_et, v2=_refsrc))
-        noc = sub[sub["is_control"] != 1]
-        n_pareto = int((noc.get("is_pareto") == True).sum()) if "is_pareto" in noc.columns else 0
-        if not noc.empty:
-            m1, m2, m3, m4, m5 = st.columns(5)
-            try:
-                bd = noc.loc[pd.to_numeric(noc["best_dock"], errors="coerce").idxmin()]
-                m1.metric(t("Best docking"), str(bd["compound"])[:18], f"{bd['best_dock']:.2f} kcal/mol",
-                          delta_color="inverse")
-            except Exception:
-                pass
-            try:
-                bi = noc.loc[pd.to_numeric(noc["best_inter"], errors="coerce").idxmax()]
-                m2.metric(t("Best interaction quality"), str(bi["compound"])[:18], f"{bi['best_inter']:.2f}")
-            except Exception:
-                pass
-            try:
-                be = noc.loc[pd.to_numeric(noc["effectiveness_pct"], errors="coerce").idxmax()]
-                m3.metric(t("Best effectiveness"), str(be["compound"])[:18], f"{be['effectiveness_pct']:.0f} %")
-            except Exception:
-                pass
-            try:
-                bc = noc.loc[pd.to_numeric(noc["confidence"], errors="coerce").idxmax()]
-                m4.metric(t("Highest confidence"), str(bc["compound"])[:18], f"{bc['confidence']:.2f}")
-            except Exception:
-                pass
-            if n_pareto > 0:
-                m5.metric(t("Pareto leaders"), f"{n_pareto} / {len(noc)}", delta=t("optimal"), delta_color="normal")
+    targets_all = sorted(rk["receptor"].unique())
+    if not targets_all:
+        st.info(t("No results to display."))
+        return
 
-        if "is_pareto" in sub.columns and n_pareto > 0:
-            pareto_only = st.checkbox(t("Filter Pareto frontier only"), key=f"pareto_only_{R}")
-            sub_display = sub[sub["is_pareto"] | (sub["is_control"] == 1)].copy() if pareto_only else sub.copy()
-        else:
-            sub_display = sub.copy()
+    if len(targets_all) > 1:
+        c_tar1, c_tar2 = st.columns([3, 1])
+        active_target = c_tar1.selectbox(
+            t("Active target / receptor"),
+            targets_all,
+            format_func=lambda r: _rname(r) + (f" · " + t("site") + f" {r.split('~', 1)[1]}" if "~" in r else ""),
+            key="rk_active_target"
+        )
+        c_tar2.download_button(t("Download all (CSV)"), rk.to_csv(index=False).encode(),
+                               "ranking_all_targets.csv", key="dl_rk_all")
+    else:
+        active_target = targets_all[0]
+        st.download_button(t("Download ranking (CSV)"), rk.to_csv(index=False).encode(),
+                           "ranking.csv", key="dl_rk_single")
 
-        view_ = sub_display[chosen_items]
-        st.dataframe(_shade(view_.assign(source=sub_display.get("source", "")), "source") if tuyos else view_,
-                     width="stretch", height=min(400, 60 + 34 * len(sub_display)))
-        _download_table(view_, f"ranking_{R}", key=f"rk_{R}")
-        g1, g2 = st.columns(2)
-        ch = sub.dropna(subset=["effectiveness_pct"]).set_index("compound")["effectiveness_pct"]
-        if not ch.empty:
-            g1.bar_chart(ch, height=260)
-        fig = _scatter_dock_inter(sub)
+    R = active_target
+    sub = rk[rk["receptor"] == R].copy()
+    _rn = _rname(R)
+    _et = (f"{_rn.split('~')[0]} · " + t("site") + f" **{_rn.split('~', 1)[1]}**"
+           if "~" in _rn else f"**{_rn}**")
+    _refsrc = meta.get("site_reference", {}).get(R) or ref_info.get(R, {}).get("src", "?")
+    st.markdown(t('{v0} · interaction reference: `{v2}`').format(v0=_et, v2=_refsrc))
+    noc = sub[sub["is_control"] != 1]
+    n_pareto = int((noc.get("is_pareto") == True).sum()) if "is_pareto" in noc.columns else 0
+    if not noc.empty:
+        k1, k2, k3, k4, k5 = st.columns(5)
+        try:
+            bd = noc.loc[pd.to_numeric(noc["best_dock"], errors="coerce").idxmin()]
+            k1.metric(t("Best docking"), f"{bd['best_dock']:.2f} kcal/mol", help=str(bd["compound"]))
+            k1.caption(f"**{str(bd['compound'])}**")
+        except Exception:
+            pass
+        try:
+            bi = noc.loc[pd.to_numeric(noc["best_inter"], errors="coerce").idxmax()]
+            k2.metric(t("Best interaction quality"), f"{bi['best_inter']:.2f}", help=str(bi["compound"]))
+            k2.caption(f"**{str(bi['compound'])}**")
+        except Exception:
+            pass
+        try:
+            be = noc.loc[pd.to_numeric(noc["effectiveness_pct"], errors="coerce").idxmax()]
+            k3.metric(t("Best effectiveness"), f"{be['effectiveness_pct']:.0f} %", help=str(be["compound"]))
+            k3.caption(f"**{str(be['compound'])}**")
+        except Exception:
+            pass
+        try:
+            bc = noc.loc[pd.to_numeric(noc["confidence"], errors="coerce").idxmax()]
+            k4.metric(t("Highest confidence"), f"{bc['confidence']:.2f}", help=str(bc["compound"]))
+            k4.caption(f"**{str(bc['compound'])}**")
+        except Exception:
+            pass
+        if n_pareto > 0:
+            k5.metric(t("Pareto leaders"), f"{n_pareto} / {len(noc)}", delta=t("optimal"), delta_color="normal")
+            k5.caption(t("multi-objective"))
+
+    if "is_pareto" in sub.columns and n_pareto > 0:
+        pareto_only = st.checkbox(t("Filter Pareto frontier only"), key=f"pareto_only_{R}")
+        sub_display = sub[sub["is_pareto"] | (sub["is_control"] == 1)].copy() if pareto_only else sub.copy()
+    else:
+        sub_display = sub.copy()
+
+    col_cfg = {
+        "effectiveness_pct": st.column_config.ProgressColumn(
+            t("Effectiveness (%)"), format="%.1f%%", min_value=0.0, max_value=125.0
+        ),
+        "cat_coverage": st.column_config.ProgressColumn(
+            t("Cat. coverage"), format="%.0f%%", min_value=0.0, max_value=1.0
+        ),
+        "best_dock": st.column_config.NumberColumn(t("Docking (kcal/mol)"), format="%.2f"),
+        "best_inter": st.column_config.NumberColumn(t("Quality"), format="%.3f"),
+        "confidence": st.column_config.NumberColumn(t("Confidence"), format="%.2f"),
+        "pKi": st.column_config.NumberColumn("pKi", format="%.2f"),
+        "LE": st.column_config.NumberColumn("LE", format="%.3f"),
+        "pareto_rank": st.column_config.NumberColumn(t("Pareto rank"), format="%d"),
+    }
+    view_ = sub_display[chosen_items]
+    st.dataframe(_shade(view_.assign(source=sub_display.get("source", "")), "source") if tuyos else view_,
+                 width="stretch", height=min(380, 60 + 34 * len(sub_display)),
+                 column_config=col_cfg)
+    _download_table(view_, f"ranking_{R}", key=f"rk_{R}")
+
+    st.markdown("---")
+    st.markdown(t("##### Pareto Frontier Landscape"))
+    plot_mode = st.radio(
+        t("Plot view"),
+        [t("Interactive Explorer (Zoom & Tooltips)"), t("Publication Figure (Matplotlib)")],
+        horizontal=True,
+        key=f"plot_mode_{R}",
+        label_visibility="collapsed"
+    )
+    if plot_mode == t("Interactive Explorer (Zoom & Tooltips)"):
+        alt_chart = _interactive_pareto_chart(sub_display, smap=smap)
+        if alt_chart:
+            st.altair_chart(alt_chart, use_container_width=True)
+    else:
+        fig = _scatter_dock_inter(sub_display)
         if fig:
-            g2.pyplot(fig)
-    st.download_button(t("Download ranking (CSV)"), rk.to_csv(index=False).encode(), "ranking.csv")
+            st.pyplot(fig, use_container_width=True)
+            try:
+                _b = io.BytesIO()
+                fig.savefig(_b, format="png", dpi=300, bbox_inches="tight")
+                st.download_button(t("Download Figure (PNG 300 DPI)"), _b.getvalue(),
+                                   file_name=f"pareto_{R}.png", mime="image/png",
+                                   key=f"dl_fig_{R}")
+            except Exception:
+                pass
+
+    with st.expander(t("Inspect compound structure & properties"), expanded=False):
+        cmps_avail = sorted(sub_display["compound"].unique())
+        if cmps_avail:
+            sel_cmp = st.selectbox(t("Compound"), cmps_avail, key=f"inspect_cmp_{R}")
+            hit = sub_display[sub_display["compound"] == sel_cmp]
+            if not hit.empty:
+                h0 = hit.iloc[0]
+                ic1, ic2 = st.columns([1, 2])
+                smi = smap.get(sc.normalize_key(sel_cmp))
+                if smi:
+                    png = vw.molecule_png(smi, size=180)
+                    if png:
+                        ic1.image(png)
+                    ic2.code(smi, language="text")
+                ic2.write(f"**{t('Effectiveness')}**: {h0.get('effectiveness_pct', 0):.1f}% · "
+                          f"**{t('Docking')}**: {h0.get('best_dock', 0):.2f} kcal/mol · "
+                          f"**{t('Quality')}**: {h0.get('best_inter', 0):.3f} · "
+                          f"**{t('Confidence')}**: {h0.get('confidence', 0):.2f}")
 
     items_all = [(c, smap[sc.normalize_key(c)]) for c in rk["compound"].unique()
                  if sc.normalize_key(c) in smap and pd.notna(smap.get(sc.normalize_key(c)))]
     if items_all:
-        with st.expander(t("ADMET report (compounds + core + control, those you choose)")):
+        with st.expander(t("ADMET report (compounds + core + control, those you choose)"), expanded=False):
             all_names = [c for c, _ in items_all]
             chosen_adme = st.multiselect(t("Which ligands to predict ADMET for?"), all_names,
                                            default=all_names, key="adme_sel_res")
@@ -407,34 +524,34 @@ def _results_screening(proj: Path):
             if S.get("admet") and items:
                 _render_adme(S["admet"], items, keyp="res")
 
-    st.markdown("---")
-    st.markdown(t("**Interaction diagram** of a specific pose."))
-    d1, d2, d3 = st.columns(3)
-    R = d1.selectbox(t("Receptor"), sorted(inter["receptor"].unique()))
-    sr = inter[inter["receptor"] == R]
-    compounds = sorted(sr["compound"].unique())
-    first = 0
-    if "is_control" in sr.columns:
-        controls = [c for c in compounds if bool(sr[sr["compound"] == c]["is_control"].any())]
-        if controls:
-            first = compounds.index(controls[0])
-    cmp_ = d2.selectbox(t("Compound"), compounds, index=first,
-                        help=t("Opens on the control, which is the reference the other "
-                               "diagrams are judged against."))
-    scmp = sr[sr["compound"] == cmp_]
-    mods = sorted({sc.model_of(n) for n in scmp["name"]})
-    mod = d3.selectbox(t("Pose"), mods)
-    row = scmp[scmp["name"].apply(lambda n: sc.model_of(n) == mod)]
-    if not row.empty:
-        reference_ = ref_info.get(R, {}).get("feats", [])
-        fig_int = sc.draw_2d(row.iloc[0], f"{R} · {cmp_} · pose {mod}", reference=reference_)
-        st.pyplot(fig_int, width="content")
-        try:
-            _b = io.BytesIO(); fig_int.savefig(_b, format="png", dpi=160, bbox_inches="tight")
-            _download_image(_b.getvalue(), f"interaccion_{cmp_}_pose{mod}", key=f"int_{R}_{cmp_}_{mod}")
-        except Exception:
-            pass
-        st.caption(t("Green = reproduces a control interaction (same residue and same bond). Gray = extra contact or the same residue with a different bond type."))
+    with st.expander(t("2D Interaction Diagram (Pose Details)"), expanded=False):
+        st.markdown(t("**Interaction diagram** of a specific pose."))
+        d1, d2, d3 = st.columns(3)
+        R_diag = d1.selectbox(t("Receptor"), sorted(inter["receptor"].unique()), key="diag_rec")
+        sr = inter[inter["receptor"] == R_diag]
+        compounds = sorted(sr["compound"].unique())
+        first = 0
+        if "is_control" in sr.columns:
+            controls = [c for c in compounds if bool(sr[sr["compound"] == c]["is_control"].any())]
+            if controls:
+                first = compounds.index(controls[0])
+        cmp_ = d2.selectbox(t("Compound"), compounds, index=first, key="diag_cmp",
+                            help=t("Opens on the control, which is the reference the other "
+                                   "diagrams are judged against."))
+        scmp = sr[sr["compound"] == cmp_]
+        mods = sorted({sc.model_of(n) for n in scmp["name"]})
+        mod = d3.selectbox(t("Pose"), mods, key="diag_pose")
+        row = scmp[scmp["name"].apply(lambda n: sc.model_of(n) == mod)]
+        if not row.empty:
+            reference_ = ref_info.get(R_diag, {}).get("feats", [])
+            fig_int = sc.draw_2d(row.iloc[0], f"{R_diag} · {cmp_} · pose {mod}", reference=reference_)
+            st.pyplot(fig_int, width="content")
+            try:
+                _b = io.BytesIO(); fig_int.savefig(_b, format="png", dpi=160, bbox_inches="tight")
+                _download_image(_b.getvalue(), f"interaccion_{cmp_}_pose{mod}", key=f"int_{R_diag}_{cmp_}_{mod}")
+            except Exception:
+                pass
+            st.caption(t("Green = reproduces a control interaction (same residue and same bond). Gray = extra contact or the same residue with a different bond type."))
 
     st.markdown("---")
     _how_to_cite()
