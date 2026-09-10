@@ -56,8 +56,13 @@ echo   Projects folder     %PROJECTS%
 
 rem Create desktop shortcut with icon if not already present
 if not exist "%USERPROFILE%\Desktop\PoliScreen.lnk" (
+    if not exist "%~dp0PoliScreen.ico" (
+        powershell -NoProfile -Command "try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DiegoAnyG/PoliScreen/main/scripts/PoliScreen.ico' -OutFile '%~dp0PoliScreen.ico' -UseBasicParsing } catch {}" >nul 2>&1
+    )
     if exist "%~dp0PoliScreen.ico" (
         powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut(\"$env:USERPROFILE\Desktop\PoliScreen.lnk\"); $s.TargetPath = \"%~f0\"; $s.IconLocation = \"%~dp0PoliScreen.ico\"; $s.WorkingDirectory = \"%USERPROFILE%\"; $s.Save()" >nul 2>&1
+    ) else (
+        powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut(\"$env:USERPROFILE\Desktop\PoliScreen.lnk\"); $s.TargetPath = \"%~f0\"; $s.WorkingDirectory = \"%USERPROFILE%\"; $s.Save()" >nul 2>&1
     )
 )
 echo.
@@ -83,14 +88,10 @@ if errorlevel 1 (
         set "IMAGE=%FALLBACK%"
     )
 ) else (
-    rem Already downloaded. Checking for a newer one costs a few kilobytes -- the manifest, not
-    rem the layers -- and skipping it is how somebody keeps running a version fixed months ago
-    rem without ever being told. Offline, the copy on disk is used and nothing is said, because
-    rem being offline is not an error here.
     echo   Checking for updates...
-    docker pull %IMAGE% >nul 2>&1
+    docker pull %IMAGE%
     if errorlevel 1 (
-        echo   Image               local copy (no network^)
+        echo   Image               local copy (offline or network error^)
     ) else (
         echo   Image               up to date
         rem A pull that replaced the image leaves the previous one untagged. Only this
