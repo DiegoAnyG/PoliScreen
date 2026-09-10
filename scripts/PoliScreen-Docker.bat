@@ -54,17 +54,11 @@ echo   Docker              OK
 if not exist "%PROJECTS%" mkdir "%PROJECTS%"
 echo   Projects folder     %PROJECTS%
 
-rem Create desktop shortcut with icon if not already present
-if not exist "%USERPROFILE%\Desktop\PoliScreen.lnk" (
-    if not exist "%~dp0PoliScreen.ico" (
-        powershell -NoProfile -Command "try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DiegoAnyG/PoliScreen/main/scripts/PoliScreen.ico' -OutFile '%~dp0PoliScreen.ico' -UseBasicParsing } catch {}" >nul 2>&1
-    )
-    if exist "%~dp0PoliScreen.ico" (
-        powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut(\"$env:USERPROFILE\Desktop\PoliScreen.lnk\"); $s.TargetPath = \"%~f0\"; $s.IconLocation = \"%~dp0PoliScreen.ico\"; $s.WorkingDirectory = \"%USERPROFILE%\"; $s.Save()" >nul 2>&1
-    ) else (
-        powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut(\"$env:USERPROFILE\Desktop\PoliScreen.lnk\"); $s.TargetPath = \"%~f0\"; $s.WorkingDirectory = \"%USERPROFILE%\"; $s.Save()" >nul 2>&1
-    )
+rem Create desktop shortcut with icon
+if not exist "%~dp0PoliScreen.ico" (
+    powershell -NoProfile -Command "try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DiegoAnyG/PoliScreen/main/scripts/PoliScreen.ico' -OutFile '%~dp0PoliScreen.ico' -UseBasicParsing } catch {}" >nul 2>&1
 )
+powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $desk = $ws.SpecialFolders.Item('Desktop'); $lnk = Join-Path $desk 'PoliScreen.lnk'; if (-not (Test-Path $lnk)) { $s = $ws.CreateShortcut($lnk); $s.TargetPath = '%~f0'; if (Test-Path '%~dp0PoliScreen.ico') { $s.IconLocation = '%~dp0PoliScreen.ico' }; $s.WorkingDirectory = $env:USERPROFILE; $s.Save() }" >nul 2>&1
 echo.
 
 docker image inspect %IMAGE% >nul 2>&1
