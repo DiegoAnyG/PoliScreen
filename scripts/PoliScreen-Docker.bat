@@ -91,7 +91,7 @@ if errorlevel 1 (
     echo   Checking for updates...
     docker pull %IMAGE%
     if errorlevel 1 (
-        echo   Image               local copy (offline or network error^)
+        echo   Image               local copy (no network^)
     ) else (
         echo   Image               up to date
         rem A pull that replaced the image leaves the previous one untagged. Only this

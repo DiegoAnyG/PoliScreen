@@ -16,82 +16,15 @@ env:
   VINA_SHA256: "b5a23b226ee5dc1b028df04082d13a7b0e5b9b12b988bbcf9498cb351e20b38f"
 
 jobs:
-  # conda-forge has no win-64 fpocket, so the Windows installer carries one built here from
-  # the patches in contrib/fpocket-windows. Cross-compiled from Linux because that is where
-  # mingw-w64 is one apt-get away; the result is a static .exe importing only KERNEL32 and
-  # msvcrt. Drop this job the day the feedstock gains win-64.
-  fpocket-windows:
+  build:
+    # Attaching the installer to the release requires write permission.
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install the cross compiler
-        run: sudo apt-get update && sudo apt-get install -y mingw-w64
-
-      - name: Build fpocket for Windows
-        run: |
-          git clone --depth 1 --branch "$FPOCKET_VERSION" https://github.com/Discngine/fpocket.git /tmp/fpocket
-          cd /tmp/fpocket
-          git apply "$GITHUB_WORKSPACE"/contrib/fpocket-windows/*.patch
-          CC=x86_64-w64-mingw32-gcc bash "$GITHUB_WORKSPACE/contrib/fpocket-windows/build-windows.sh" \
-              /tmp/fpocket "$GITHUB_WORKSPACE/vendor"
-          # Fail loudly rather than ship an installer with no cavity detection.
-          for exe in fpocket tpocket dpocket; do
-              test -s "$GITHUB_WORKSPACE/vendor/$exe.exe" || { echo "missing $exe.exe"; exit 1; }
-          done
-          file "$GITHUB_WORKSPACE"/vendor/*.exe
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: fpocket-windows
-          path: vendor/*.exe
-
-  build:
-    needs: fpocket-windows
-    # The repository hands workflows a read-only token, so attaching the installers to the release
-    # needed this and would have failed at the last step of a tag build, after twenty minutes of
-    # work on both runners. Only this job asks for it, and only for the release.
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            artifact: PoliScreen-Windows-x86_64
-          - os: ubuntu-latest
-            artifact: PoliScreen-Linux-x86_64
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-
-      # Only the Windows recipe references these; Linux resolves fpocket from conda-forge.
-      - name: Collect fpocket
-        if: runner.os == 'Windows'
-        uses: actions/download-artifact@v4
-        with:
-          name: fpocket-windows
-          path: installer/vendor
-
-      # Vina used to be downloaded by post_install, on the user's machine, at install time. One
-      # download that does not go through there leaves a one-click installation with no docking
-      # engine, and the only sign of it is a warning that scrolls past in the installer window --
-      # the failure surfaces much later, as every docking job failing at once. Fetched here
-      # instead, where the network is reliable and the SHA256 is checked before anything ships.
-      # Apache-2.0, so it travels with a copy of its licence.
-      - name: Collect Vina
-        if: runner.os == 'Windows'
-        shell: bash -el {0}
-        run: |
-          mkdir -p installer/vendor
-          curl -fsSL -o installer/vendor/vina.exe \
-            "https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v${VINA_VERSION}/vina_${VINA_VERSION}_win.exe"
-          echo "${VINA_SHA256} *installer/vendor/vina.exe" | sha256sum -c -
-          curl -fsSL -o installer/vendor/AutoDock-Vina-LICENSE.txt \
-            "https://raw.githubusercontent.com/ccsb-scripps/AutoDock-Vina/v${VINA_VERSION}/LICENSE"
-
-      # The base environment is used as it comes: creating one only to run constructor from it
-      # failed on Windows, where the new environment was not there to activate. `defaults` is
+      # The base environment is used as it comes. `defaults` is
       # removed because its terms of service stop a non-interactive build.
       - uses: conda-incubator/setup-miniconda@v3
         with:
@@ -130,17 +63,10 @@ jobs:
           constructor installer/ --output-dir out
           ls -l out
 
-      # Each run leaves about 1.5 GB across the three installers, and the free account has 500 MB
-      # of Actions storage in total, so the quota fills after one run and blocks every later push
-      # -- including the 1.4 MB fpocket hand-off, which is what actually stops the next build.
-      # Release assets do not count against it, so on a tag the installers go there and this step
-      # is skipped entirely: a tag build now stores nothing. Only a trial build off a branch, which
-      # has no release to attach to, still needs somewhere to leave them, and five days is enough
-      # to fetch them and short enough that the next one is not blocked by this one.
       - uses: actions/upload-artifact@v4
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         with:
-          name: ${{ matrix.artifact }}
+          name: PoliScreen-Linux-x86_64
           path: out/*
           retention-days: 5
 
