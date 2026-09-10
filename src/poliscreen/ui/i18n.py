@@ -888,4 +888,18 @@ _ES = {
     'Beats the next by': 'Le gana a la siguiente por',
     'Routes tried': 'Rutas probadas',
     "Lowest Ea per compound. A margin under about 0.5 kcal/mol is a tie, not a preference: that is the order of CaverDock's own repeatability.": 'Menor Ea por compuesto. Un margen menor a ~0.5 kcal/mol es un empate, no una preferencia: ese es el orden de la repetibilidad del propio CaverDock.',
+
+    # Worked example and updates
+    'Example (8HTB)': 'Ejemplo (8HTB)',
+    'Load the canonical Cruzain test case (8HTB)': 'Carga el caso de prueba canónico de Cruzaína (8HTB)',
+    'Example ligands (8HTB)': 'Ligandos de ejemplo (8HTB)',
+    'Loads 3 known active inhibitors and 3 low-affinity decoys for 8HTB': 'Carga 3 inhibidores activos conocidos y 3 señuelos de baja afinidad para 8HTB',
+    'Generating 3D structures for example ligands...': 'Generando estructuras 3D para ligandos de ejemplo...',
+    '{v0} example compounds loaded and ready for step 3.': '{v0} compuestos de ejemplo cargados y listos para el paso 3.',
+    '{v0} example ligands ready (3 inhibitors + 3 decoys).': '{v0} ligandos de ejemplo listos (3 inhibidores + 3 señuelos).',
+    '**Updates**': '**Actualizaciones**',
+    'Check for updates': 'Buscar actualizaciones',
+    'A new version is available: v{v1}. Pull the latest container or download the launcher to update.': 'Hay una nueva versión disponible: v{v1}. Descarga el contenedor más reciente o vuelve a ejecutar el lanzador para actualizar.',
+    'PoliScreen is up to date (v{v1}).': 'PoliScreen está actualizado (v{v1}).',
+    'Could not reach GitHub releases (offline or rate limited).': 'No se pudo conectar a GitHub releases (sin conexión o límite de tasa).',
 }

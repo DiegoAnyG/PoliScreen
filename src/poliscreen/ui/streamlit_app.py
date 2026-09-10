@@ -472,6 +472,26 @@ with _menu_cfg:
     st.slider(t("Split between tools and viewer"), 0.3, 0.7, step=0.02, key="cfg_split",
               help=t("Left gives more space to the viewer; right, to the tools."))
     st.slider(t("Panel height (px)"), 380, 1200, step=20, key="cfg_height")
+    st.markdown("---")
+    st.markdown(t("**Updates**"))
+    st.caption(f"PoliScreen v{__version__}")
+    if st.button(t("Check for updates"), key="btn_check_updates"):
+        try:
+            import json
+            import urllib.request
+            req = urllib.request.Request(
+                "https://api.github.com/repos/DiegoAnyG/PoliScreen/releases/latest",
+                headers={"User-Agent": "PoliScreen"}
+            )
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = json.loads(resp.read().decode())
+                latest = data.get("tag_name", "").lstrip("v")
+                if latest and latest > __version__:
+                    st.info(t("A new version is available: v{v1}. Pull the latest container or download the launcher to update.").format(v1=latest))
+                else:
+                    st.success(t("PoliScreen is up to date (v{v1}).").format(v1=__version__))
+        except Exception:
+            st.caption(t("Could not reach GitHub releases (offline or rate limited)."))
 
 if S.pop("_open_downloads", False):
     _downloads_dialog(proj)

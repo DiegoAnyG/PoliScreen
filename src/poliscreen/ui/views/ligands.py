@@ -283,13 +283,48 @@ def _peptide_mode(proj: Path):
         st.caption(t('{v0} peptides built with these parameters.').format(v0=len(S['ligands'])))
 
 
+EXAMPLE_LIGANDS = [
+    ("Benzofuroxan_ester", "O=C(OCCCC)c1ccc2[n+]([O-])onc2c1", "example (active)"),
+    ("Benzofuroxan_acid", "O=C(O)c1ccc2no[n+]([O-])c2c1", "example (active)"),
+    ("K777_analogue", "O=C(N[C@@H](Cc1ccccc1)C(=O)N[C@@H](Cc1ccccc1)S(=O)(=O)/C=C/c2ccccc2)OC", "example (active)"),
+    ("Decoy_Alanine", "CC(N)C(=O)O", "example (decoy)"),
+    ("Decoy_Phenol", "Oc1ccccc1", "example (decoy)"),
+    ("Decoy_1-Butanol", "CCCCO", "example (decoy)"),
+]
+
+
+def _load_example_ligands(proj: Path):
+    S = st.session_state
+    d = lay.artifact(proj, lay.INPUT_LIGANDS)
+    d.mkdir(parents=True, exist_ok=True)
+    names = [name for name, _smi, _src in EXAMPLE_LIGANDS]
+    smiles = [smi for _name, smi, _src in EXAMPLE_LIGANDS]
+    with st.spinner(t("Generating 3D structures for example ligands...")):
+        made = lig.materialize(smiles, d, names=names)
+    S["ligands"] = [str(p) for _, p, _ in made]
+    rows_ = []
+    for (name, smi, src), (_, p, _) in zip(EXAMPLE_LIGANDS, made):
+        rows_.append({
+            "name": name,
+            "smiles": smi,
+            "source": src,
+            "product": name,
+            "iupac_name": None,
+            "feasibility": None,
+        })
+    (proj / "ligands_meta.csv").write_text(pd.DataFrame(rows_).to_csv(index=False))
+    _notify(t("{v0} example compounds loaded and ready for step 3.").format(v0=len(made)))
+    st.success(t("{v0} example ligands ready (3 inhibitors + 3 decoys).").format(v0=len(made)))
+    st.rerun()
+
+
 def render_ligands_tools(proj: Path):
     """Tool panel for Ligands stage."""
     S = st.session_state
     st.subheader(t("What do you want to dock?"))
     modo = st.radio(t("Source of the compounds"),
-                    ["Build by reaction", "Screen approved drugs", "Generate peptides",
-                     "Upload ready ligands"],
+                    ["Upload ready ligands", "Build by reaction", "Screen approved drugs",
+                     "Generate peptides"],
                     horizontal=True, format_func=t, key="ligand_mode")
     st.caption(t("Sources add up. Compounds from one source stay when you switch to another, so a "
                  "run can hold five products from the builder, five approved drugs and anything "
@@ -484,7 +519,15 @@ def render_ligands_tools(proj: Path):
 
     else:
         S["lead"] = None
-        ups = st.file_uploader(t("Upload ligands"), type=["mol2", "sdf", "mol", "smi"], accept_multiple_files=True)
+        c_up, c_ex = st.columns([2, 1])
+        with c_up:
+            ups = st.file_uploader(t("Upload ligands"), type=["mol2", "sdf", "mol", "smi"], accept_multiple_files=True)
+        with c_ex:
+            st.write("")
+            st.write("")
+            if st.button(t("Example ligands (8HTB)"), width="stretch",
+                         help=t("Loads 3 known active inhibitors and 3 low-affinity decoys for 8HTB")):
+                _load_example_ligands(proj)
         if ups:
             d = lay.artifact(proj, lay.INPUT_LIGANDS)
             d.mkdir(parents=True, exist_ok=True)

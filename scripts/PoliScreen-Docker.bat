@@ -53,6 +53,13 @@ echo   Docker              OK
 
 if not exist "%PROJECTS%" mkdir "%PROJECTS%"
 echo   Projects folder     %PROJECTS%
+
+rem Create desktop shortcut with icon if not already present
+if not exist "%USERPROFILE%\Desktop\PoliScreen.lnk" (
+    if exist "%~dp0PoliScreen.ico" (
+        powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut(\"$env:USERPROFILE\Desktop\PoliScreen.lnk\"); $s.TargetPath = \"%~f0\"; $s.IconLocation = \"%~dp0PoliScreen.ico\"; $s.WorkingDirectory = \"%USERPROFILE%\"; $s.Save()" >nul 2>&1
+    )
+)
 echo.
 
 docker image inspect %IMAGE% >nul 2>&1

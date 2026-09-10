@@ -2,10 +2,24 @@
 
 Notable changes. Dates are release dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
-## [1.1.0] — 2026-08-24
+## [1.1.0] — 2026-09-10
 
 ### Added
 
+- **Interactive Pareto Landscape, in Results.** Multi-objective optimization landscape balancing
+  binding affinity, interaction quality (PLIP) and confidence scores. Includes dynamic 2D chemical
+  structure tooltips on hover, collision-free smart labeling, and zoomable interactive scatter plots.
+- **Geometric Footprint Polygons (TOP Leaderboard).** A visual interaction ranking where top
+  compounds are represented by interactive geometric polygons whose vertices and edges reflect
+  specific protein contact residues and bond types (salt bridges, hydrogen bonds, pi-stacking,
+  hydrophobic contacts).
+- **Worked Example (8HTB Cruzain).** One-click worked example buttons in both Receptors and Ligands:
+  loads the canonical 8HTB protease receptor and 6 representative ligands (3 active inhibitors including
+  benzofuroxans and K777, plus 3 low-affinity decoys) for instant onboarding.
+- **In-App Update Checker.** Added a "Check for updates" utility in Settings querying official GitHub
+  releases.
+- **Desktop Shortcut & Icon.** Bundled Windows icon (PoliScreen.ico) and automatic desktop shortcut
+  generation from the container launcher.
 - **Transport tunnels, in Results.** A docking score says how well a compound sits in the site and
   nothing about whether it can reach it. Point the new tab at a CaverWeb download or at a folder of
   local CaverDock runs and it reads both the same way: `Ea`, `dE_BS`, the tunnel geometry, and the
@@ -20,7 +34,6 @@ Notable changes. Dates are release dates; the format follows [Keep a Changelog](
   shipped either) and CaverDock is a Linux image under an academic licence (the reason ADCP is
   opt-in). Both are discovered, or reported absent with the one variable that turns them on:
   `POLISCREEN_CAVER`, `POLISCREEN_CAVERDOCK`. `poliscreen info` reports both.
-
 - **CAVER in the container**, with the Java runtime. It is GPL-3 and written in Java, so it may be
   redistributed and it behaves the same everywhere: the image finds the same six tunnels of 8HTB,
   to every digit, as a local run and as CaverWeb's own server. caver.cz has no stable download URL,

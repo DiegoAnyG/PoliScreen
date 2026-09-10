@@ -201,3 +201,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: scripts/PoliScreen-Docker.bat
+
+      - name: Attach the icon to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: scripts/PoliScreen.ico

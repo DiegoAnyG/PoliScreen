@@ -45,7 +45,7 @@ def render_receptors_tools(proj: Path):
             except rc.ReceptorError as err:
                 st.session_state["_fetch_error"] = str(err)
 
-    pdb_id = c1.text_input(t("PDB identifier"), placeholder=t("4D44"), key="pdb_code_in",
+    pdb_id = c1.text_input(t("PDB identifier"), placeholder=t("8HTB"), key="pdb_code_in",
                            on_change=_fetch_pdb_action)
     up = c2.file_uploader(t("...or upload a .pdb file"), type=["pdb"])
 
@@ -59,7 +59,13 @@ def render_receptors_tools(proj: Path):
         src.write_bytes(up.getvalue())
         S["src_pdb"] = str(src)
     else:
-        if c1.button(t("Download from the PDB")):
+        b1, b2 = c1.columns([1, 1])
+        if b1.button(t("Download from the PDB"), width="stretch"):
+            _fetch_pdb_action()
+            if S.get("_fetch_error"):
+                c1.error(S.pop("_fetch_error"))
+        if b2.button(t("Example (8HTB)"), width="stretch", help=t("Load the canonical Cruzain test case (8HTB)")):
+            S["pdb_code_in"] = "8HTB"
             _fetch_pdb_action()
             if S.get("_fetch_error"):
                 c1.error(S.pop("_fetch_error"))
