@@ -45,6 +45,15 @@ def render_receptors_tools(proj: Path):
             except rc.ReceptorError as err:
                 st.session_state["_fetch_error"] = str(err)
 
+    def _example_8htb_action():
+        st.session_state["pdb_code_in"] = "8HTB"
+        try:
+            fetched = rc.fetch_pdb("8HTB", lay.artifact(proj, lay.RECEPTORS))
+            st.session_state["src_pdb"] = str(fetched)
+            st.session_state.pop("_fetch_error", None)
+        except rc.ReceptorError as err:
+            st.session_state["_fetch_error"] = str(err)
+
     pdb_id = c1.text_input(t("PDB identifier"), placeholder=t("8HTB"), key="pdb_code_in",
                            on_change=_fetch_pdb_action)
     up = c2.file_uploader(t("...or upload a .pdb file"), type=["pdb"])
@@ -60,15 +69,10 @@ def render_receptors_tools(proj: Path):
         S["src_pdb"] = str(src)
     else:
         b1, b2 = c1.columns([1, 1])
-        if b1.button(t("Download from the PDB"), width="stretch"):
-            _fetch_pdb_action()
-            if S.get("_fetch_error"):
-                c1.error(S.pop("_fetch_error"))
-        if b2.button(t("Example (8HTB)"), width="stretch", help=t("Load the canonical Cruzain test case (8HTB)")):
-            S["pdb_code_in"] = "8HTB"
-            _fetch_pdb_action()
-            if S.get("_fetch_error"):
-                c1.error(S.pop("_fetch_error"))
+        b1.button(t("Download from the PDB"), width="stretch", on_click=_fetch_pdb_action)
+        b2.button(t("Example (8HTB)"), width="stretch",
+                  help=t("Load the canonical Cruzain test case (8HTB)"),
+                  on_click=_example_8htb_action)
         if S.get("src_pdb"):
             src = Path(S["src_pdb"])
 
@@ -100,7 +104,10 @@ def render_receptors_tools(proj: Path):
                 return f"Chain {c} · {n} residues"
             return f"{o} (hetero group)"
 
-        _sel_ctrl = c3.multiselect(t("Extract as control"), _opc_ctrl, key=f"rec_extract_{kb}",
+        ctrl_default = [k for k in keys if k.startswith("8HT|")]
+        _sel_ctrl = c3.multiselect(t("Extract as control"), _opc_ctrl,
+                                   default=ctrl_default if f"rec_extract_{kb}" not in S else None,
+                                   key=f"rec_extract_{kb}",
                                    format_func=_fmt_ctrl,
                                    help=t("The co-crystallized ligand that defines the reference fingerprint. It can be a hetero group or a peptide chain; both appear here."))
         extract = [o for o in _sel_ctrl if not o.startswith("chain:")]
