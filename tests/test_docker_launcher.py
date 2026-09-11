@@ -128,3 +128,35 @@ def test_only_our_own_stale_images_are_removed():
     text = LAUNCHER.read_text(encoding="utf-8")
     assert "docker images ghcr.io/diegoanyg/poliscreen --filter \"dangling=true\"" in text
     assert "docker image prune" not in text, "too broad: that removes every project's leftovers"
+
+
+def test_component_questionnaire_options():
+    """Launcher interactively prompts for base and complements."""
+    text = LAUNCHER.read_text(encoding="utf-8")
+    assert "What do you want to install?" in text
+    assert "Base (Default):" in text
+    assert "1. PoliScreen" in text
+    assert "2. ADME-AI (admelab)" in text
+    assert "3. ADCP (AutoDock CrankPep)" in text
+    assert "4. CAVER Suite" in text
+    assert "5. GNINA (CNN Scoring)" in text
+
+
+def test_gpu_detection_status_and_warning():
+    """Hardware GPU status is queried for GNINA."""
+    text = LAUNCHER.read_text(encoding="utf-8")
+    assert "GPU Detected:" in text
+    assert "WARNING: No NVIDIA GPU Detected" in text
+    assert "--gpus all" in text
+
+
+def test_configuration_persisted_to_config_env():
+    """User component choices are saved to and read from config.env."""
+    text = LAUNCHER.read_text(encoding="utf-8")
+    assert "config.env" in text
+    assert "ENABLE_ADMET" in text
+    assert "ENABLE_ADCP" in text
+    assert "ENABLE_CAVER" in text
+    assert "ENABLE_GNINA" in text
+    assert "--setup" in text
+

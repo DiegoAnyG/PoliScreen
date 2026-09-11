@@ -61,6 +61,113 @@ if not exist "%~dp0PoliScreen.ico" (
 powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $desk = $ws.SpecialFolders.Item('Desktop'); $lnk = Join-Path $desk 'PoliScreen.lnk'; if (-not (Test-Path $lnk)) { $s = $ws.CreateShortcut($lnk); $s.TargetPath = '%~f0'; if (Test-Path '%~dp0PoliScreen.ico') { $s.IconLocation = '%~dp0PoliScreen.ico' }; $s.WorkingDirectory = $env:USERPROFILE; $s.Save() }" >nul 2>&1
 echo.
 
+set "CONFIG_FILE=%PROJECTS%\config.env"
+set "TOOLS_DIR=%PROJECTS%\tools"
+if not exist "%TOOLS_DIR%" mkdir "%TOOLS_DIR%"
+
+set "DO_SETUP=0"
+if /i "%~1"=="--setup" set "DO_SETUP=1"
+if /i "%~1"=="-s" set "DO_SETUP=1"
+if /i "%~1"=="--configure" set "DO_SETUP=1"
+if not exist "%CONFIG_FILE%" set "DO_SETUP=1"
+
+if "%DO_SETUP%"=="1" goto :run_questionnaire
+
+echo   Config file         %CONFIG_FILE%
+choice /C SC /T 3 /D C /M "  Press S to reconfigure components, or C to continue (3s)" >nul 2>&1
+if not errorlevel 2 goto :run_questionnaire
+goto :load_config
+
+:run_questionnaire
+set "GPU_NAME="
+for /f "usebackq delims=" %%g in (`powershell -NoProfile -Command "try { $v = (Get-CimInstance Win32_VideoController | Where-Object { $_.Name -match 'NVIDIA' } | Select-Object -First 1).Name; if ($v) { Write-Output $v } else { Write-Output 'NONE' } } catch { Write-Output 'NONE' }"`) do (
+    set "GPU_NAME=%%g"
+)
+set "HAS_GPU=0"
+if defined GPU_NAME (
+    if not "%GPU_NAME%"=="NONE" (
+        set "HAS_GPU=1"
+        set "GPU_STATUS=[GPU Detected: %GPU_NAME%]"
+    ) else (
+        set "GPU_STATUS=[WARNING: No NVIDIA GPU Detected]"
+    )
+) else (
+    set "GPU_STATUS=[WARNING: No NVIDIA GPU Detected]"
+)
+
+echo.
+echo   ===================================================================
+echo    What do you want to install?
+echo   ===================================================================
+echo.
+echo   Base (Default):
+echo     [x] 1. PoliScreen
+echo            Core virtual screening: Vina 1.2, RDKit, OpenBabel, PLIP, fpocket.
+echo.
+echo   Complements:
+echo     [ ] 2. ADME-AI (admelab)
+echo            Deep-learning pharmacokinetic and toxicity endpoint predictions.
+echo.
+echo     [ ] 3. ADCP (AutoDock CrankPep)
+echo            Conformational sampling and flexible peptide docking (1-20 residues).
+echo.
+echo     [ ] 4. CAVER Suite
+echo            Geometric detection and analysis of active-site access tunnels.
+echo.
+echo     [ ] 5. GNINA (CNN Scoring)
+echo            Convolutional neural network scoring and docking.
+echo            Status: %GPU_STATUS%
+echo.
+echo   -------------------------------------------------------------------
+echo   Select complements to install (e.g. 2,4,5 or 'all') [Default: Base only]:
+set "SELECTION="
+set /p "SELECTION=> "
+
+set "ENABLE_ADMET=0"
+set "ENABLE_ADCP=0"
+set "ENABLE_CAVER=0"
+set "ENABLE_GNINA=0"
+
+if /i "%SELECTION%"=="all" (
+    set "ENABLE_ADMET=1"
+    set "ENABLE_ADCP=1"
+    set "ENABLE_CAVER=1"
+    set "ENABLE_GNINA=1"
+) else (
+    echo %SELECTION% | find "2" >nul && set "ENABLE_ADMET=1"
+    echo %SELECTION% | find "3" >nul && set "ENABLE_ADCP=1"
+    echo %SELECTION% | find "4" >nul && set "ENABLE_CAVER=1"
+    echo %SELECTION% | find "5" >nul && set "ENABLE_GNINA=1"
+)
+
+(
+    echo # PoliScreen Component Configuration
+    echo ENABLE_ADMET=%ENABLE_ADMET%
+    echo ENABLE_ADCP=%ENABLE_ADCP%
+    echo ENABLE_CAVER=%ENABLE_CAVER%
+    echo ENABLE_GNINA=%ENABLE_GNINA%
+) > "%CONFIG_FILE%"
+
+echo   Configuration saved to %CONFIG_FILE%
+echo.
+
+:load_config
+set "ENABLE_ADMET=0"
+set "ENABLE_ADCP=0"
+set "ENABLE_CAVER=0"
+set "ENABLE_GNINA=0"
+if exist "%CONFIG_FILE%" (
+    for /f "usebackq tokens=1,* delims==" %%A in ("%CONFIG_FILE%") do (
+        if "%%A"=="ENABLE_ADMET" set "ENABLE_ADMET=%%B"
+        if "%%A"=="ENABLE_ADCP" set "ENABLE_ADCP=%%B"
+        if "%%A"=="ENABLE_CAVER" set "ENABLE_CAVER=%%B"
+        if "%%A"=="ENABLE_GNINA" set "ENABLE_GNINA=%%B"
+    )
+)
+
+echo   Components          Base [OK]  ADME-AI [%ENABLE_ADMET%]  ADCP [%ENABLE_ADCP%]  CAVER [%ENABLE_CAVER%]  GNINA [%ENABLE_GNINA%]
+echo.
+
 docker image inspect %IMAGE% >nul 2>&1
 if errorlevel 1 (
     echo   First run: downloading the image, about 3 GB. This happens once;
@@ -137,6 +244,26 @@ if defined RUNNING (
     docker stop poliscreen >nul 2>&1
 )
 
-docker run --rm -it --init --name poliscreen -p 127.0.0.1:8501:8501 -v "%PROJECTS%:/data" %THEME% %IMAGE%
+set "EXTRA_FLAGS="
+if "%ENABLE_ADMET%"=="0" (
+    set "EXTRA_FLAGS=%EXTRA_FLAGS% -e POLISCREEN_WITH_ADMET=0 -e POLISCREEN_ADME_PYTHON="
+) else (
+    set "EXTRA_FLAGS=%EXTRA_FLAGS% -e POLISCREEN_WITH_ADMET=1"
+)
+
+if "%ENABLE_CAVER%"=="0" (
+    set "EXTRA_FLAGS=%EXTRA_FLAGS% -e POLISCREEN_WITH_CAVER=0 -e POLISCREEN_CAVER="
+) else (
+    set "EXTRA_FLAGS=%EXTRA_FLAGS% -e POLISCREEN_WITH_CAVER=1"
+)
+
+if "%ENABLE_GNINA%"=="1" (
+    powershell -NoProfile -Command "if (Get-CimInstance Win32_VideoController | Where-Object { $_.Name -match 'NVIDIA' }) { exit 0 } else { exit 1 }" >nul 2>&1
+    if not errorlevel 1 (
+        set "EXTRA_FLAGS=%EXTRA_FLAGS% --gpus all"
+    )
+)
+
+docker run --rm -it --init --name poliscreen -p 127.0.0.1:8501:8501 -v "%PROJECTS%:/data" -v "%TOOLS_DIR%:/root/poliscreen_tools" %THEME% %EXTRA_FLAGS% %IMAGE%
 
 endlocal
