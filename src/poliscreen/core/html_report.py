@@ -818,14 +818,22 @@ def _prepare_target_dataset(
     site_part = target_id.split("~", 1)[1] if "~" in target_id else ""
     display_name = sc.display_name(clean_base) + (f" (site {site_part})" if site_part else "")
 
-    # Ensure Pareto rankings are computed for this target
-    if not rk_target.empty and "is_pareto" not in rk_target.columns:
+    # Candidate-level 2D Pareto frontier on (best_dock, best_inter) and ranking integration
+    cands_mask = (rk_target.get("is_control") != 1) if "is_control" in rk_target.columns else pd.Series(True, index=rk_target.index)
+    cands_df = rk_target[cands_mask].copy()
+    if not cands_df.empty:
         from .screening import compute_pareto_ranks
         obj_cols = [c for c in ["best_dock", "best_inter"] if c in rk_target.columns]
         if len(obj_cols) == 2:
-            pranks, is_p = compute_pareto_ranks(rk_target, objectives=obj_cols, minimize_cols={"best_dock"})
-            rk_target["pareto_rank"] = pranks
-            rk_target["is_pareto"] = is_p
+            _, is_p_cands = compute_pareto_ranks(cands_df, objectives=obj_cols, minimize_cols={"best_dock"})
+            rk_target["_is_pareto_2d"] = rk_target.index.map(is_p_cands).fillna(False)
+        else:
+            rk_target["_is_pareto_2d"] = False
+    else:
+        rk_target["_is_pareto_2d"] = False
+
+    is_ranking_p = (rk_target.get("is_pareto") == True) | (pd.to_numeric(rk_target.get("pareto_rank"), errors="coerce") == 1)
+    rk_target["is_pareto"] = cands_mask & (rk_target["_is_pareto_2d"] | is_ranking_p)
 
     rec_file, receptor_pdb = _find_receptor_pdb(proj_path, target_id)
 
@@ -883,7 +891,10 @@ def _prepare_target_dataset(
         return 0.0
 
     if not cand_rows.empty:
-        cand_rows["_eff_val"] = pd.to_numeric(cand_rows.get("effectiveness_pct"), errors="coerce").fillna(0)
+        if "effectiveness_pct" in cand_rows.columns:
+            cand_rows["_eff_val"] = pd.to_numeric(cand_rows["effectiveness_pct"], errors="coerce").fillna(0)
+        else:
+            cand_rows["_eff_val"] = 0.0
         cand_rows["_pareto_val"] = cand_rows.get("is_pareto", False).map({True: 0, False: 1})
         cand_sorted = cand_rows.sort_values(["_pareto_val", "_eff_val"], ascending=[True, False])
     else:
@@ -1115,11 +1126,9 @@ def _prepare_target_dataset(
             "smiles": smap.get(ck, ""),
         })
 
-    pareto_line = [
-        {"x": p["x"], "y": p["y"]}
-        for p in sorted(plotly_points, key=lambda pt: pt["x"])
-        if p["is_pareto"] or p["is_control"]
-    ]
+    pareto_pts = [p for p in plotly_points if p["is_pareto"] and not p["is_control"]]
+    pareto_pts.sort(key=lambda pt: pt["x"])
+    pareto_line = [{"x": p["x"], "y": p["y"]} for p in pareto_pts]
     ctrl_pt = next((p for p in plotly_points if p["is_control"]), None)
 
     tunnels_html = _render_tunnels_section(caver_clusters, caver_report_data, L or {})
@@ -2873,7 +2882,8 @@ function initPlotlyChart() {{
     modeBarButtonsToRemove: ["lasso2d", "select2d"]
   }};
 
-  const pPromise = plotLib.newPlot(chartDiv, [lineTrace, candTrace, paretoTrace, ctrlTrace], layout, config);
+  const traces = paretoLine.length > 1 ? [lineTrace, candTrace, paretoTrace, ctrlTrace] : [candTrace, paretoTrace, ctrlTrace];
+  const pPromise = plotLib.newPlot(chartDiv, traces, layout, config);
 
   const setupEvents = function() {{
     if (typeof chartDiv.on === "function") {{

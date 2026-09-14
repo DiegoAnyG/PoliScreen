@@ -338,3 +338,41 @@ def test_pymol_tunnel_zip_compilation(tmp_path: Path):
         assert any(n.endswith(".pml") for n in names)
 
 
+def test_html_report_pareto_excludes_control_from_frontier_line(tmp_path: Path):
+    """Verify that html_report computes candidate-level Pareto leaders and NEVER connects the control to the Pareto line."""
+    proj = tmp_path / "strong_ctrl_proj"
+    proj.mkdir()
+    meta = {
+        "project": "StrongCtrlTest",
+        "receptors": ["rec.pdb"],
+        "controls": ["ctrl.sdf"],
+        "control_assign": {"ctrl": "rec"},
+        "catalytic": {},
+        "secondary": {},
+    }
+    (proj / "run.json").write_text(json.dumps(meta), encoding="utf-8")
+    (proj / "receptors").mkdir()
+    (proj / "receptors" / "rec.pdb").write_text("ATOM      1  N   ALA A   1       0.0   0.0   0.0  1.00 20.00           N\nEND\n", encoding="utf-8")
+
+    rk_df = pd.DataFrame([
+        {"compound": "ctrl", "is_control": 1, "best_dock": -10.5, "best_inter": 1.0, "is_pareto": True, "pareto_rank": 1, "receptor": "rec"},
+        {"compound": "cand_dock", "is_control": 0, "best_dock": -8.5, "best_inter": 0.4, "is_pareto": False, "pareto_rank": 2, "receptor": "rec"},
+        {"compound": "cand_inter", "is_control": 0, "best_dock": -6.8, "best_inter": 0.8, "is_pareto": False, "pareto_rank": 2, "receptor": "rec"},
+    ])
+    rk_df.to_csv(proj / "ranking.csv", index=False)
+
+    html_str = hr.build_interactive_report(proj)
+    assert "<!DOCTYPE html>" in html_str
+
+    # Inspect dataset directly
+    ds = hr._prepare_target_dataset(proj, "rec", rk_df, pd.DataFrame(), meta, {})
+    pareto_pts = ds["plotly_data"]["pareto_line"]
+    assert len(pareto_pts) == 2
+    # Ensure control (-10.5) is NOT in the Pareto frontier line
+    assert not any(p["x"] == -10.5 for p in pareto_pts)
+    # Ensure both candidate trade-offs are on the frontier line
+    xs = {p["x"] for p in pareto_pts}
+    assert -8.5 in xs and -6.8 in xs
+
+
+
