@@ -832,8 +832,7 @@ def _prepare_target_dataset(
     else:
         rk_target["_is_pareto_2d"] = False
 
-    is_ranking_p = (rk_target.get("is_pareto") == True) | (pd.to_numeric(rk_target.get("pareto_rank"), errors="coerce") == 1)
-    rk_target["is_pareto"] = cands_mask & (rk_target["_is_pareto_2d"] | is_ranking_p)
+    rk_target["is_pareto"] = cands_mask & rk_target["_is_pareto_2d"]
 
     rec_file, receptor_pdb = _find_receptor_pdb(proj_path, target_id)
 
@@ -2792,6 +2791,8 @@ function initPlotlyChart() {{
   }};
 
   const cands = pts.filter(p => !p.is_control && !p.is_pareto);
+  const candSizes = cands.map(p => 5.5 + 6.5 * (p.conf !== null && p.conf !== undefined ? p.conf : 0.7));
+  const candOpacities = cands.map(p => 0.35 + 0.55 * (p.conf !== null && p.conf !== undefined ? p.conf : 0.7));
   const candTrace = {{
     x: cands.map(p => p.x),
     y: cands.map(p => p.y),
@@ -2800,10 +2801,16 @@ function initPlotlyChart() {{
     text: cands.map(p => p.name),
     customdata: cands,
     hoverinfo: "none",
-    marker: {{ color: "#10b981", size: 9, opacity: 0.85, line: {{ color: "#065f46", width: 1 }} }}
+    marker: {{
+      color: "#10b981",
+      size: candSizes,
+      opacity: candOpacities,
+      line: {{ color: "#065f46", width: 1 }}
+    }}
   }};
 
   const paretoPts = pts.filter(p => p.is_pareto);
+  const paretoSizes = paretoPts.map(p => 11 + 5 * (p.conf !== null && p.conf !== undefined ? p.conf : 0.7));
   const paretoTrace = {{
     x: paretoPts.map(p => p.x),
     y: paretoPts.map(p => p.y),
@@ -2814,7 +2821,11 @@ function initPlotlyChart() {{
     textfont: {{ size: 11, color: "#f8fafc" }},
     customdata: paretoPts,
     hoverinfo: "none",
-    marker: {{ color: "#2563eb", size: 13, line: {{ color: "#fbbf24", width: 2.2 }} }}
+    marker: {{
+      color: "#2563eb",
+      size: paretoSizes,
+      line: {{ color: "#fbbf24", width: 2.2 }}
+    }}
   }};
 
   const ctrlPts = pts.filter(p => p.is_control);

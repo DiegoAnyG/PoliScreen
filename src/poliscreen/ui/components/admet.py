@@ -42,8 +42,7 @@ def _scatter_dock_inter(sub):
     else:
         d["_is_pareto_2d"] = False
 
-    is_ranking_p = (d.get("is_pareto") == True) | (pd.to_numeric(d.get("pareto_rank"), errors="coerce") == 1)
-    d["_is_pareto_final"] = (d["is_control"] != 1) & (d["_is_pareto_2d"] | is_ranking_p)
+    d["_is_pareto_final"] = d["_is_pareto_2d"]
 
     fig, ax = plt.subplots(figsize=(6.8, 4.6), dpi=160)
     fig.patch.set_facecolor("white")
@@ -85,6 +84,9 @@ def _scatter_dock_inter(sub):
         es_pareto = bool(r.get("_is_pareto_final", False))
         bd_val = float(r["bd"])
         bi_val = float(r["bi"])
+        conf_raw = pd.to_numeric(pd.Series([r.get("confidence")]), errors="coerce").iloc[0]
+        conf_val = float(conf_raw) if pd.notna(conf_raw) else 0.7
+        conf_val = max(0.1, min(1.0, conf_val))
         eff_val = pd.to_numeric(pd.Series([r.get("effectiveness_pct")]), errors="coerce").iloc[0]
         eff_str = f" ({eff_val:.0f}%)" if pd.notna(eff_val) else ""
         name = f"{name_raw[:16]}{eff_str}"
@@ -100,8 +102,8 @@ def _scatter_dock_inter(sub):
                                     "badge_bg": "#fee2e2", "badge_ec": "#ef4444"})
         elif es_pareto:
             lbl = t("Pareto optimal")
-            sc_pt = ax.scatter(bd_val, bi_val, s=110, marker="o", c="#2563eb",
-                               edgecolors="#f59e0b", linewidths=2.2, zorder=5)
+            sc_pt = ax.scatter(bd_val, bi_val, s=95 + 45 * conf_val, marker="o", c="#2563eb",
+                               edgecolors="#f59e0b", linewidths=2.2, alpha=0.95, zorder=5)
             if lbl not in legend_handles:
                 legend_handles[lbl] = sc_pt
             if name_raw in top_candidates:
@@ -110,8 +112,8 @@ def _scatter_dock_inter(sub):
                                         "badge_bg": "#dbeafe", "badge_ec": "#3b82f6"})
         else:
             lbl = t("Candidate")
-            sc_pt = ax.scatter(bd_val, bi_val, s=55, marker="o", c="#10b981",
-                               edgecolors="#0f766e", linewidths=0.6, alpha=0.85, zorder=4)
+            sc_pt = ax.scatter(bd_val, bi_val, s=30 + 45 * conf_val, marker="o", c="#10b981",
+                               edgecolors="#0f766e", linewidths=0.6, alpha=0.35 + 0.55 * conf_val, zorder=4)
             if lbl not in legend_handles:
                 legend_handles[lbl] = sc_pt
             if name_raw in top_candidates:
@@ -204,6 +206,8 @@ def _scatter_dock_inter(sub):
                   frameon=True, facecolor="white", edgecolor="#e2e8f0", fontsize=7.5, loc="best")
 
     ax.set_title(t("Docking vs. quality · Pareto frontier · ideal: top-right"), fontsize=9.6, fontweight="bold", pad=10)
+    ax.text(0.98, 0.02, t("Bubble size & opacity: confidence"), transform=ax.transAxes, ha="right", va="bottom",
+            fontsize=6.8, color="#64748b", fontstyle="italic")
     fig.tight_layout()
     return fig
 
@@ -230,8 +234,7 @@ def _interactive_pareto_chart(sub, smap=None) -> str:
     else:
         d["_is_pareto_2d"] = False
 
-    is_ranking_p = (d.get("is_pareto") == True) | (pd.to_numeric(d.get("pareto_rank"), errors="coerce") == 1)
-    d["_is_pareto_final"] = (d["is_control"] != 1) & (d["_is_pareto_2d"] | is_ranking_p)
+    d["_is_pareto_final"] = d["_is_pareto_2d"]
 
     smap = smap or {}
 
@@ -564,6 +567,7 @@ function render() {{
     if (px < margin.left - 10 || px > width - margin.right + 10 || py < margin.top - 10 || py > height - margin.bottom + 10) return;
 
     let shape;
+    const confVal = (pt.conf !== undefined && pt.conf !== null) ? pt.conf : 0.7;
     if (pt.is_ctrl) {{
       shape = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
       const s = 9;
@@ -573,7 +577,7 @@ function render() {{
       shape.setAttribute("stroke-width", "1.5");
     }} else if (pt.is_pareto) {{
       shape = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-      const s = 8;
+      const s = 6.5 + 3.0 * confVal;
       shape.setAttribute("points", `${{px}},${{py-s}} ${{px+s}},${{py}} ${{px}},${{py+s}} ${{px-s}},${{py}}`);
       shape.setAttribute("fill", "#2563eb");
       shape.setAttribute("stroke", "#f59e0b");
@@ -582,11 +586,12 @@ function render() {{
       shape = document.createElementNS("http://www.w3.org/2000/svg", "circle");
       shape.setAttribute("cx", px);
       shape.setAttribute("cy", py);
-      shape.setAttribute("r", "6");
+      const r = 3.5 + 4.5 * confVal;
+      shape.setAttribute("r", r);
       shape.setAttribute("fill", "#10b981");
       shape.setAttribute("stroke", "#0f766e");
       shape.setAttribute("stroke-width", "1.0");
-      shape.setAttribute("opacity", "0.88");
+      shape.setAttribute("opacity", (0.35 + 0.55 * confVal).toFixed(2));
     }}
     shape.setAttribute("class", "pt-marker");
 

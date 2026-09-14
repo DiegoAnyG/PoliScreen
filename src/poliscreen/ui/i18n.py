@@ -28,6 +28,7 @@ _ES = {
     'Pareto leaders': 'Líderes de Pareto',
     'Pareto frontier': 'Frontera de Pareto',
     'Pareto optimal': 'Óptimo de Pareto',
+    'Bubble size & opacity: confidence': 'Tamaño y opacidad: confianza',
     'optimal': 'óptimo',
     'multi-objective': 'multiobjetivo',
     'Candidate': 'Candidato',
