@@ -24,6 +24,7 @@ from poliscreen.core import viewer as vw
 from poliscreen.core.design import AdmelabBridge
 from poliscreen.ui.common import (
     _download_image,
+    _download_table,
     _empty_state,
     _fmt_ki,
     _how_to_cite,

@@ -40,3 +40,35 @@ def test_both_stages_that_carry_tunnels_show_the_tab():
         app.session_state["stage"] = stage
         app.run()
         assert "Transport tunnels" in [s.value for s in app.get("subheader")], stage
+
+
+def test_results_stage_with_screening_results(tmp_path, monkeypatch):
+    """Results stage with real ranking table must render downloads, charts and tables without NameError."""
+    import json
+    import pandas as pd
+
+    proj = tmp_path / "proj1"
+    proj.mkdir()
+    meta = {"project": "proj1", "receptors": ["rec1.pdb"]}
+    (proj / "run.json").write_text(json.dumps(meta), encoding="utf-8")
+    rk = pd.DataFrame([{
+        "compound": "cmp1",
+        "receptor": "rec1",
+        "is_control": 1,
+        "best_dock": -8.0,
+        "best_inter": 1.0,
+        "effectiveness_pct": 100.0,
+        "confidence": 0.8,
+        "pKi": 6.0,
+        "LE": 0.3,
+        "pareto_rank": 1,
+        "pose": 1,
+    }])
+    rk.to_csv(proj / "ranking.csv", index=False)
+
+    app = AppTest.from_file(APP, default_timeout=180)
+    app.session_state["stage"] = "Results"
+    app.session_state["proj_dir"] = str(proj)
+    app.run()
+    assert not app.exception, f"Results with screening data failed: {app.exception[0].message if app.exception else ''}"
+

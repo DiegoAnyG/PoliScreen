@@ -50,3 +50,28 @@ def test_no_local_shadows_an_imported_helper():
             if clash:
                 offenders.append(f"{file_path.name}:{scope.name}: {sorted(clash)}")
     assert not offenders, f"locals shadowing imported helpers: {offenders}"
+
+
+def test_no_undefined_global_calls():
+    """Ensure every call or reference to a global/helper name in UI is imported or defined."""
+    import symtable
+    import builtins
+    builtin_names = set(dir(builtins)) | {"__file__"}
+    offenders = []
+
+    def check_table(t, global_symbols, fname):
+        for sym in t.get_symbols():
+            if sym.is_global() and not sym.is_declared_global():
+                name = sym.get_name()
+                if name not in global_symbols and name not in builtin_names:
+                    offenders.append(f"{fname}:{t.get_name()}:{name}")
+        for child in t.get_children():
+            check_table(child, global_symbols, fname)
+
+    for file_path in UI_FILES:
+        code = file_path.read_text(encoding="utf-8")
+        st = symtable.symtable(code, str(file_path), "exec")
+        check_table(st, set(st.get_identifiers()), file_path.name)
+
+    assert not offenders, f"undefined global symbols in UI files: {offenders}"
+
