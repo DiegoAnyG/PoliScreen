@@ -137,3 +137,26 @@ def test_compute_ranking_includes_pareto_columns():
     assert "pareto_rank" in rk.columns
     assert "is_pareto" in rk.columns
     assert (rk["is_pareto"] == True).any()
+
+
+def test_pareto_candidate_level_not_suppressed_by_strong_control():
+    """Candidates are evaluated among themselves so a strong control (-10.5 kcal, 1.0 inter)
+    does not wipe out the candidate Pareto frontier or suppress Pareto optimal markers."""
+    from poliscreen.ui.components.admet import _interactive_pareto_chart
+
+    df = pd.DataFrame([
+        {"compound": "control_zi9", "best_dock": -10.556, "best_inter": 1.0, "is_control": 1, "is_pareto": True, "pareto_rank": 1},
+        {"compound": "Bf-1PropanolOH", "best_dock": -7.712, "best_inter": 0.67, "is_control": 0, "is_pareto": True, "pareto_rank": 1},
+        {"compound": "Benzofuroxan", "best_dock": -6.942, "best_inter": 0.67, "is_control": 0, "is_pareto": False, "pareto_rank": 2},
+        {"compound": "Bf-1PentanolOH", "best_dock": -8.009, "best_inter": 0.33, "is_control": 0, "is_pareto": False, "pareto_rank": 2},
+    ])
+    fig = _scatter_dock_inter(df)
+    assert fig is not None
+    ax = fig.axes[0]
+    lines = [line.get_label() for line in ax.get_lines()]
+    assert any("Pareto" in str(l) for l in lines)
+
+    html = _interactive_pareto_chart(df)
+    assert "tag-pareto" in html
+    assert "frontier-line" in html
+

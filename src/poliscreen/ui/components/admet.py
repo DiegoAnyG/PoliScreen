@@ -34,9 +34,16 @@ def _scatter_dock_inter(sub):
     if d.empty:
         return None
 
-    # Compute 2D Pareto frontier on (bd, bi) for the plot
-    _, is_pareto_2d = compute_pareto_ranks(d, objectives=["bd", "bi"], minimize_cols={"bd"})
-    d["_is_pareto_2d"] = is_pareto_2d
+    # Candidate-level 2D Pareto frontier on (bd, bi)
+    cands = d[d["is_control"] != 1].copy()
+    if not cands.empty:
+        _, is_p_cands = compute_pareto_ranks(cands, objectives=["bd", "bi"], minimize_cols={"bd"})
+        d["_is_pareto_2d"] = d.index.map(is_p_cands).fillna(False)
+    else:
+        d["_is_pareto_2d"] = False
+
+    is_ranking_p = (d.get("is_pareto") == True) | (pd.to_numeric(d.get("pareto_rank"), errors="coerce") == 1)
+    d["_is_pareto_final"] = (d["is_control"] != 1) & (d["_is_pareto_2d"] | is_ranking_p)
 
     fig, ax = plt.subplots(figsize=(6.8, 4.6), dpi=160)
     fig.patch.set_facecolor("white")
@@ -51,8 +58,8 @@ def _scatter_dock_inter(sub):
         ax.axhline(y=ctrl_bi, color="#ef4444", linestyle=":", linewidth=1.1, alpha=0.45, zorder=1)
         ax.axvline(x=ctrl_bd, color="#ef4444", linestyle=":", linewidth=1.1, alpha=0.45, zorder=1)
 
-    # Sort 2D Pareto optimal points by bd to draw the frontier line
-    pareto_pts = d[d["_is_pareto_2d"]].sort_values("bd")
+    # Sort Pareto optimal points by bd to draw the frontier line
+    pareto_pts = d[d["_is_pareto_final"]].sort_values("bd", ascending=False)
     line_handle = None
     if len(pareto_pts) > 1:
         line_handle, = ax.plot(pareto_pts["bd"], pareto_pts["bi"], color="#2563eb", linestyle="--",
@@ -64,10 +71,10 @@ def _scatter_dock_inter(sub):
 
     n_total = len(d)
     if n_total > 10:
-        cands = d[d["is_control"] != 1].copy()
-        cands["_pareto_order"] = cands["_is_pareto_2d"].map({True: 0, False: 1})
-        cands["_eff_order"] = -pd.to_numeric(cands.get("effectiveness_pct"), errors="coerce").fillna(0)
-        top_candidates = set(cands.sort_values(["_pareto_order", "_eff_order"]).head(3)["compound"])
+        cands_df = d[d["is_control"] != 1].copy()
+        cands_df["_pareto_order"] = cands_df["_is_pareto_final"].map({True: 0, False: 1})
+        cands_df["_eff_order"] = -pd.to_numeric(cands_df.get("effectiveness_pct"), errors="coerce").fillna(0)
+        top_candidates = set(cands_df.sort_values(["_pareto_order", "_eff_order"]).head(3)["compound"])
     else:
         top_candidates = set(d[d["is_control"] != 1]["compound"])
 
@@ -75,7 +82,7 @@ def _scatter_dock_inter(sub):
     for _, r in d.iterrows():
         name_raw = str(r["compound"])
         es_ctrl = r.get("is_control") == 1
-        es_pareto = bool(r.get("_is_pareto_2d", False))
+        es_pareto = bool(r.get("_is_pareto_final", False))
         bd_val = float(r["bd"])
         bi_val = float(r["bi"])
         eff_val = pd.to_numeric(pd.Series([r.get("effectiveness_pct")]), errors="coerce").iloc[0]
@@ -215,9 +222,16 @@ def _interactive_pareto_chart(sub, smap=None) -> str:
     if d.empty:
         return ""
 
-    # Compute 2D Pareto frontier on (best_dock, best_inter)
-    _, is_pareto_2d = compute_pareto_ranks(d, objectives=["best_dock", "best_inter"], minimize_cols={"best_dock"})
-    d["_is_pareto_2d"] = is_pareto_2d
+    # Candidate-level 2D Pareto frontier on (best_dock, best_inter)
+    cands = d[d["is_control"] != 1].copy()
+    if not cands.empty:
+        _, is_p_cands = compute_pareto_ranks(cands, objectives=["best_dock", "best_inter"], minimize_cols={"best_dock"})
+        d["_is_pareto_2d"] = d.index.map(is_p_cands).fillna(False)
+    else:
+        d["_is_pareto_2d"] = False
+
+    is_ranking_p = (d.get("is_pareto") == True) | (pd.to_numeric(d.get("pareto_rank"), errors="coerce") == 1)
+    d["_is_pareto_final"] = (d["is_control"] != 1) & (d["_is_pareto_2d"] | is_ranking_p)
 
     smap = smap or {}
 
@@ -242,10 +256,10 @@ def _interactive_pareto_chart(sub, smap=None) -> str:
 
     n_total = len(d)
     if n_total > 10:
-        cands = d[d["is_control"] != 1].copy()
-        cands["_pareto_order"] = cands["_is_pareto_2d"].map({True: 0, False: 1})
-        cands["_eff_order"] = -pd.to_numeric(cands.get("effectiveness_pct"), errors="coerce").fillna(0)
-        top_candidates = set(cands.sort_values(["_pareto_order", "_eff_order"]).head(3)["compound"])
+        cands_df = d[d["is_control"] != 1].copy()
+        cands_df["_pareto_order"] = cands_df["_is_pareto_final"].map({True: 0, False: 1})
+        cands_df["_eff_order"] = -pd.to_numeric(cands_df.get("effectiveness_pct"), errors="coerce").fillna(0)
+        top_candidates = set(cands_df.sort_values(["_pareto_order", "_eff_order"]).head(3)["compound"])
     else:
         top_candidates = set(d[d["is_control"] != 1]["compound"])
 
@@ -253,14 +267,14 @@ def _interactive_pareto_chart(sub, smap=None) -> str:
     for _, r in d.iterrows():
         name = str(r["compound"])
         es_ctrl = bool(r.get("is_control") == 1)
-        es_pareto = bool(r.get("_is_pareto_2d", False))
+        es_pareto = bool(r.get("_is_pareto_final", False))
         bd = float(r["best_dock"])
         bi = float(r["best_inter"])
         eff = float(r["effectiveness_pct"]) if pd.notna(r.get("effectiveness_pct")) else None
         conf = float(r["confidence"]) if pd.notna(r.get("confidence")) else None
         prank = int(r["pareto_rank"]) if pd.notna(r.get("pareto_rank")) else None
 
-        show_label = es_ctrl or (name in top_candidates)
+        show_label = es_ctrl or (name in top_candidates) or es_pareto
         label_text = f"{name[:14]} ({eff:.0f}%)" if (show_label and eff is not None) else (name[:14] if show_label else "")
 
         # 2D structure image in base64
@@ -290,7 +304,7 @@ def _interactive_pareto_chart(sub, smap=None) -> str:
             "img": img_b64,
         })
 
-    pareto_pts = [p for p in points_data if p["is_ctrl"] or p["is_pareto"]]
+    pareto_pts = [p for p in points_data if p["is_pareto"]]
     pareto_pts.sort(key=lambda p: -p["bd"])
 
     chart_payload = json.dumps({
