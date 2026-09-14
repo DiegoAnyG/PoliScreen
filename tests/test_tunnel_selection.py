@@ -30,8 +30,12 @@ CLUSTER = ("MODEL        0\n"
 
 
 @pytest.fixture()
-def app(tmp_path):
+def app(tmp_path, monkeypatch):
     """The Run stage with three tunnels already found."""
+    monkeypatch.setenv("POLISCREEN_PROJECTS", str(tmp_path))
+    mpl_dir = tmp_path / "mpl"
+    mpl_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("MPLCONFIGDIR", str(mpl_dir))
     clusters = tmp_path / "caver" / "out" / "data" / "clusters"
     clusters.mkdir(parents=True)
     for n in (1, 2, 3):

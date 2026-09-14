@@ -24,7 +24,6 @@ from poliscreen.core import viewer as vw
 from poliscreen.core.design import AdmelabBridge
 from poliscreen.ui.common import (
     _download_image,
-    _download_table,
     _empty_state,
     _fmt_ki,
     _how_to_cite,
@@ -71,10 +70,70 @@ def _pleiotropic_summary(rk, targets_):
     st.caption(t("Effectiveness (%) of each compound in each target, ordered by the **minimum** across targets: broad-spectrum ones on top. Only those docked in all."))
     st.dataframe(table_.round(1), width="stretch", hide_index=True,
                  height=min(340, 60 + 34 * len(table_)))
-    _download_table(table_, "pleiotropico", key="pleio")
     best_broad = table_.iloc[0]
     st.success(t('Best broad-spectrum: **{v1}** (minimum {v3:.0f} % across {v5} targets).').format(v1=best_broad['compound'], v3=best_broad['minimum'], v5=len(targets_)))
     st.divider()
+
+
+def _build_pymol_tunnel_zip(folder: Path, proj: Path) -> tuple[str, bytes]:
+    """Compiles a complete PyMOL visualizer bundle with scripts, coordinates, and instructions."""
+    import io
+    import zipfile
+
+    buf = io.BytesIO()
+    runs = tn.runs_in(folder)
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        readme_lines = [
+            "==================================================================",
+            f" PoliScreen Transport Tunnels - PyMOL Visualization Package",
+            f" Project: {proj.name}",
+            "==================================================================",
+            "",
+            "HOW TO RUN IN PYMOL:",
+            "--------------------",
+            "1. Extract this zip archive into any folder on your computer.",
+            "2. Open PyMOL.",
+            "3. Load any of the trajectory scripts using the PyMOL command line:",
+            "     cd <extracted_folder>",
+            "     @<run_subfolder>/figure.pml",
+            "   or launch directly from your terminal:",
+            "     pymol <run_subfolder>/figure.pml",
+            "",
+            "WHAT EACH SCRIPT SHOWS:",
+            "-----------------------",
+            "- Receptor: Shown as semi-transparent ribbon/cartoon (grey80).",
+            "- Tunnel: Rendered as 3D mesh (grey60).",
+            "- Trajectory: Key poses along the CAVER route highlighted as sticks:",
+            "    * Entrance / Mouth: Disc at the surface.",
+            "    * Obstacle / Barrier (HARDEST STEP): Highest energy point on the profile.",
+            "    * Binding site: Bound destination in the active site.",
+            "",
+            f"Total trajectories included: {len(runs)}",
+        ]
+        zf.writestr("README.txt", "\n".join(readme_lines))
+
+        for run in runs:
+            run_p = Path(run)
+            dir_name = run_p.name
+            for f in run_p.iterdir():
+                if f.is_file() and f.suffix in {".pdb", ".pdbqt", ".pml", ".dat", ".txt", ".dsd", ".config"}:
+                    try:
+                        zf.write(f, arcname=f"{dir_name}/{f.name}")
+                    except Exception:
+                        pass
+
+            fig_p = run_p / "figure.pml"
+            if not fig_p.exists():
+                prof = tn.profile_of(run_p)
+                if prof:
+                    rec_p = next(iter(sorted(run_p.glob("*.pdb"))), None)
+                    tun_p = next(iter(sorted(run_p.glob("tun_*.pdb"))), None)
+                    states = tn.chosen_poses(prof, bound=tn.orientation_of(run_p))
+                    pml_text = tn.pymol_script(run_p, rec_p or "receptor.pdb", tun_p, states)
+                    zf.writestr(f"{dir_name}/figure.pml", pml_text)
+
+    buf.seek(0)
+    return f"PoliScreen_Tunnels_PyMOL_{proj.name}.zip", buf.getvalue()
 
 
 def _results_tunnels(proj: Path):
@@ -89,7 +148,10 @@ def _results_tunnels(proj: Path):
         return
 
     here = proj / lay.TUNNELS
-    S.setdefault("tun_folder", str(here) if here.is_dir() else "")
+    if here.is_dir() and (not S.get("tun_folder") or not Path(str(S.get("tun_folder"))).is_dir()):
+        S["tun_folder"] = str(here)
+    else:
+        S.setdefault("tun_folder", str(here) if here.is_dir() else "")
     folder_str = st.text_input(t("Results folder"), key="tun_folder",
                                help=t("This project's runs by default. Point it elsewhere to read "
                                       "a CaverWeb download."))
@@ -126,15 +188,30 @@ def _results_tunnels(proj: Path):
     st.dataframe(_readable_transport(shown), width="stretch", hide_index=True)
     st.caption(t("Ea is what entering costs and compares tunnels. dE_BS is how much better the "
                  "site is than the outside. Detail in Help › Transport tunnels."))
-    _download_table(shown, "tuneles", key="tunnels")
 
-    if st.button(t("Write the full report"), key="tun_export"):
-        out = tn.export(folder, proj / lay.TUNNELS / "report")
-        st.success(t("Written to {p}").format(p=out))
-        page = out / "report.html"
-        if page.exists():
-            st.download_button(t("report.html"), page.read_bytes(), file_name="report.html",
-                               mime="text/html", key="tun_html")
+    c_pml1, c_pml2 = st.columns([3, 2])
+    with c_pml1:
+        if st.button(t("Compile PyMOL Visualizer Package (.zip)"), key="btn_compile_tunnel_zip", type="primary", use_container_width=True):
+            with st.spinner(t("Compiling PyMOL visualization bundle (.pml + trajectories)...")):
+                try:
+                    fname, zip_bytes = _build_pymol_tunnel_zip(folder, proj)
+                    S["_cached_tunnel_zip"] = (fname, zip_bytes)
+                except Exception as ex:
+                    st.error(t("Could not compile PyMOL package: {err}").format(err=ex))
+    with c_pml2:
+        if S.get("_cached_tunnel_zip"):
+            zname, zbytes = S["_cached_tunnel_zip"]
+            st.download_button(
+                t("Download {name} ({size:.1f} MB)").format(name=zname, size=len(zbytes) / 1e6),
+                zbytes,
+                file_name=zname,
+                mime="application/zip",
+                key="btn_dl_tunnel_zip",
+                type="primary",
+                use_container_width=True,
+            )
+        else:
+            st.caption(t("Self-contained package with .pml scripts, coordinates, and key barrier poses."))
 
 
 def _render_top_interaction_leaderboard(
@@ -204,7 +281,11 @@ def _render_top_interaction_leaderboard(
                 "eff": float(c_row.get("effectiveness_pct") or 100.0),
                 "dock": float(c_row.get("best_dock") or 0.0),
                 "quality": float(c_row.get("best_inter") or 0.0),
-                "cat_cov": float(c_row.get("cat_coverage") or 0.0),
+                "cat_cov": (
+                    float(c_row["cat_coverage"])
+                    if pd.notna(c_row.get("cat_coverage"))
+                    else None
+                ),
             })
 
         for _, c_row in active_cands.iterrows():
@@ -217,7 +298,11 @@ def _render_top_interaction_leaderboard(
                 "eff": float(c_row.get("effectiveness_pct") or 0.0),
                 "dock": float(c_row.get("best_dock") or 0.0),
                 "quality": float(c_row.get("best_inter") or 0.0),
-                "cat_cov": float(c_row.get("cat_coverage") or 0.0),
+                "cat_cov": (
+                    float(c_row["cat_coverage"])
+                    if pd.notna(c_row.get("cat_coverage"))
+                    else None
+                ),
             })
             rank_counter += 1
 
@@ -334,11 +419,13 @@ def _render_top_interaction_leaderboard(
                     unsafe_allow_html=True,
                 )
 
+                cat_cov_val = item.get("cat_cov")
+                cat_cov_txt = f"{cat_cov_val*100:.0f}%" if cat_cov_val is not None else t("N/A (no catalytic residues defined)")
                 st.markdown(
                     f"- **{t('Effectiveness')}**: `{item['eff']:.1f}%`\n"
                     f"- **{t('Docking')}**: `{item['dock']:.2f} kcal/mol`\n"
                     f"- **{t('Quality')}**: `{item['quality']:.3f}`\n"
-                    f"- **{t('Cat. coverage')}**: `{item['cat_cov']*100:.0f}%`"
+                    f"- **{t('Cat. coverage')}**: `{cat_cov_txt}`"
                 )
 
             title_text = (
@@ -403,7 +490,7 @@ def _results_screening(proj: Path):
                                                 crystal_feats=meta.get("crystal_feats"))
 
     cat, sec = {}, {}
-    with st.expander(t("Scoring Configuration, Residues & Validation"), expanded=False):
+    with st.expander(t("Scoring Configuration, Residues & Validation"), expanded=True):
         tab_res, tab_w, tab_val = st.tabs([
             t("Active Site Residues"),
             t("Scoring Weights"),
@@ -571,13 +658,6 @@ def _results_screening(proj: Path):
     if faltan:
         st.warning(t('You weight **{v1}** but there is no data for that axis in this run: it is ignored in the score. Predict ADMET first, or lower its weight to 0 so Methods does not declare it.').format(v1=' and '.join(faltan)))
 
-    with st.expander(t("Export Methods (for the paper)")):
-        st.caption(t("Parameters, box, weights, reference and exact software versions. Reproducibility ready to paste into the Methods section."))
-        methods_text_ = rp.methods_text(meta, weights=w, catalytic=cat, secondary=sec)
-        st.download_button(t("Download Methods.md"), methods_text_, file_name="PoliScreen_Methods.md",
-                           mime="text/markdown")
-        st.code(methods_text_, language="markdown")
-
     engines_ = {}
     _dock_p = lay.artifact(proj, lay.DOCKING_CSV)
     if _dock_p.exists():
@@ -624,7 +704,10 @@ def _results_screening(proj: Path):
     _dianas = sorted({sc.display_name(sc.base_of(x)) for x in rk["receptor"].unique()})
     if len(_dianas) > 1:
         _pleiotropic_summary(rk, _dianas)
-    targets_all = sorted(rk["receptor"].unique())
+    targets_all = sorted(
+        rk["receptor"].unique(),
+        key=lambda r: (0 if ("principal" in str(r).lower() or "~" not in str(r)) else 1, str(r))
+    )
     if not targets_all:
         st.info(t("No results to display."))
         return
@@ -689,12 +772,16 @@ def _results_screening(proj: Path):
     else:
         sub_display = sub.copy()
 
+    has_cat = "cat_coverage" in sub_display.columns and not sub_display["cat_coverage"].isna().all()
+    if has_cat:
+        sub_display["cat_coverage"] = (pd.to_numeric(sub_display["cat_coverage"], errors="coerce") * 100.0).round(1)
+
     col_cfg = {
         "effectiveness_pct": st.column_config.ProgressColumn(
             t("Effectiveness (%)"), format="%.1f%%", min_value=0.0, max_value=125.0
         ),
         "cat_coverage": st.column_config.ProgressColumn(
-            t("Cat. coverage"), format="%.0f%%", min_value=0.0, max_value=1.0
+            t("Cat. coverage"), format="%.0f%%", min_value=0.0, max_value=100.0
         ),
         "best_dock": st.column_config.NumberColumn(t("Docking (kcal/mol)"), format="%.2f"),
         "best_inter": st.column_config.NumberColumn(t("Quality"), format="%.3f"),
@@ -703,11 +790,14 @@ def _results_screening(proj: Path):
         "LE": st.column_config.NumberColumn("LE", format="%.3f"),
         "pareto_rank": st.column_config.NumberColumn(t("Pareto rank"), format="%d"),
     }
-    view_ = sub_display[chosen_items]
+    view_items = [c for c in chosen_items if c != "cat_coverage" or has_cat]
+    view_ = sub_display[view_items]
     st.dataframe(_shade(view_.assign(source=sub_display.get("source", "")), "source") if tuyos else view_,
                  width="stretch", height=min(380, 60 + 34 * len(sub_display)),
                  column_config=col_cfg)
     _download_table(view_, f"ranking_{R}", key=f"rk_{R}")
+    if not has_cat and "cat_coverage" in rk.columns:
+        st.caption(t("Note: Catalytic coverage is not shown for this pocket because no catalytic residues were defined for it."))
 
     st.markdown("---")
     st.markdown(t("##### Pareto Frontier Landscape"))
@@ -735,6 +825,35 @@ def _results_screening(proj: Path):
             except Exception:
                 pass
 
+    # Prominent standalone interactive HTML report download directly below Pareto plot
+    c_dl_rep1, c_dl_rep2 = st.columns([3, 2])
+    with c_dl_rep1:
+        if st.button(t("Compile & Download Interactive Report (.html)"), key=f"btn_compile_dossier_{R}", type="primary", use_container_width=True):
+            with st.spinner(t("Compiling standalone interactive HTML dossier (3D + Plotly)...")):
+                try:
+                    from poliscreen.core.html_report import build_interactive_report
+                    rep_html = build_interactive_report(proj, target=R, lang=S.get("_lang_pick", "en"))
+                    clean_r = sc.display_name(sc.base_of(R)).replace(" ", "_")
+                    site_suffix = f"_{R.split('~', 1)[1]}" if "~" in R else ""
+                    fname = f"{proj.name}_{clean_r}{site_suffix}_Dossier.html"
+                    S[f"_cached_html_report_{R}"] = (fname, rep_html.encode("utf-8"))
+                except Exception as ex:
+                    st.error(t("Could not generate report: {err}").format(err=ex))
+    with c_dl_rep2:
+        if S.get(f"_cached_html_report_{R}"):
+            r_name, r_bytes = S[f"_cached_html_report_{R}"]
+            st.download_button(
+                t("Download {name} ({size:.1f} MB)").format(name=r_name, size=len(r_bytes) / 1e6),
+                r_bytes,
+                file_name=r_name,
+                mime="text/html",
+                key=f"btn_dl_dossier_{R}",
+                type="primary",
+                use_container_width=True,
+            )
+        else:
+            st.caption(t("Zero-Server standalone dossier with 3D complex, PLIP polygons, and interactive Pareto landscape."))
+
     items_all = [(c, smap[sc.normalize_key(c)]) for c in rk["compound"].unique()
                  if sc.normalize_key(c) in smap and pd.notna(smap.get(sc.normalize_key(c)))]
     if items_all:
@@ -748,6 +867,13 @@ def _results_screening(proj: Path):
                     pr = AdmelabBridge().predict([s for _, s in items], use_ml=True)
                 S["admet"] = {**(S.get("admet") or {}), **{rg.inchikey(r.get("SMILES")): r for r in pr.rows}}
             if S.get("admet") and items:
+                missing_adme = [s for _, s in items if s and rg.inchikey(s) not in S["admet"]]
+                if missing_adme:
+                    try:
+                        pr_miss = AdmelabBridge().predict(missing_adme, use_ml=True)
+                        S["admet"] = {**S["admet"], **{rg.inchikey(r.get("SMILES")): r for r in pr_miss.rows}}
+                    except Exception:
+                        pass
                 _render_adme(S["admet"], items, keyp="res")
 
     _render_top_interaction_leaderboard(
@@ -757,6 +883,11 @@ def _results_screening(proj: Path):
         ref_info=ref_info,
         meta=meta,
     )
+
+    with st.expander(t("Export Methods (for the paper)")):
+        st.caption(t("Parameters, box, weights, reference and exact software versions. Reproducibility ready to paste into the Methods section."))
+        methods_text_ = rp.methods_text(meta, weights=w, catalytic=cat, secondary=sec)
+        st.code(methods_text_, language="markdown")
 
     st.markdown("---")
     _how_to_cite()

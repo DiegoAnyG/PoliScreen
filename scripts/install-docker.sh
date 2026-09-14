@@ -29,6 +29,13 @@ banner() {
 
 banner
 
+# Ensure PoliScreen.ico is present
+if [ ! -f "scripts/PoliScreen.ico" ] && [ ! -f "PoliScreen.ico" ]; then
+    mkdir -p scripts
+    echo "  Downloading PoliScreen.ico..."
+    curl -fsSL "https://raw.githubusercontent.com/DiegoAnyG/PoliScreen/main/scripts/PoliScreen.ico" -o "scripts/PoliScreen.ico" 2>/dev/null || \
+    curl -fsSL "https://github.com/DiegoAnyG/PoliScreen/releases/download/v1.2.1/PoliScreen.ico" -o "scripts/PoliScreen.ico" 2>/dev/null || true
+fi
 
 choice="${1:-}"
 if [ -z "$choice" ]; then

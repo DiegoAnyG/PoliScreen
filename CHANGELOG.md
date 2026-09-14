@@ -2,6 +2,16 @@
 
 Notable changes. Dates are release dates; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [1.2.1] — 2026-09-14
+
+### Added
+
+- **Standalone Zero-Server Interactive HTML Dossiers.** Complete self-contained HTML reports with embedded 3Dmol.js (3D protein-ligand complexes, active site cavity, CAVER transport tunnels), Plotly.js (interactive Pareto frontier with floating 2D chemical structure tooltips), and PLIP geometric interaction footprint SVGs. Fully functional offline with zero server requirements.
+- **Authentic fpocket Cavity Detection & Alpha Spheres.** Integrates full fpocket cavity extraction (`pockets.detect` and `.poliscreen` session archive parsing). Displays translucent golden Voronoi alpha spheres outlining the exact geometrical cavity volume, eliminating opaque surface artifacts.
+- **Dynamic Compound-Specific Residue Highlighting.** Automatically extracts and highlights the exact interacting residues calculated by PLIP for the active pose: catalytic residues in radiant yellow/amber sticks (`yellowCarbon`) and additional contact residues in bright cyan sticks (`cyanCarbon`).
+- **PyMOL Transport Tunnel Visualizer Bundles.** Export complete, self-contained PyMOL visualization packages (`.zip` containing `.pml` scripts and associated `.pdbqt`/tunnel structures) for CAVER access routes and CaverDock energy profiles.
+- **Clean Terminal Shutdown.** Graceful and silent exit on `Ctrl+C` (SIGINT) without uncaught traceback dumps across CLI and Streamlit processes.
+
 ## [1.1.0] — 2026-09-10
 
 ### Added

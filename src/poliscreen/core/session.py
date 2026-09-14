@@ -198,9 +198,11 @@ EXPORTS = {
     "complexes_zip":     ("Receptor-ligand complexes (PDB)", "folder", lay.COMPLEXES),
     "poses_zip":         ("Docking poses per model", "folder", "poses"),
     "methods":           ("Methods section: parameters and versions", "generado", "PoliScreen_Methods.md"),
+    "html_report":       ("Interactive Zero-Server HTML report (3D + Plotly)", "generado", "reporte_interactivo.html"),
 }
 
 RECOMMENDED = {
+    "html_report":       "Self-contained dossier with 3D viewer, Pareto and PLIP footprints",
     "methods":           "Not in the folder: written on export",
     "results_csv":    "Main table: score, Ki, efficiency and confidence",
     "interactions_csv": "Contact fingerprint that underpins the score",
@@ -251,9 +253,18 @@ def package_bytes(proj, keys_: Sequence[str], methods_text: Optional[str] = None
                 continue
             _desc, tipo, origin = EXPORTS[key_]
             if tipo == "generado":
-                if methods_text:
-                    zf.writestr(origin, methods_text)
-                    included_items.append(origin)
+                if key_ == "methods":
+                    if methods_text:
+                        zf.writestr(origin, methods_text)
+                        included_items.append(origin)
+                elif key_ == "html_report":
+                    try:
+                        from .html_report import build_interactive_report
+                        html_code = build_interactive_report(proj)
+                        zf.writestr(origin, html_code)
+                        included_items.append(origin)
+                    except Exception:
+                        pass
             elif tipo == "file":
                 if _add_file(zf, lay.artifact(proj, origin), f"tablas/{origin}"):
                     included_items.append(f"tablas/{origin}")

@@ -56,3 +56,6 @@ installer/vendor/
 
 # CAVER leaves this where it was started from
 whole_clustering.csv
+
+# Local report builds and scratch exports
+reports/

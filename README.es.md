@@ -9,8 +9,8 @@ Cribado virtual reproducible que cierra el ciclo **diseño → filtro de sinteti
 con una función de puntuación objetiva por cavidad, métrica de confianza ortogonal y
 optimización multi-objetivo mediante el Frente de Pareto.
 
-> **v1.1.0** — Paisaje interactivo de Pareto, polígonos geométricos de huella de
-> interacción, túneles de transporte (CAVER / CaverDock) y distribución reproducible en contenedor.
+> **v1.2.1** — Reportes HTML interactivos standalone Zero-Server (3Dmol + Plotly), detección
+> auténtica de cavidades fpocket y paquetes visualizadores de túneles para PyMOL.
 
 ---
 

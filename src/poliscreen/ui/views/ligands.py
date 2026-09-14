@@ -554,6 +554,12 @@ def render_ligands_tools(proj: Path):
                 con = mdf["smiles"].notna().sum() if "smiles" in mdf.columns else 0
                 st.caption(t('Structure read from {v1} of {v3}: allows computing ADMET, ligand efficiency, SAscore and PAINS alerts.').format(v1=con, v3=len(mdf)))
                 items = [(r["name"], r["smiles"]) for _, r in mdf.iterrows() if pd.notna(r.get("smiles"))]
+                ctrl_smap = sc.build_smiles_map(str(lay.artifact(proj, lay.RECEPTORS)))
+                for c_path in S.get("controls", []):
+                    c_stem = Path(c_path).stem
+                    c_smi = ctrl_smap.get(sc.normalize_key(c_stem))
+                    if c_smi and not any(it[0] == c_stem for it in items):
+                        items.append((c_stem, c_smi))
                 if items:
                     with st.expander(t("ADMET report of the uploaded ligands")):
                         if st.button(t("Predict ADMET"), key="adme_uploaded"):

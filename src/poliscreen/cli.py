@@ -236,7 +236,10 @@ def cmd_ui(args) -> int:
         _open_when_serving(url, args.port)
     else:
         print(f"WARNING: exposed on the local network, no authentication. http://<your-ip>:{args.port}")
-    return subprocess.call(cmd)
+    try:
+        return subprocess.call(cmd)
+    except KeyboardInterrupt:
+        return 0
 
 
 def _ui_in_a_window(cmd, url: str, port: int) -> int:
@@ -475,6 +478,8 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
     try:
         return args.func(args)
+    except KeyboardInterrupt:
+        return 0
     except AdmelabError as e:
         print("ERROR:", e, file=sys.stderr)
         return 1

@@ -20,7 +20,7 @@ cls
 echo.
 powershell -NoProfile -Command "[Console]::OutputEncoding=[Text.Encoding]::UTF8; [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('G1szODsyOzA7MjQwOzI1NW0g4paI4paI4paI4paI4paI4paI4pWXICDilojilojilojilojilojilojilZcg4paI4paI4pWXICAgICDilojilojilZfilojilojilojilojilojilojilojilZcg4paI4paI4paI4paI4paI4paI4pWX4paI4paI4paI4paI4paI4paI4pWXIOKWiOKWiOKWiOKWiOKWiOKWiOKWiOKVl+KWiOKWiOKWiOKWiOKWiOKWiOKWiOKVl+KWiOKWiOKWiOKVlyAgIOKWiOKWiOKVlxtbMG0KG1szODsyOzMwOzE5MDsyNTVtIOKWiOKWiOKVlOKVkOKVkOKWiOKWiOKVl+KWiOKWiOKVlOKVkOKVkOKVkOKWiOKWiOKVl+KWiOKWiOKVkSAgICAg4paI4paI4pWR4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWd4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWd4paI4paI4pWU4pWQ4pWQ4paI4paI4pWX4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWd4paI4paI4pWU4pWQ4pWQ4pWQ4pWQ4pWd4paI4paI4paI4paI4pWXICDilojilojilZEbWzBtChtbMzg7Mjs3MDsxNDA7MjU1bSDilojilojilojilojilojilojilZTilZ3ilojilojilZEgICDilojilojilZHilojilojilZEgICAgIOKWiOKWiOKVkeKWiOKWiOKWiOKWiOKWiOKWiOKWiOKVl+KWiOKWiOKVkSAgICAg4paI4paI4paI4paI4paI4paI4pWU4pWd4paI4paI4paI4paI4paI4pWXICDilojilojilojilojilojilZcgIOKWiOKWiOKVlOKWiOKWiOKVlyDilojilojilZEbWzBtChtbMzg7MjsxMjA7OTA7MjU1bSDilojilojilZTilZDilZDilZDilZ0g4paI4paI4pWRICAg4paI4paI4pWR4paI4paI4pWRICAgICDilojilojilZHilZrilZDilZDilZDilZDilojilojilZHilojilojilZEgICAgIOKWiOKWiOKVlOKVkOKVkOKWiOKWiOKVl+KWiOKWiOKVlOKVkOKVkOKVnSAg4paI4paI4pWU4pWQ4pWQ4pWdICDilojilojilZHilZrilojilojilZfilojilojilZEbWzBtChtbMzg7MjsxNzA7NDA7MjU1bSDilojilojilZEgICAgIOKVmuKWiOKWiOKWiOKWiOKWiOKWiOKVlOKVneKWiOKWiOKWiOKWiOKWiOKWiOKWiOKVl+KWiOKWiOKVkeKWiOKWiOKWiOKWiOKWiOKWiOKWiOKVkeKVmuKWiOKWiOKWiOKWiOKWiOKWiOKVl+KWiOKWiOKVkSAg4paI4paI4pWR4paI4paI4paI4paI4paI4paI4paI4pWX4paI4paI4paI4paI4paI4paI4paI4pWX4paI4paI4pWRIOKVmuKWiOKWiOKWiOKWiOKVkRtbMG0KG1szODsyOzE3MDs0MDsyNTVtIOKVmuKVkOKVnSAgICAgIOKVmuKVkOKVkOKVkOKVkOKVkOKVnSDilZrilZDilZDilZDilZDilZDilZDilZ3ilZrilZDilZ3ilZrilZDilZDilZDilZDilZDilZDilZ0g4pWa4pWQ4pWQ4pWQ4pWQ4pWQ4pWd4pWa4pWQ4pWdICDilZrilZDilZ3ilZrilZDilZDilZDilZDilZDilZDilZ3ilZrilZDilZDilZDilZDilZDilZDilZ3ilZrilZDilZ0gIOKVmuKVkOKVkOKVkOKVnRtbMG0='))"
 echo.
-echo      Reproducible virtual screening   v1.1.0   container setup
+echo      Reproducible virtual screening   v1.2.1   container setup
 echo.
 
 rem Docker Desktop is never started from here on purpose: it is the user's machine and starting a
@@ -56,7 +56,7 @@ echo   Projects folder     %PROJECTS%
 
 rem Create desktop shortcut with icon
 if not exist "%~dp0PoliScreen.ico" (
-    powershell -NoProfile -Command "try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DiegoAnyG/PoliScreen/main/scripts/PoliScreen.ico' -OutFile '%~dp0PoliScreen.ico' -UseBasicParsing } catch {}" >nul 2>&1
+    powershell -NoProfile -Command "try { Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/DiegoAnyG/PoliScreen/main/scripts/PoliScreen.ico' -OutFile '%~dp0PoliScreen.ico' -UseBasicParsing } catch { Invoke-WebRequest -Uri 'https://github.com/DiegoAnyG/PoliScreen/releases/download/v1.2.1/PoliScreen.ico' -OutFile '%~dp0PoliScreen.ico' -UseBasicParsing }" >nul 2>&1
 )
 powershell -NoProfile -Command "$ws = New-Object -ComObject WScript.Shell; $desk = $ws.SpecialFolders.Item('Desktop'); $lnk = Join-Path $desk 'PoliScreen.lnk'; if (-not (Test-Path $lnk)) { $s = $ws.CreateShortcut($lnk); $s.TargetPath = '%~f0'; if (Test-Path '%~dp0PoliScreen.ico') { $s.IconLocation = '%~dp0PoliScreen.ico' }; $s.WorkingDirectory = $env:USERPROFILE; $s.Save() }" >nul 2>&1
 echo.
@@ -255,6 +255,12 @@ if "%ENABLE_CAVER%"=="0" (
     set "EXTRA_FLAGS=%EXTRA_FLAGS% -e POLISCREEN_WITH_CAVER=0 -e POLISCREEN_CAVER="
 ) else (
     set "EXTRA_FLAGS=%EXTRA_FLAGS% -e POLISCREEN_WITH_CAVER=1"
+)
+
+if "%ENABLE_ADCP%"=="0" (
+    set "EXTRA_FLAGS=%EXTRA_FLAGS% -e POLISCREEN_WITH_ADCP=0 -e POLISCREEN_ADCP="
+) else (
+    set "EXTRA_FLAGS=%EXTRA_FLAGS% -e POLISCREEN_WITH_ADCP=1"
 )
 
 if "%ENABLE_GNINA%"=="1" (

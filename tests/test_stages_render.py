@@ -17,6 +17,14 @@ APP = str(__import__("pathlib").Path(__file__).resolve().parent.parent
           / "src" / "poliscreen" / "ui" / "streamlit_app.py")
 
 
+@pytest.fixture(autouse=True)
+def isolated_projects_dir(monkeypatch, tmp_path):
+    monkeypatch.setenv("POLISCREEN_PROJECTS", str(tmp_path))
+    mpl_dir = tmp_path / "mpl"
+    mpl_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("MPLCONFIGDIR", str(mpl_dir))
+
+
 @pytest.mark.parametrize("stage", ["Receptors", "Ligands", "Run", "Results"])
 def test_the_stage_draws(stage):
     app = AppTest.from_file(APP, default_timeout=180)

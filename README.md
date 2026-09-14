@@ -9,8 +9,8 @@ filter → docking → interaction-quality scoring → ADMET**, with an objectiv
 per-cavity scoring function, orthogonal confidence metric, and multi-objective
 Pareto optimization.
 
-> **v1.1.0** — Multi-objective Pareto landscape, interaction footprint polygons,
-> transport tunnels (CAVER / CaverDock), and one-click container distribution.
+> **v1.2.1** — Standalone Zero-Server interactive HTML reports (3Dmol + Plotly), authentic
+> fpocket cavity detection, and PyMOL transport tunnel visualizer bundles.
 
 ---
 

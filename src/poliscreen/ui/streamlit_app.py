@@ -15,6 +15,7 @@ import matplotlib
 matplotlib.use("Agg")
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from poliscreen import __version__
 from poliscreen.core import adcp
@@ -544,8 +545,13 @@ _cols = _nav.columns(len(STAGES))
 for _i, _e in enumerate(STAGES):
     if _cols[_i].button(t(_e), key=f"nav_{_e}", width="stretch",
                         type=("primary" if _e == S["stage"] else "secondary")):
-        S["stage"] = _e
-        st.rerun()
+        if S["stage"] != _e:
+            S["stage"] = _e
+            S["_stage_switched"] = True
+            st.rerun()
+
+if S.pop("_stage_switched", False):
+    components.html("<script>try{window.scrollTo(0,0);if(window.parent)window.parent.scrollTo(0,0);}catch(e){}</script>", height=0, width=0)
 
 # Opened last, so it also catches what the active stage just did: a run finishing sets the notice
 # while this script is already past the panels.

@@ -152,7 +152,7 @@ def view_html(receptor=None, ligand_=None, height_: int = 480, width_="100%",
               show_hetero: bool = True, box_=None, pocket_spheres=None,
               cavities=None, opacity: float = 0.95, axes_: bool = False,
               surface: bool = False, extra_models=None, model_colors=None,
-              callouts=None) -> str:
+              callouts=None, background: Optional[str] = None) -> str:
     """HTML of a viewer with receptor, ligand or both. Any of them can be omitted.
 
     box_: Box or dict cx..sz, drawn as a wireframe.
@@ -163,8 +163,13 @@ def view_html(receptor=None, ligand_=None, height_: int = 480, width_="100%",
     molecule at different points of a route -- a transport through a tunnel is read as the sequence
     of them, so they are separate models rather than states of one.
     """
+    import os
     import py3Dmol
     v = py3Dmol.view(width=width_, height=height_)
+    if background is None:
+        is_light = os.environ.get("POLISCREEN_THEME", "dark").strip().lower() == "light"
+        background = "white" if is_light else "#070d1d"
+    v.setBackgroundColor(background)
     if receptor is not None:
         text_, fmt = _read(receptor)
         v.addModel(text_, fmt)

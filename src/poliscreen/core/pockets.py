@@ -13,10 +13,13 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import sys
 
 
 def fpocket_available() -> bool:
-    return shutil.which("fpocket") is not None
+    if shutil.which("fpocket") is not None:
+        return True
+    return (Path(sys.prefix) / "bin" / "fpocket").exists()
 
 
 def _spheres_from_pqr(pqr, max_n: int = 500) -> list:
@@ -112,8 +115,8 @@ def detect(pdb, timeout: int = 300, on_notice=None) -> list:
         # letter "C:", which fails whenever the process has no current directory on that drive —
         # and it returns without writing anything while still exiting 0, which reads exactly like a
         # protein with no cavities. With no path to take apart there is nothing left to get wrong:
-        # the output lands in cwd. Measured with the cross-compiled binary on 4D44.
-        r = subprocess.run(["fpocket", "-f", local.name], cwd=str(tmp), capture_output=True,
+        fp_cmd = shutil.which("fpocket") or (str(Path(sys.prefix) / "bin" / "fpocket") if (Path(sys.prefix) / "bin" / "fpocket").exists() else "fpocket")
+        r = subprocess.run([fp_cmd, "-f", local.name], cwd=str(tmp), capture_output=True,
                            text=True, timeout=timeout)
         outd = tmp / f"{pdb.stem}_out"
         info = outd / f"{pdb.stem}_info.txt"
